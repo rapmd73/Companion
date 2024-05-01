@@ -32,14 +32,6 @@ RunningName=sys.argv[0]
 
 CompanionStorage='/home/Companion/Personas'
 
-# Your API token for Discord
-
-TOKEN=""
-
-# Your API token for OpenAI
-
-AIAPI=""
-
 # Global lock for managing sequential access to the AI api and file safety.
 
 MasterLock=threading.Lock()
@@ -51,11 +43,9 @@ intents.messages=True
 intents.members=True
 
 # Create a Discord client
-
 client = discord.Client(intents=intents)
 
 # List to store pending requests
-
 request_list = []
 
 # Leet list deritives for trying to get someones age.
@@ -249,6 +239,11 @@ def GetBabble(text):
 
         persona.append( { "role": "user", "content": input_text } )
 
+        # Read token and API, already verified at program start.
+
+        tfile=RunningName+'.tokens'
+        TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
+
         # Initiate the OpenAI call. Could be GPT4ALL, Ollama, or any other similar process
 
         clientAI=openai.OpenAI(api_key=AIAPI)
@@ -285,6 +280,7 @@ def GetBabble(text):
 
         return response
     except Exception as err:
+        print(f"Broke GB: {err}")
         # Something broke. Keep the responses in character
         responses=ReadFile(bot['Broken']).strip().split('\n')
         selected_response=random.choice(responses)
@@ -501,6 +497,19 @@ async def on_ready():
 # starts the bot with the corresponding token
 
 if __name__=='__main__':
+    tfile=RunningName+'.tokens'
+    if os.path.exists(tfile):
+        try:
+            TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
+        except Exception as err:
+            print(f"The Discord token must be the first line of {tfile}")
+            print(f"The OpenAI API must be the second line of {tfile}")
+            sys.exit(1)
+
+    else:
+        print(f"Missing token file: {tfile}")
+        sys.exit(1)
+
     while True:
         try:
             client.run(TOKEN,log_handler=None)

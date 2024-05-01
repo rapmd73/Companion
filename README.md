@@ -1,5 +1,7 @@
 # Companion
 
+** WORK IN PROGRESS **
+
 ## Introduction
 
 Introducing Companion, a versatile program empowering users to create personalized personas for Discord
