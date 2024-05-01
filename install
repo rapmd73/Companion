@@ -1,0 +1,20 @@
+#!/bin/bash
+pip3=`which pip3`
+if [ "x$pip3" == "x" ] ; then
+    echo PIP3 not installed. Please install it first, then re-run this script.
+    exit 1
+fi
+
+BaseDir="/home/Companion"
+
+cd /home/GitHub/Companion
+
+mkdir -p $BaseDir > /dev/null 2>&1
+git pull https://github.com/rapmd73/Companion
+#cp -r * /home/Companion > /dev/null 2>&1
+
+python3 -m pip install --upgrade pip --break-system-packages
+
+for i in `cat requirements.txt` ; do
+    $pip3 install -U $i --break-system-packages
+done

@@ -1,0 +1,513 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# pip3 install openai
+# pip3 install discord
+# pip3 install alt-profanity-check
+
+# ***** IMPORTANT:
+
+#       For some weird reason, the only way I can get the changing of nickname/avatar to work proper it to
+#       give the bot administrator preiviledges. It works exceptionally well, but you MUST pay attention to
+#       the details.
+
+import sys
+import os
+import concurrent.futures
+import threading
+import time
+import json
+import random
+import string
+import openai
+import discord
+from discord.ext import commands, tasks
+import profanity_check as pc
+
+# The running name of the program. Must be global and NEVER changing.
+
+RunningName=sys.argv[0]
+
+# Persona base folder. This is where all personas are stored.
+
+CompanionStorage='/home/Companion/Personas'
+
+# Your API token for Discord
+
+TOKEN=""
+
+# Your API token for OpenAI
+
+AIAPI=""
+
+# Global lock for managing sequential access to the AI api and file safety.
+
+MasterLock=threading.Lock()
+
+# This is required for the bot to work properly.
+
+intents = discord.Intents.all()
+intents.messages=True
+intents.members=True
+
+# Create a Discord client
+
+client = discord.Client(intents=intents)
+
+# List to store pending requests
+
+request_list = []
+
+# Leet list deritives for trying to get someones age.
+
+lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
+rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
+
+# General file tools
+
+def ReadFile(fn):
+    if os.path.exists(fn):
+        cf=open(fn,'r')
+        buffer=cf.read().strip()
+        cf.close()
+    else:
+        buffer=None
+    return buffer
+
+# Building the leet derivitives. This was a royal pain in the ass, but by doing so, it any user trying to
+# bypass the edit detection can be persumed to have malicious intent.
+
+def BuildDerivitives(word):
+    substitutions={
+        'a': ['@'],
+        'e': ['3'],
+        'o': ['0'],
+        'l': ['1', '|', '!', 'i'],
+        'i': ['1', 'l', '|', '!', 'l'],
+        's': ['z', '$', '5']
+    }
+
+    # Start the list
+    dList=[ word ]
+
+    # Forward in loop
+    for x in range(len(word)):
+        xword=list(word)
+        if xword[x] in substitutions.keys():
+            cList=substitutions[xword[x]]
+            for y in range(len(cList)):
+                xword[x]=cList[y]
+                nword=''.join(xword)
+                if nword not in dList:
+                    dList.append(nword)
+
+    # Forward reset at beginning
+    xword=list(word)
+    for x in range(len(word)):
+        if xword[x] in substitutions.keys():
+            cList=substitutions[xword[x]]
+            for y in range(len(cList)):
+                xword[x]=cList[y]
+                nword=''.join(xword)
+                if nword not in dList:
+                    dList.append(nword)
+
+    # Backwards
+    xword=list(word)
+    for x in range(len(word)-1,-1,-1):
+        if xword[x] in substitutions.keys():
+            cList=substitutions[xword[x]]
+            for y in range(len(cList)):
+                xword[x]=cList[y]
+                nword=''.join(xword)
+                if nword not in dList:
+                    dList.append(nword)
+
+    # return the list of words back to user
+    return dList
+
+def BuildLeetList(side):
+    leetlist=[]
+
+    for i in range(len(side)):
+        leet=BuildDerivitives(side[i])
+        for j in range(len(leet)):
+            if leet[j] not in leetlist:
+                leetlist.append(leet[j])
+
+    return leetlist
+
+# Strip pucnctuation.
+
+def StripPunctuation(text):
+    # Define punctuation and high ASCII characters
+    punctuation = string.punctuation
+    high_ascii_chars = ''.join(chr(i) for i in range(128, 256))
+
+    # Create a translation table to map all punctuation and high ASCII characters to spaces
+    translation_table = str.maketrans({**dict.fromkeys(punctuation, ' '), **dict.fromkeys(high_ascii_chars, ' ')})
+
+    # Replace punctuation and high ASCII characters with spaces in the text
+    cleaned_text = text.translate(translation_table)
+
+    return cleaned_text
+
+# Json filter
+
+# Filter end of line and hard spaces
+
+def jsonFilter(s,FilterSpace=True):
+    d=s.replace("\\n","").replace("\\t","").replace("\\r","")
+
+    if FilterSpace==True:
+        filterText='\t\r\n \u00A0'
+    else:
+        filterText='\t\r\n\u00A0'
+
+    for c in filterText:
+        d=d.replace(c,'')
+
+    return(d)
+
+# Read channel list and set bot persona
+
+def GetCompanionPersona(channel):
+    # Get the list of channels and the bot name that is allowed in a given channel
+    cfg=RunningName+'.cfg'
+    try:
+        Channels=json.loads(jsonFilter(ReadFile(cfg)))
+    except Exception as err:
+        print(f"{cfg} damaged: {err}")
+        sys.exit(1)
+
+    if channel in Channels:
+        bot={}
+        bot['BotName']=Channels[channel]
+        bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+        bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
+        bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
+        bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+
+        # Load bot config file.
+        try:
+            bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
+            if os.path.exists(bcfg):
+                settings=json.loads(jsonFilter(ReadFile(bcfg)))
+            else:
+                settings={}
+        except Exception as err:
+            print(f"{bcfg} damaged: {err}")
+
+        # Merge the persona settings into the controlling dictionary
+        if settings!={}:
+            bot|=settings
+
+        # Run through some sanity checks.
+
+        if 'AllowVulgarity' not in bot:
+            bot['AllowVulgarity']='No'
+        if 'DeveloperUID' not in bot:
+            bot['DeveloperUID']=0
+        if 'MaxMemory' not in bot:
+            bot['MaxMemory']=5
+
+        # return the current bot
+        return bot
+
+    # if None, then bot is NOT allowed in area
+    return None
+
+# This function handle the actual responses.
+
+def GetBabble(text):
+    try:
+        # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
+        # we don't have any global variables.
+
+        uid,channel,input_text=text.split('/')
+
+        # Load the persona and memory files
+        bot=GetCompanionPersona(channel)
+
+        persona=[]
+        mList=[]
+        pList=ReadFile(bot['Persona']).strip().split('\n')
+
+        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.memory"
+        if os.path.exists(fn):
+            mList=ReadFile(fn).strip().split('\n')
+            pList+=mList
+
+        memU={ "role": "user", "content": input_text }
+        persona.append(memU)
+
+        for s in pList:
+            try:
+                persona.append(json.loads(s))
+            except:
+                print("Broke:",s)
+
+        persona.append( { "role": "user", "content": input_text } )
+
+        # Initiate the OpenAI call. Could be GPT4ALL, Ollama, or any other similar process
+
+        clientAI=openai.OpenAI(api_key=AIAPI)
+
+        # frequency_penalty=2 causes problems if you want your bot to write code.
+        # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
+        completion=clientAI.chat.completions.create( \
+            model="gpt-3.5-turbo", \
+            frequency_penalty=2,
+            temperature=1,
+            messages=persona )
+
+        response=completion.choices[0].message.content
+        clientAI.close()
+
+        # Save "memory" to disk
+
+        memA={ "role": "assistant", "content": response }
+
+        mList.append(json.dumps(memU))
+        mList.append(json.dumps(memA))
+
+        # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
+
+        if len(mList)>(bot['MaxMemory']*2):
+            mList=mList[2:]
+
+        fh=open(fn,'w')
+        for i in mList:
+            fh.write(i+'\n')
+        fh.close()
+
+        # Return the AI response
+
+        return response
+    except Exception as err:
+        # Something broke. Keep the responses in character
+        responses=ReadFile(bot['Broken']).strip().split('\n')
+        selected_response=random.choice(responses)
+        return selected_response
+
+# Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
+
+async def HandleOneMessage(request):
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        message=request['message']
+
+        uid=str(message.author.id)
+        author=str(message.author.mention)
+        channel=str(message.channel)
+
+        # Figure out which persona is calling the shots.
+        bot=GetCompanionPersona(channel)
+
+        input_text=request['arg']
+
+        print('U',uid,message.author,message.channel,message.content)
+
+        # Only seems to work with Administrator priviledges
+        # Change the nickname if the bot.
+        try:
+            await message.guild.me.edit(nick=bot['BotName'])
+            pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+            fh=open(pname,'rb')
+            png=fh.read()
+            fh.close()
+            await client.user.edit(avatar=png)
+        except Exception as err:
+            print(f"Broken Nick/Avatar: {err}")
+
+        async with message.channel.typing():
+            # Handle any vulgarity
+            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no':
+                if bool(pc.predict([ input_text ]))==True:
+                    responses=ReadFile(bot['Vulgarity']).strip().split('\n')
+                    response=random.choice(responses)
+                    try: # delete the offending message
+                        await message.delete()
+                    except:
+                        pass
+                else:
+                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+'/'+input_text)
+            else:
+                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+'/'+input_text)
+
+            print('B',client.user.id,bot['BotName'],message.channel,response)
+
+            resp=f"{author} {response}"
+            await send_response(message,resp)
+
+# Return the response to the user. messages over 1997 characters are returned as a message file attachment.
+
+async def send_response(message, response):
+    try:
+        if len(response) > 1997:
+            with open("response.txt", "w", encoding="utf-8") as file:
+                file.write(response)
+            await message.channel.send(file=discord.File("response.txt"))
+            os.remove("response.txt")
+        else:
+            await message.channel.send(response)
+    except discord.errors.HTTPException as e:
+        print(f'Error sending message: {str(e)}')
+
+# The dirty part. I wanted to serialize requests for the bot, so i timer approach is used coupled with a locking
+# method. This keep a rate limit approach for the open AI api in accordance to its policies. Sleeping method can
+# also be added.
+
+@tasks.loop(seconds=5)  # Adjust the interval as needed
+async def update_response_data():
+    global request_list
+
+    if not MasterLock.locked():
+        MasterLock.acquire()
+        if request_list:
+            request = request_list.pop(0)
+
+            try:
+                await HandleOneMessage(request)
+            except Exception as err:
+                print(f"Broke: {str(err)}")
+
+        MasterLock.release()
+    else:
+        print("Locked longer then task limit")
+
+# This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
+# many sides to an octogon?"
+
+# The victim will respond 8.
+
+# The attacker then edits the question to read "How old are you?" or "what is your age?" and takes a screen shot.
+# The attacker then uses the screen shot to get the victim permenantly banned, as it looks like the victim
+# violated Discord's age restrictions. The is a zero tolorence policy for Discord and a viscious way to target
+# people.
+
+# There is one serious restriction to this. Is a message is posted prior to the bot being loaded, but edited
+# after the fact, the bot won't receive the edit notification. THIS IS A MAJOR LOOPHOLE, but one only DISCORD can
+# fix.
+
+@client.event
+async def on_message_edit(before, after):
+    if after.content==before.content:
+        return
+
+    # Search for word in list
+    def CheckWordList(side,sampleText):
+        Found=False
+        for w in range(len(side)):
+            if side[w] in sampleText:
+                Found=True
+                break
+        return Found
+
+    try:
+        # Build leet lists
+
+        leftside=BuildLeetList(lside)
+        rightside=BuildLeetList(rside)
+
+        sampleText=StripPunctuation(after.content.lower())
+
+        leftFound=CheckWordList(leftside,sampleText)
+        rightFound=CheckWordList(rightside,sampleText)
+
+        if leftFound and rightFound:
+            uid=str(after.author.id)
+            msg=discord.Embed(
+                title='Possible edit attack detected',
+                description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
+                color=discord.Color.red() )
+            await after.channel.send(embed=msg)
+    except Exception as err:
+        print('Broken Edit:', str(err))
+        print('  UID:',after.author.id)
+        print('  User:',after.author)
+        print('  Before:',before.content)
+        print('  After:',after.content)
+
+# Get the user message and add it to a processing list. This really is the driving point of the AI responses.
+# Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
+# message of a particular interest, like cooking, or programming.
+
+@client.event
+async def on_message(message):
+    # Ignore messages from the bot itself
+    if message.author==client.user:
+        return
+    # Don't respond to other bots.
+    if message.author.bot:
+        return
+
+    if '%CheckBot' in message.content:
+        member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
+        # Check if the bot is a member of the channel
+        if member in message.channel.members:
+            await send_response(message,"Allowed")
+        else:
+            await send_response(message,"Allowed")
+        msg=f"{len(request_list)} pending requests"
+        await send_response(message,msg)
+        return
+
+    # Figure out which persona is calling the shots.
+    channel=str(message.channel)
+    bot=GetCompanionPersona(channel)
+
+    # If we have a bot, then we can converse here.
+    if bot!=None and (client.user in message.mentions or not message.mentions):
+        uid=str(message.author.id)
+
+        # Me, the developer
+        if uid==bot['DeveloperUID']:
+            imput_text="[Your developer, endearing, warm, loving] "+message.content.strip()
+        else: # Not me, the rest of the world
+            input_text = message.content.strip()
+
+        # Handle this that I don't want. Deflect or break...
+        if 'president' in input_text.lower():
+            input_text+=' [deflect politics]'
+
+        # Check to see if the message is directed to another user. If it is, don't respond.
+        if not message.reference:
+            pass
+        # Check if the message is a reply to the AI
+        elif message.reference and message.reference.resolved.author.id==client.user.id:
+            pass
+        else:
+            return
+
+        # If this is a direct reply or a mention, give a slightly more personal response
+        if (message.reference and message.reference.resolved.author.id==client.user.id) \
+        or (client.user in message.mentions):
+            input_text+=' [warm, friendly]'
+
+        # Give the AI the message
+        MasterLock.acquire()
+        request_list.append({'arg': input_text, 'message': message} )
+        MasterLock.release()
+
+# Start the timer task for responses.
+
+@client.event
+async def on_ready():
+    print(f'Logged in as {client.user}')
+
+    # Start the task when the bot is ready
+    update_response_data.start()
+
+# starts the bot with the corresponding token
+
+if __name__=='__main__':
+    while True:
+        try:
+            client.run(TOKEN,log_handler=None)
+        except Exception as err: # Make sure the lock is released
+            print(f"Broken MAIN: {err}")
+
+        if MasterLock.locked():
+            MasterLock.release()
+        # Make sure the lock is released before the bot restarts.
+        time.sleep(60)
