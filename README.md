@@ -60,18 +60,17 @@ cd /home/GitHub/Companion
 
 ### Files
 
-#### /home/Companion/
+#### /home/Companion
 
-- CODE_OF_CONDUCT.md
-- Companion
-- Companion.cfg
-- Companion.tokens
-- install
-- Personas
-- requirements.txt
-- README.md
+- **Personas** This is where the various personas (personalities) are kept.
+- **Companion** Main program
+- **Companion.cfg** JSON file of the channel name (text only) and the persona for that channel. Each channel can have its own persona or can share a persona.
+- **Companion.tokens** This file doesn't exist until YOU create it. The first line of the file is the Discord token. The second line of the file is the OpenAI API key. Just these two lines ONLY, exactly as each service provides them.
+- **install** The inataller that create the /home/Companion folder
+- **requirements.txt** The pip3 requirements that will load the neccessry packages.
+- **README.md** This file.
+- **CODE_OF_CONDUCT.md** GitHub required files.
 - CONTRIBUTING.md
-- dependabot.yml
 - lgpl-2.1.txt
 - LICENSE-lgpl
 - SECURITY.md
