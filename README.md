@@ -58,6 +58,54 @@ cd /home/GitHub/Companion
 ./install
 ```
 
+### Files
+
+#### /home/Companion/
+
+- CODE_OF_CONDUCT.md
+- Companion
+- Companion.cfg
+- Companion.tokens
+- install
+- Personas
+- requirements.txt
+- README.md
+- CONTRIBUTING.md
+- dependabot.yml
+- lgpl-2.1.txt
+- LICENSE-lgpl
+- SECURITY.md
+
+#### /home/Companion/Personas
+
+- Marcus
+- Mugsy
+- Tipsy
+
+#### /home/Companion/Personas/Marcus
+
+- Marcus.broke
+- Marcus.cfg
+- Marcus.persona
+- Marcus.png
+- Marcus.vulgarity
+
+#### /home/Companion/Personas/Mugsy
+
+- Mugsy.broke
+- Mugsy.cfg
+- Mugsy.persona
+- Mugsy.png
+- Mugsy.vulgarity
+
+#### /home/Companion/Personas/Tipsy
+
+- Tipsy.broke
+- Tipsy.cfg
+- Tipsy.persona
+- Tipsy.png
+- Tipsy.vulgarity
+
 ## Open AI
 
 Be sure you read and understand the terms and services and acceptable use.
@@ -138,3 +186,4 @@ Sure, here's a step-by-step guide to setting up a Discord bot on the Discord Dev
     Test your bot's functionality on Discord by interacting with it in the server where you added it.
 
 That's it! You've successfully set up a Discord bot on the Discord Developer Portal.
+
