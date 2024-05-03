@@ -30,7 +30,7 @@ Be sure you read and understand the terms and services and acceptable use.
 
 Obtaining an API:
 
-1. **Visit OpenAI's Website**: Go to the (OpenAI website)[https://openai.com]. Direct link to the (API page)[https://platform.openai.com/api-keys]
+1. **Visit OpenAI's Website**: Go to the [OpenAI website](https://openai.com). Direct link to the [API page](https://platform.openai.com/api-keys).
 
 1. **Explore the API**: Learn about the available APIs and their capabilities. OpenAI offers several APIs, including GPT (text generation), DALL-E (image generation), and CLIP (image understanding). Choose the one that fits your needs.
 
@@ -65,10 +65,10 @@ This bot *requires* **administrator** priviledges for changing the avatar and ni
 Sure, here's a step-by-step guide to setting up a Discord bot on the Discord Developer Portal:
 
 1. **Create a Discord Account:**
-   If you don't have one already, create a (Discord account)[https://discord.com/register].
+   If you don't have one already, create a [Discord account]([https://discord.com/register).
 
 1. **Access the Developer Portal:**
-   Go to the (Discord Developer Portal)[https://discord.com/developers/applications].
+   Go to the [Discord Developer Portal](https://discord.com/developers/applications).
 
 1. **Create a New Application:**
    Click on the "New Application" button in the top-right corner.
