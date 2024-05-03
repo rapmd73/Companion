@@ -20,7 +20,11 @@ improvement over time.
 If you find this software useful, please give it a star and consider sponsoring it to support its ongoing
 development and enhancement.
 
-# Open AI
+## Companion
+
+This is the actual discord bot. This section will go through the installation and setup process.
+
+## Open AI
 
 Be sure you read and understand the terms and services and acceptable use.
 
