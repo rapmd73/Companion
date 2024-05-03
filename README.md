@@ -17,6 +17,6 @@ administrators in maintaining order and fostering positive environments. With on
 Companion evolves to meet the evolving needs of Discord communities, promising continuous expansion and
 improvement over time.
 
-If you find this software useful, please give it a star and consider sponsoring it to support its ongoing
-development and enhancement.
+If you find this software useful, please give it a star and consider
+(https://github.com/sponsors/rapmd73)[sponsoring] it to support its ongoing development and enhancement.
 

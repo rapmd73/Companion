@@ -193,7 +193,12 @@ def GetCompanionPersona(channel):
             bot|=settings
 
         # Run through some sanity checks.
-
+        if 'Model' not in bot:
+            bot['Model']="gpt-3.5-turbo"
+        if 'FreqPenality' not in bot:
+            bot['FreqPenality']=2
+        if 'Temperature' not in bot:
+            bot['Temperature']=1
         if 'AllowVulgarity' not in bot:
             bot['AllowVulgarity']='No'
         if 'DeveloperUID' not in bot:
@@ -251,9 +256,9 @@ def GetBabble(text):
         # frequency_penalty=2 causes problems if you want your bot to write code.
         # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
         completion=clientAI.chat.completions.create( \
-            model="gpt-3.5-turbo", \
-            frequency_penalty=2,
-            temperature=1,
+            model=bot['Model'], \
+            frequency_penalty=bot['FreqPenality'],
+            temperature=bot['Temperature'],
             messages=persona )
 
         response=completion.choices[0].message.content
@@ -268,13 +273,14 @@ def GetBabble(text):
 
         # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
 
-        if len(mList)>(bot['MaxMemory']*2):
-            mList=mList[2:]
+        if bot['MaxMemory']>0:
+            if len(mList)>(bot['MaxMemory']*2):
+                mList=mList[2:]
 
-        fh=open(fn,'w')
-        for i in mList:
-            fh.write(i+'\n')
-        fh.close()
+            fh=open(fn,'w')
+            for i in mList:
+                fh.write(i+'\n')
+            fh.close()
 
         # Return the AI response
 
