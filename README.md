@@ -24,6 +24,40 @@ development and enhancement.
 
 This is the actual discord bot. This section will go through the installation and setup process.
 
+### Requirements
+
+This software requires a VPS with with a minimum of 1 core (2 cores is heavily recomended), 1 gig of RAM (4 recomended), 2 gigs of swap, 40 gigs of SSD storage. This software was developed for the intention of using a VPS to its fullest extent. If you wish to use a virtual environment, please consult your VPS documentation.
+
+Jackrabbit Relay requires Python 3 (version 3.8.10) and pip3. If you do not have pip3, the below link will show you how to install it.
+
+    https://www.linuxscrew.com/install-pip
+
+The command for installation really is very simple and here is the short
+version. please be sure you are in route or in your virtual environment
+appropriate to the documentation of your VPS. the below command is for
+Ubuntu.you will need to use the package manager appropriate to your VPS.
+
+```bash
+    apt install python3-pip
+```
+
+### Installing and setting up
+
+Start with these shell commands
+
+```bash
+mkdir -p /home/GitHub
+cd /home/GitHub
+git clone https://github.com/rapmd73/Companion
+```
+
+You now have a copy of the Companion repository. Now its time to install everything.
+
+```bash
+cd /home/GitHub/Companion
+./install
+```
+
 ## Open AI
 
 Be sure you read and understand the terms and services and acceptable use.
