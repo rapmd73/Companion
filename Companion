@@ -364,8 +364,8 @@ async def update_response_data():
     global request_list
 
     if not MasterLock.locked():
-        MasterLock.acquire()
-        if request_list:
+        MasterLock.acquire(timeout=60)
+        if request_list and MasterLock.locked():
             request = request_list.pop(0)
 
             try:
@@ -487,8 +487,9 @@ async def on_message(message):
             input_text+=' [warm, friendly]'
 
         # Give the AI the message
-        MasterLock.acquire()
-        request_list.append({'arg': input_text, 'message': message} )
+        MasterLock.acquire(timeout=60)
+        if MasterLock.locked():
+            request_list.append({'arg': input_text, 'message': message} )
         MasterLock.release()
 
 # Start the timer task for responses.
