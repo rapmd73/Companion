@@ -71,15 +71,16 @@ cd /home/GitHub/Companion
 - **README.md** This file.
 - **CODE_OF_CONDUCT.md** GitHub required files.
 - CONTRIBUTING.md
+- dependabot.yml
 - lgpl-2.1.txt
 - LICENSE-lgpl
 - SECURITY.md
 
 #### /home/Companion/Personas
 
-- Marcus
-- Mugsy
-- Tipsy
+- **Marcus** The stoic mentor/teacher modelled after Marcus Aurelius. This persona is meant to demonstrate how a historical figure to bew brought to "life".
+- **Mugsy** This is a play of the ganster characters from Bug Bunny cartoons or Rockey the mobster, or Dick Dastardly. It is kept is the same light hwearted humor.
+- **Tipsy** This is the playful side of AI. Completely whimsical at all times and makes for a really nice addition to any server.
 
 #### /home/Companion/Personas/Marcus
 
