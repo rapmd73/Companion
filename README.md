@@ -82,6 +82,14 @@ cd /home/GitHub/Companion
 - **Mugsy** This is a play of the ganster characters from Bug Bunny cartoons or Rockey the mobster, or Dick Dastardly. It is kept is the same light hwearted humor.
 - **Tipsy** This is the playful side of AI. Completely whimsical at all times and makes for a really nice addition to any server.
 
+#### /home/Companion/Personas/Tipsy
+
+- **Tipsy.broke** A list on responses where one will be given to the user is the OpenAI API doesn't respond. The more the better and one response per line. Responses should be in-line with the persona you are creating.
+- **Tipsy.cfg** Configuration settings, like how much to remember, for this persona.
+- **Tipsy.persona** The actual persona of the character you are creating. Consists os a system role that define the personality amd multiple user/assissant line the refine/shape the persona with mock questions/responses.
+- **Tipsy.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.
+- **Tipsy.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
+
 #### /home/Companion/Personas/Marcus
 
 - Marcus.broke
@@ -97,14 +105,6 @@ cd /home/GitHub/Companion
 - Mugsy.persona
 - Mugsy.png
 - Mugsy.vulgarity
-
-#### /home/Companion/Personas/Tipsy
-
-- Tipsy.broke
-- Tipsy.cfg
-- Tipsy.persona
-- Tipsy.png
-- Tipsy.vulgarity
 
 ## Open AI
 
