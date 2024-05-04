@@ -79,7 +79,7 @@ cd /home/GitHub/Companion
 #### /home/Companion/Personas
 
 - **Marcus** The stoic mentor/teacher modelled after Marcus Aurelius. This persona is meant to demonstrate how a historical figure to bew brought to "life".
-- **Mugsy** This is a play of the ganster characters from Bug Bunny cartoons or Rockey the mobster, or Dick Dastardly. It is kept is the same light hwearted humor.
+- **Mugsy** This is a play of the ganster characters from Bugs Bunny cartoons or Rockey the mobster, or Dick Dastardly. It is kept is the same light hwearted humor.
 - **Tipsy** This is the playful side of AI. Completely whimsical at all times and makes for a really nice addition to any server.
 
 #### /home/Companion/Personas/Tipsy
@@ -135,6 +135,7 @@ Above is an example of the config file for this persona. Here is a table that ex
 | Temperature | 1 |Choose a sampling temperature between 0 and 2. If you go for a higher number like 0.8, the output will be more random. But if you pick a lower number like 0.2, the output will be more focused and predictable. |
 | DeveloperUID | 123456789 | The developer, YOU. This is just a cutezy way for the bot to know if you that it is talking to. This can be used to add warmness and other mofifiers to behavior and responses. Its really a steping stone to developing "relation" between the bot and human |
 | MaxMemory | 50 | The number of previous user AND bot references to save in a file. Using the example, this will cause the bot to store 50 user AND 50 bot responses to disk for EACH user it interacts with. |
+| AlowVulgarity | Yes | This tells the bot to allow vulgarity. Be sure any area that allows this is appropriately protected according to the TOS. |
 
 #### Persona construction
 
@@ -189,11 +190,38 @@ Typically there is only ONE system context, and multiple user/assistant pairs in
 details and mock ups you provide ultimately yields a more life like persona. Please be aware that the most
 robust your persona is, the more life like it is, however, it will also consume more tokens.
 
+#### Broke connections
+
+This is a simple flat text file with one response per line. These are given to the user in place of a response from the AI api, if one wasn't received. It should be in-line of the persona.
+
+```TXT
+What was that you said? I must have lost my senses temporarily. Let's blame it on the cosmic interference!
+Oh dear, it seems I've momentarily misplaced my wit. Let's hope it turns up soon!
+Pardon me? I think I just had a brief encounter with the Bermuda Triangle of thoughts!
+Oops! Looks like my brain took a detour through the Land of Confusion. Let me reroute and get back to you!
+My apologies! I seem to have ventured into the Twilight Zone of responses. Bear with me while I find my way back!
+Well, that's an interesting question! Unfortunately, my brain decided to take a brief vacation. Let's hope it returns with some fresh insights!
+Oh my, it appears my thoughts got tangled up in a cosmic dance. Let me untangle them and get back to you!
+Oopsie daisy! It seems my neurons got caught up in a whirlwind of confusion. I'll need a moment to untangle them!
+What was that you said? My brain must have taken a spontaneous detour to La La Land. Let's bring it back to reality, shall we?
+Pardon me while I retrieve my thoughts from the Bermuda Triangle of comprehension. I'll be back in a jiffy!
+My apologies! It seems my brain went on a joyride without me. Let's reel it back in and get down to business!
+Oops! It seems my brain got caught up in a cosmic traffic jam. Let's clear the lanes and get back on track!
+Hold on a moment while I retrieve my thoughts from the labyrinth of confusion. I'll be back before you know it!
+Well, that's a puzzler! It appears my brain took a spontaneous detour to the Land of Lost Thoughts. Let me track them down!
+My apologies for the brain glitch! It seems I accidentally hit the snooze button on my cognitive functions. Let's wake them up!
+Oops! My brain just decided to take a brief siesta. Let's wake it up and get back to business!
+Pardon me while I locate my train of thought—it seems to have gone off the rails momentarily!
+What was that you said? My brain must have taken a quick dip in the River of Forgetfulness. Let me fish out those thoughts!
+My apologies for the momentary brain freeze! It seems my thoughts decided to take a snow day. Let's thaw them out!
+Hold your horses while I round up my scattered thoughts—they seem to have gone on a wild goose chase without me!"
+```
+
 ## Open AI
 
-Be sure you read and understand the terms and services and acceptable use.
+Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR API KEY**
 
-Obtaining an API:
+Obtaining an API key:
 
 1. **Visit OpenAI's Website**: Go to the [OpenAI website](https://openai.com). Direct link to the [API page](https://platform.openai.com/api-keys).
 
@@ -223,7 +251,7 @@ That's it! You should now have access to the OpenAI API and be able to start usi
 
 ## Discord
 
-Be sure you read and understand the terms and services and acceptable use.
+Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR DISCORD TOKEN***
 
 This bot *requires* **administrator** priviledges for changing the avatar and nickname.
 
