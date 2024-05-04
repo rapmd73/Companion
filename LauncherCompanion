@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Crontab entry ( without hash mark #
+# @reboot ( /home/Companion/LauncherCompanion & ) > /dev/null 2>&1
+
+BaseDir="/home/Companion"
+
+while true ; do
+    $BaseDir/Companion
+    sleep 60
+done

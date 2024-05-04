@@ -529,13 +529,10 @@ if __name__=='__main__':
         print(f"Missing token file: {tfile}")
         sys.exit(1)
 
-    while True:
-        try:
-            client.run(TOKEN,log_handler=None)
-        except Exception as err: # Make sure the lock is released
-            print(f"Broken MAIN: {err}")
+    try:
+        client.run(TOKEN,log_handler=None)
+    except Exception as err: # Make sure the lock is released
+        print(f"Broken MAIN: {err}")
 
-        if MasterLock.locked():
-            MasterLock.release()
-        # Make sure the lock is released before the bot restarts.
-        time.sleep(60)
+    if MasterLock.locked():
+        MasterLock.release()
