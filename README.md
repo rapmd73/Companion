@@ -186,7 +186,8 @@ The persona file is comprised on multiple JSON (one per line) consysting of thre
 | assistant | These are example responses to the mockup questions. Sarcasm, humor, snark, any every other trait are represented here. |
 
 Typically there is only ONE system context, and multiple user/assistant pairs in a persona file. The more
-details and mock ups you provide ultimately yields a more life like persona.
+details and mock ups you provide ultimately yields a more life like persona. Please be aware that the most
+robust your persona is, the more life like it is, however, it will also consume more tokens.
 
 ## Open AI
 
