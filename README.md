@@ -137,7 +137,7 @@ Above is an example of the config file for this persona. Here is a table that ex
 | MaxMemory | 50 | The number of previous user AND bot references to save in a file. Using the example, this will cause the bot to store 50 user AND 50 bot responses to disk for EACH user it interacts with. |
 | AlowVulgarity | Yes | This tells the bot to allow vulgarity. Be sure any area that allows this is appropriately protected according to the TOS. |
 
-#### Persona construction
+##### Persona construction
 
 Constructing the persona is the must difficult aspect of the entire process. Remember, it is important that
 you understand the terms of service and acceptable use of each service involved in this project.
@@ -190,7 +190,7 @@ Typically there is only ONE system context, and multiple user/assistant pairs in
 details and mock ups you provide ultimately yields a more life like persona. Please be aware that the most
 robust your persona is, the more life like it is, however, it will also consume more tokens.
 
-#### Broke connections
+##### Broke connections
 
 This is a simple flat text file with one response per line. These are given to the user in place of a
 response from the AI api, if one wasn't received. It should be in-line of the persona.
@@ -218,7 +218,7 @@ My apologies for the momentary brain freeze! It seems my thoughts decided to tak
 Hold your horses while I round up my scattered thoughts—they seem to have gone on a wild goose chase without me!"
 ```
 
-#### Managing vulgarity
+##### Managing vulgarity
 
 This is a simple flat text file with one response per line. These are given to the user if vulgarity is
 detected in the user input. It should be in-line of the persona. If this file doesn't exist or the
@@ -246,6 +246,31 @@ Well, slap my knee and call me silly! We're on a merry-go-round of manners, not 
 Holy guacamole! We're aiming for a fiesta of fun, not a fiasco of foul language. Let's spice things up with some positivity, shall we?
 Oh dearie me! It's like someone forgot to sprinkle a little sugar on their words. Let's sweeten the pot and brew up some kindness, shall we?
 Well, jumpin' jackrabbits! We're hoppin' down the bunny trail of politeness, not stompin' through the mud of meanness. Let's hop to it and keep it classy!
+```
+
+#### Companion configuration
+
+The **Companion.cfg** file is where you tell the bot which personas operate in given text channels. This is
+a json file consisting of the room name, then the assisiated persona. You can have any number of personas,
+and a persona can be used in multiple channels.
+
+```JSON
+{
+    "tipsys-room":"Tipsy",
+    "testing":"Marcus"
+}
+```
+
+#### Companion tokens
+
+Use the below reference material to obtain you token and API.
+
+The **Companion.tokens** file is where you tell the bot what your Discord token is (line 1) and your OpenAI
+API (line 2). **NEVER SHARE OR GIVE OUT THIS INFORMATION!** 
+
+```TXT
+1111111111111111111111.22222222222222.333333333333
+11-22222222222222222222222222222
 ```
 
 ## Open AI
