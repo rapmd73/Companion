@@ -92,7 +92,7 @@ cd /home/GitHub/Companion
 
 #### /home/Companion/Personas/Marcus
 
-- Marcus.broke
+- **Marcus.broke** These files are the same meaning as **Tipsy**
 - Marcus.cfg
 - Marcus.persona
 - Marcus.png
@@ -100,11 +100,39 @@ cd /home/GitHub/Companion
 
 #### /home/Companion/Personas/Mugsy
 
-- Mugsy.broke
+- **Mugsy.broke** These files are the same meaning as **Tipsy**
 - Mugsy.cfg
 - Mugsy.persona
 - Mugsy.png
 - Mugsy.vulgarity
+
+### Configuring
+
+Configuring Companion is technically easy. Lets start with the personas. These are what define the
+personalities of your bot. Each channel can have its own personality. We will use Tipsy as the blueprint for
+this demonstration. Each persona has its own folder to keep things easily organized.
+
+We'll start with Tipsy.cfg:
+
+```JSON
+{ 
+    "Model":"gpt-3.5-turbo",
+    "FreqPenality":2,
+    "Temperature":1,
+    "DeveloperUID":123456789, 
+    "MaxMemory":50 
+}
+```
+
+Above is an example of the config file for this persona. Here is a table that explains each item.
+
+| Item | Example | Description |
+| :--  | :-: | :-- |
+| Model | gpt-3.5-turbo | This is the supported model that OpenAI allows. If you use Ollama, GPT4ALL, or similar, it will match your AI engine. |
+| FreqPenality | 2 | You can pick a number between -2.0 and 2.0 when you use the OpenAI API. If you choose a positive number, it means the system will penalize repeating the same words too often. This helps make the responses more varied and avoids repeating the same lines over and over again. |
+| Temperature | 1 |Choose a sampling temperature between 0 and 2. If you go for a higher number like 0.8, the output will be more random. But if you pick a lower number like 0.2, the output will be more focused and predictable. |
+| DeveloperUID | 123456789 | The developer, YOU. This is just a cutezy way for the bot to know if you that it is talking to. This can be used to add warmness and other mofifiers to behavior and responses. Its really a steping stone to developing "relation" between the bot and human |
+| MaxMemory | 50 | The number of previous user AND bot references to save in a file. Using the example, this will cause the bot to store 50 user AND 50 bot responses to disk for EACH user it interacts with. |
 
 ## Open AI
 
