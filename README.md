@@ -1,7 +1,5 @@
 # Companion
 
-** THIS DOCUMENT IS A WORK IN PROGRESS **
-
 ## Introduction
 
 Introducing Companion, a versatile program empowering users to create personalized personas for Discord
@@ -19,6 +17,15 @@ improvement over time.
 
 If you find this software useful, please give it a star and consider
 [sponsoring](https://github.com/sponsors/rapmd73) it to support its ongoing development and enhancement.
+
+##### Disclaimer
+
+This software is provided AS-IS, without warranty of any kind, express or implied. While every effort is
+made to keep the software maintained and functioning properly, no guarantees are made regarding its
+reliability or accuracy. By using this software, you automatically accept the terms of service and
+acceptable use policy of Discord, OpenAI or any software referred to. The creator of this software shall not
+be liable for any damages, including but not limited to, direct, indirect, incidental, or consequential
+damages, arising from the use or inability to use this software. Use at your own risk.
 
 ## Companion
 
