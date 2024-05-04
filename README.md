@@ -192,7 +192,8 @@ robust your persona is, the more life like it is, however, it will also consume 
 
 #### Broke connections
 
-This is a simple flat text file with one response per line. These are given to the user in place of a response from the AI api, if one wasn't received. It should be in-line of the persona.
+This is a simple flat text file with one response per line. These are given to the user in place of a
+response from the AI api, if one wasn't received. It should be in-line of the persona.
 
 ```TXT
 What was that you said? I must have lost my senses temporarily. Let's blame it on the cosmic interference!
@@ -217,9 +218,39 @@ My apologies for the momentary brain freeze! It seems my thoughts decided to tak
 Hold your horses while I round up my scattered thoughts—they seem to have gone on a wild goose chase without me!"
 ```
 
+#### Managing vulgarity
+
+This is a simple flat text file with one response per line. These are given to the user if vulgarity is
+detected in the user input. It should be in-line of the persona. If this file doesn't exist or the
+**AllowVulgarity** item is **Yes**, then vulgarity is NOT filtered. Vulgarity filtering admonishes the user
+and *deletes* the offending post.
+
+```TXT
+Well, sugar plum, we keep things squeaky clean around here! Let's try that again without the naughty words, shall we?
+Oh my stars! We're all about keeping it family-friendly here. Let's wash that mouth out with soap and try a more polite approach, darlin'.
+Oh dear, looks like someone forgot their manners! Let's turn that potty mouth into a poetry corner, shall we?
+Well, butter my biscuits! We're on a strict no-nonsense diet when it comes to language. Let's sprinkle a little sweetness into that sentence, shall we?
+Oopsie daisy! Looks like someone tripped over a pile of unsavory words. How about we sweep those under the rug and start fresh?
+Well, bless your heart, but we're all about rainbows and butterflies here! Let's try expressing ourselves in a more rainbow-friendly way, shall we?
+Oh my goodness gracious! We prefer conversation that's as pure as a field of daisies. Let's pluck out those not-so-nice words and replace them with sunshine!
+Whoopsie doodle! It seems like someone took a wrong turn down Foul Language Lane. Let's circle back to the polite path, shall we?
+Uh-oh! It's like someone stepped in a puddle of potty talk. Let's dry those shoes off and take a walk on the polite side, shall we?
+Well, knock me over with a feather! We're aiming for a tea party atmosphere, not a wrestling match with words. Let's keep it classy, shall we?
+Well, well, well! Looks like we've got a case of the naughty word blues. Let's turn that frown upside down with some sweet talk, shall we?
+Oh my stars and garters! We're aiming for a garden of good vibes, not a jungle of jumbled words. Let's weed out those bad boys and plant some positivity!
+Oopsie daisy! It's like someone spilled a bucket of not-so-nice words. Let's mop up the mess and redecorate with some kindness, shall we?
+Well, butter my biscuit! We're serving up sunshine and smiles, not thunderstorms and scowls. Let's swap those storm clouds for rainbows, shall we?
+Goodness gracious! It's raining cats and dogs, and those words are like a lightning bolt to the heart. Let's bring out the sunshine and chase away the storm!
+Uh-oh spaghetti-o! We've got a case of the wordy woes. Let's toss out the sour grapes and sip on some sweet tea, shall we?
+Well, slap my knee and call me silly! We're on a merry-go-round of manners, not a rollercoaster of rudeness. Let's keep it polite and playful, shall we?
+Holy guacamole! We're aiming for a fiesta of fun, not a fiasco of foul language. Let's spice things up with some positivity, shall we?
+Oh dearie me! It's like someone forgot to sprinkle a little sugar on their words. Let's sweeten the pot and brew up some kindness, shall we?
+Well, jumpin' jackrabbits! We're hoppin' down the bunny trail of politeness, not stompin' through the mud of meanness. Let's hop to it and keep it classy!
+```
+
 ## Open AI
 
-Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR API KEY**
+Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR API KEY!**
 
 Obtaining an API key:
 
@@ -251,7 +282,7 @@ That's it! You should now have access to the OpenAI API and be able to start usi
 
 ## Discord
 
-Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR DISCORD TOKEN***
+Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR DISCORD TOKEN!**
 
 This bot *requires* **administrator** priviledges for changing the avatar and nickname.
 
