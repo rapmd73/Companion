@@ -361,3 +361,20 @@ Sure, here's a step-by-step guide to setting up a Discord bot on the Discord Dev
 
 That's it! You've successfully set up a Discord bot on the Discord Developer Portal.
 
+## Reboot startup
+
+For Companion to auto start after a reboot, the following line needs to be added to your crontab. **It is
+absolutely critical that you are root user or run crontab with sudo privileges. Companion must be in the crontab
+root level to work correctly**.
+
+```crontab
+@reboot ( /home/Companion/LauncherCompanion & ) > /dev/null 2>&1
+```
+
+## Manual startup
+
+Use the following command. 
+
+```bash
+ /home/Companion/LauncherCompanion
+```
