@@ -314,11 +314,12 @@ That's it! You should now have access to the OpenAI API and be able to start usi
 
 ## Discord
 
-Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR DISCORD TOKEN!**
+Be sure you read and understand the terms and services and acceptable use. **NEVER GIVE OUT OR SHARE YOUR
+DISCORD TOKEN!**
 
 This bot *requires* **administrator** priviledges for changing the avatar and nickname.
 
-Sure, here's a step-by-step guide to setting up a Discord bot on the Discord Developer Portal:
+Here's a step-by-step guide to setting up a Discord bot:
 
 1. **Create a Discord Account:**
    If you don't have one already, create a [Discord account]([https://discord.com/register).
