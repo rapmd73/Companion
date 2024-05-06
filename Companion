@@ -159,6 +159,34 @@ def jsonFilter(s,FilterSpace=True):
 
     return(d)
 
+# Break input into a word list for steering.
+
+def GetWordList(text):
+    words=text.lower().split()                          # Split the string by spaces
+    return [word for word in words if word]     # Filter out empty strings (including spaces)
+
+# Get "steering" prompts, if there are any
+
+def GetSteering(bot,input_text):
+    wordlist=GetWordList(StripPunctuation(input_text))
+    if wordlist==None or wordlist==[]:
+        return None
+
+    SteerDir=f"{CompanionStorage}/{bot['BotName']}/Steering"
+
+    try:
+        for word in wordlist:
+            if os.path.isdir(SteerDir+'/'+word):
+                SteerDir+='/'+word
+            elif os.path.isfile(SteerDir+'/'+word+'.txt'):
+                prompts=ReadFile(SteerDir+'/'+word+'.txt').strip().split('\n')
+                return prompts
+    except Exception as err:
+        print(f"{err}")
+
+    # No txt file found. No prompts available
+    return None
+
 # Read channel list and set bot persona
 
 def GetCompanionPersona(channel):
@@ -240,13 +268,18 @@ def GetBabble(text):
         mList=[]
         pList=ReadFile(bot['Persona']).strip().split('\n')
 
+        # Look for a "steering" file
+        sList=GetSteering(bot,input_text)
+        if sList!=None:
+            pList+=sList
+
+        # Load memory files, if one exists.
         fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.memory"
         if os.path.exists(fn):
             mList=ReadFile(fn).strip().split('\n')
             pList+=mList
 
-        memU={ "role": "user", "content": input_text }
-        persona.append(memU)
+        # Build the complete persona list
 
         for s in pList:
             try:
@@ -254,7 +287,10 @@ def GetBabble(text):
             except:
                 print("Broke:",s)
 
-        persona.append( { "role": "user", "content": input_text } )
+        # Add user input
+
+        memU={ "role": "user", "content": input_text }
+        persona.append(memU)
 
         # Read token and API, already verified at program start.
 
