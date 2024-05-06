@@ -97,6 +97,14 @@ cd /home/GitHub/Companion
 - **Tipsy.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.
 - **Tipsy.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
 
+#### /home/Companion/Personas/Overmind
+
+- **Overmind.broke** These files are the same meaning as **Tipsy**
+- Overmind.cfg
+- Overmind.persona
+- Overmind.png
+- Overmind.vulgarity
+
 #### /home/Companion/Personas/Marcus
 
 - **Marcus.broke** These files are the same meaning as **Tipsy**
