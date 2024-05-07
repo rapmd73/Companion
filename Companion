@@ -143,7 +143,6 @@ def StripPunctuation(text):
     return cleaned_text
 
 # Json filter
-
 # Filter end of line and hard spaces
 
 def jsonFilter(s,FilterSpace=True):
@@ -166,6 +165,17 @@ def GetWordList(text):
     return [word for word in words if word]     # Filter out empty strings (including spaces)
 
 # Get "steering" prompts, if there are any
+
+# Steering files are a way of providing reinforcement to a pattern or paticular question/response designed
+# to maintain the persona. Often times this may be used to enforce platform TOS/AUP. 
+
+# While we can dive into the nuances on unbiased AI material, we'll just skip to the finality: NOTHING IS
+# UNBIASED. This will NEVER change simply because of how we learn, develop, and grow both as a family and
+# societal structure. Bias is AUTOMATIC.
+
+# The steering principles demonstrated here are much like we go through as children. The txt file will have
+# the question repeated multiple times, with multiple acceptable responses. This practice is virtually
+# identical to how we learn as children.
 
 def GetSteering(bot,input_text):
     wordlist=GetWordList(StripPunctuation(input_text))
@@ -259,7 +269,10 @@ def GetBabble(text):
         # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
         # we don't have any global variables.
 
-        uid,channel,input_text=text.split('/')
+        dataline=text.split('/')
+        uid=dataline[0]
+        channel=dataline[1]
+        input_text=dataline[2]
 
         # Load the persona and memory files
         bot=GetCompanionPersona(channel)
@@ -299,6 +312,10 @@ def GetBabble(text):
 
         # Initiate the OpenAI call. Could be GPT4ALL, Ollama, or any other similar process
 
+        # This section, literally 3 lines, is the entirity of the AI in the code. The rest of the code, ALL
+        # OF IT, is user interaction and discord framework. This section could be OpenAI, Ollama, GPT4ALL or
+        # any other AI/LLM system.
+
         clientAI=openai.OpenAI(api_key=AIAPI)
 
         # frequency_penalty=2 causes problems if you want your bot to write code.
@@ -334,7 +351,7 @@ def GetBabble(text):
 
         return response
     except Exception as err:
-        print(f"Broke GB: {err}")
+        print(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
         # Something broke. Keep the responses in character
         responses=ReadFile(bot['Broken']).strip().split('\n')
         selected_response=random.choice(responses)
@@ -419,7 +436,7 @@ async def update_response_data():
             try:
                 await HandleOneMessage(request)
             except Exception as err:
-                print(f"Broke: {str(err)}")
+                print(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
         MasterLock.release()
     else:
