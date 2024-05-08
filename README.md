@@ -34,6 +34,14 @@ This is the actual discord bot. This section will go through the installation an
 It supports OpenAI and Ollama currently. If you use Ollama, you must have the Ollama server running. You can
 use either, or both simultaneously. Companion also supports multiple models running at once.
 
+### Unique Features
+
+Unlock the full potential of Companion, your Discord chat bot, with seamless persona management.
+Effortlessly add, swap, or edit personas on-the-fly, ensuring your server's interactions stay fresh and
+engaging. Plus, enjoy the freedom to switch between AI engines and models without disrupting the flow of
+conversation. With Companion, customization is effortless, allowing you to tailor your bot's behavior to
+suit your server's unique vibe without ever missing a beat.
+
 ### Requirements
 
 This software requires a VPS with with a minimum of 1 core (2 cores is heavily recomended), 1 gig of RAM (4
