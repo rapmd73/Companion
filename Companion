@@ -210,65 +210,65 @@ def GetCompanionPersona(channel):
         print(f"{cfg} damaged: {err}")
         sys.exit(1)
 
+    if 'Channels' not in Config:
+        Config['Channels']={}
+
+    bot={}
     Channels=Config['Channels']
     if channel in Channels:
-        bot={}
-        bot['Default']=Config['Default']
-        bot['DefaultPersona']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.persona"
-        bot['DefaultVulgarity']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.vulgarity"
-        bot['DefaultBroken']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.broke"
-        bot['DefaultAvatar']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.png"
         bot['BotName']=Channels[channel]
-        bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
-        bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
-        bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
-        bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+        bot['Channel']=channel
+    else:
+        bot['BotName']=Config['Default']
+        bot['Channel']=None
 
-        # Load bot config file.
-        try:
-            bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
-            if os.path.exists(bcfg):
-                settings=json.loads(jsonFilter(ReadFile(bcfg)))
-            else:
-                settings={}
-        except Exception as err:
-            print(f"{bcfg} damaged: {err}")
+    bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+    bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
+    bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
+    bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
 
-        # Merge the persona settings into the controlling dictionary
-        if settings!={}:
-            bot|=settings
-
-        # Run through some sanity checks.
-        if 'Model' not in bot:
-            bot['Model']="gpt-3.5-turbo"
-        if 'FreqPenality' not in bot:
-            bot['FreqPenality']=2
+    # Load bot config file.
+    try:
+        bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
+        if os.path.exists(bcfg):
+            settings=json.loads(jsonFilter(ReadFile(bcfg)))
         else:
-            if type(bot['FreqPenality'])!=float:
-                bot['FreqPenality']=float(bot['FreqPenality'])
-        if 'Temperature' not in bot:
-            bot['Temperature']=1
-        else:
-            if type(bot['Temperature'])!=float:
-                bot['Temperature']=float(bot['Temperature'])
-        if 'AllowVulgarity' not in bot:
-            bot['AllowVulgarity']='No'
-        if 'DeveloperUID' not in bot:
-            bot['DeveloperUID']=0
-        else:
-            if type(bot['DeveloperUID'])!=int:
-                bot['DeveloperUID']=int(bot['DeveloperUID'])
-        if 'MaxMemory' not in bot:
-            bot['MaxMemory']=5
-        else:
-            if type(bot['MaxMemory'])!=int:
-                bot['MaxMemory']=int(bot['MaxMemory'])
+            settings={}
+    except Exception as err:
+        print(f"{bcfg} damaged: {err}")
 
-        # return the current bot
-        return bot
+    # Merge the persona settings into the controlling dictionary
+    if settings!={}:
+        bot|=settings
 
-    # if None, then bot is NOT allowed in area
-    return None
+    # Run through some sanity checks.
+    if 'Model' not in bot:
+        bot['Model']="gpt-3.5-turbo"
+    if 'FreqPenality' not in bot:
+        bot['FreqPenality']=2
+    else:
+        if type(bot['FreqPenality'])!=float:
+            bot['FreqPenality']=float(bot['FreqPenality'])
+    if 'Temperature' not in bot:
+        bot['Temperature']=1
+    else:
+        if type(bot['Temperature'])!=float:
+            bot['Temperature']=float(bot['Temperature'])
+    if 'AllowVulgarity' not in bot:
+        bot['AllowVulgarity']='No'
+    if 'DeveloperUID' not in bot:
+        bot['DeveloperUID']=0
+    else:
+        if type(bot['DeveloperUID'])!=int:
+            bot['DeveloperUID']=int(bot['DeveloperUID'])
+    if 'MaxMemory' not in bot:
+        bot['MaxMemory']=5
+    else:
+        if type(bot['MaxMemory'])!=int:
+            bot['MaxMemory']=int(bot['MaxMemory'])
+
+    # return the current bot
+    return bot
 
 # Initiate the OpenAI call.
 
@@ -294,6 +294,7 @@ def GetOllama(persona,bot):
         completion=ollama.chat( \
                 stream=False,
                 model=bot['Model'], \
+                options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
                 messages=persona )
     except Exception as err:
         print("Ollama:",str(err))
@@ -547,10 +548,11 @@ async def on_message(message):
     bot=GetCompanionPersona(channel)
 
     # If we have a bot, then we can converse here.
-    if bot!=None and (client.user in message.mentions or not message.mentions):
+    if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
         uid=str(message.author.id)
 
-        # Me, the developer
+        # Me, the developer. Basic blueprint to demonstrating how to delevope a "relationship" approach.
+        # This does impact the bot.
         if uid==bot['DeveloperUID']:
             imput_text="[Your developer, endearing, warm, loving] "+message.content.strip()
         else: # Not me, the rest of the world

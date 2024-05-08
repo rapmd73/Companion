@@ -140,10 +140,11 @@ this demonstration. Each persona has its own folder to keep things easily organi
 
 #### Persona configuration
 
-We'll start with Tipsy.cfg:
+We'll start with **Tipsy.cfg**. This is the OpenAI setup.
 
 ```JSON
 { 
+    "Engine":"OpenAI",
     "Model":"gpt-3.5-turbo",
     "FreqPenality":2,
     "Temperature":1,
@@ -152,10 +153,24 @@ We'll start with Tipsy.cfg:
 }
 ```
 
-Above is an example of the config file for this persona. Here is a table that explains each item.
+Here is what the Ollama setup would look like:
+
+```JSON
+{ 
+    "Engine":"Ollama",
+    "Model":"tinyllama",
+    "FreqPenality":2,
+    "Temperature":0.31,
+    "DeveloperUID":123456789, 
+    "MaxMemory":50
+}
+```
+
+Above is an example of the config file(s) for this persona. Here is a table that explains each item.
 
 | Item | Example | Description |
 | :--  | :-: | :-- |
+| Engine| OpenAI | Currently *OpenAI* and *Ollama* are the only engines supported. More to come. |
 | Model | gpt-3.5-turbo | This is the supported model that OpenAI allows. If you use Ollama, GPT4ALL, or similar, it will match your AI engine. |
 | FreqPenality | 2 | You can pick a number between -2.0 and 2.0 when you use the OpenAI API. If you choose a positive number, it means the system will penalize repeating the same words too often. This helps make the responses more varied and avoids repeating the same lines over and over again. |
 | Temperature | 1 |Choose a sampling temperature between 0 and 2. If you go for a higher number like 0.8, the output will be more random. But if you pick a lower number like 0.2, the output will be more focused and predictable. |
