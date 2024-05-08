@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # pip3 install openai
+# pip3 install ollama
 # pip3 install discord
 # pip3 install alt-profanity-check
 
@@ -20,6 +21,7 @@ import json
 import random
 import string
 import openai
+import ollama
 import discord
 from discord.ext import commands, tasks
 import profanity_check as pc
@@ -203,13 +205,19 @@ def GetCompanionPersona(channel):
     # Get the list of channels and the bot name that is allowed in a given channel
     cfg=RunningName+'.cfg'
     try:
-        Channels=json.loads(jsonFilter(ReadFile(cfg)))
+        Config=json.loads(jsonFilter(ReadFile(cfg)))
     except Exception as err:
         print(f"{cfg} damaged: {err}")
         sys.exit(1)
 
+    Channels=Config['Channels']
     if channel in Channels:
         bot={}
+        bot['Default']=Config['Default']
+        bot['DefaultPersona']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.persona"
+        bot['DefaultVulgarity']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.vulgarity"
+        bot['DefaultBroken']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.broke"
+        bot['DefaultAvatar']=f"{CompanionStorage}/{bot['Default']}/{bot['Default']}.png"
         bot['BotName']=Channels[channel]
         bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
         bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
@@ -262,6 +270,36 @@ def GetCompanionPersona(channel):
     # if None, then bot is NOT allowed in area
     return None
 
+# Initiate the OpenAI call.
+
+def GetOpenAI(AIAPI,persona,bot):
+    clientAI=openai.OpenAI(api_key=AIAPI)
+
+    # frequency_penalty=2 causes problems if you want your bot to write code.
+    # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
+    completion=clientAI.chat.completions.create( \
+            model=bot['Model'], \
+            frequency_penalty=bot['FreqPenality'],
+            temperature=bot['Temperature'],
+            messages=persona )
+
+    response=completion.choices[0].message.content
+    clientAI.close()
+    return response
+
+# Use the Ollama API
+
+def GetOllama(persona,bot):
+    try:
+        completion=ollama.chat( \
+                stream=False,
+                model=bot['Model'], \
+                messages=persona )
+    except Exception as err:
+        print("Ollama:",str(err))
+    response=completion['message']['content']
+    return response
+
 # This function handle the actual responses.
 
 def GetBabble(text):
@@ -310,24 +348,11 @@ def GetBabble(text):
         tfile=RunningName+'.tokens'
         TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
 
-        # Initiate the OpenAI call. Could be GPT4ALL, Ollama, or any other similar process
-
-        # This section, literally 3 lines, is the entirity of the AI in the code. The rest of the code, ALL
-        # OF IT, is user interaction and discord framework. This section could be OpenAI, Ollama, GPT4ALL or
-        # any other AI/LLM system.
-
-        clientAI=openai.OpenAI(api_key=AIAPI)
-
-        # frequency_penalty=2 causes problems if you want your bot to write code.
-        # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
-        completion=clientAI.chat.completions.create( \
-            model=bot['Model'], \
-            frequency_penalty=bot['FreqPenality'],
-            temperature=bot['Temperature'],
-            messages=persona )
-
-        response=completion.choices[0].message.content
-        clientAI.close()
+        response=None
+        if bot['Engine'].lower()=='openai':
+            response=GetOpenAI(AIAPI,persona,bot)
+        elif bot['Engine'].lower()=='ollama':
+            response=GetOllama(persona,bot)
 
         # Save "memory" to disk
 
@@ -428,19 +453,17 @@ async def send_response(message, response):
 async def update_response_data():
     global request_list
 
-    if not MasterLock.locked():
-        MasterLock.acquire(timeout=60)
-        if request_list and MasterLock.locked():
+    if MasterLock.acquire(timeout=60):
+        if request_list:
             request = request_list.pop(0)
 
             try:
                 await HandleOneMessage(request)
             except Exception as err:
                 print(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-
         MasterLock.release()
     else:
-        print("Locked longer then task limit")
+        print("Lock Failed URD")
 
 # This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
 # many sides to an octogon?"
@@ -552,10 +575,11 @@ async def on_message(message):
             input_text+=' [warm, friendly]'
 
         # Give the AI the message
-        MasterLock.acquire(timeout=60)
-        if MasterLock.locked():
+        if MasterLock.acquire(timeout=60):
             request_list.append({'arg': input_text, 'message': message} )
-        MasterLock.release()
+            MasterLock.release()
+        else:
+            print("Lock failed OM")
 
 # Start the timer task for responses.
 

@@ -1,3 +1,4 @@
 openai
+ollama
 discord
 alt-profanity-check

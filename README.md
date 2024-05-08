@@ -31,11 +31,22 @@ damages, arising from the use or inability to use this software. Use at your own
 
 This is the actual discord bot. This section will go through the installation and setup process.
 
+It supports OpenAI and Ollama currently. If you use Ollama, you must have the Ollama server running. You can
+use either, or both simultaneously. Companion also supports multiple models running at once.
+
 ### Requirements
 
-This software requires a VPS with with a minimum of 1 core (2 cores is heavily recomended), 1 gig of RAM (4 recomended), 2 gigs of swap, 40 gigs of SSD storage. This software was developed for the intention of using a VPS to its fullest extent. If you wish to use a virtual environment, please consult your VPS documentation.
+This software requires a VPS with with a minimum of 1 core (2 cores is heavily recomended), 1 gig of RAM (4
+recomended), 2 gigs of swap, 40 gigs of SSD storage. This software was developed for the intention of using
+a VPS to its fullest extent. If you wish to use a virtual environment, please consult your VPS
+documentation. 
 
-Jackrabbit Relay requires Python 3 (version 3.8.10) and pip3. If you do not have pip3, the below link will show you how to install it.
+If you choose to use Ollama as your AI engine, you will need a GPU for best performance. While the
+**tinyllama** model will work reasonable well without a GPU, there is a severe performance penality for the
+bot being able to respond to user requests.
+
+Companion requires Python 3 (version 3.8.10) and pip3. If you do not have pip3, the below link will show you
+how to install it.
 
     https://www.linuxscrew.com/install-pip
 
@@ -265,14 +276,31 @@ Well, jumpin' jackrabbits! We're hoppin' down the bunny trail of politeness, not
 
 #### Companion configuration
 
-The **Companion.cfg** file is where you tell the bot which personas operate in given text channels. This is
-a json file consisting of the room name, then the assisiated persona. You can have any number of personas,
-and a persona can be used in multiple channels.
+The **Companion.cfg** file is used to configure the behavior of Companion. It contains settings that define
+default behavior and assign personas to specific channels within a Discord server.
+
+Default Persona: The "Default" parameter specifies the default persona to be used when a message is received
+from a channel that is not explicitly defined in the "Channels" section. This ensures consistent behavior
+across channels if no specific persona is assigned.
+
+Channel Assignments: The "Channels" section maps each channel name to its corresponding persona. This allows
+for tailored interactions based on the context of the conversation within each channel. For example,
+channels dedicated to specific topics or themes can have personas assigned to match those themes, enhancing
+engagement and immersion for users.
+
+**Important**: The default persona is used for **moderation** only. Personas will chat with users *ONLY* if
+they are explicitly listed with a channel. AI chatting can become annoying very quickly with constant
+responsing that may not be wanted or solicited.
 
 ```JSON
 {
-    "tipsys-room":"Tipsy",
-    "testing":"Marcus"
+    "Default":"Overmind",
+    "Channels":
+    {
+        "tipsys-room":"Tipsy",
+        "mugsys-place":"Mugsy",
+        "stoicism":"Marcus"
+    }
 }
 ```
 
@@ -287,6 +315,13 @@ API (line 2). **NEVER SHARE OR GIVE OUT THIS INFORMATION!**
 1111111111111111111111.22222222222222.333333333333
 11-22222222222222222222222222222
 ```
+
+## Ollama
+
+Ollama is a great way to run an AI model "locally" and provides an incredible wealth of opportunities in
+developing personas with a diverse nature. However, it is significantly more advanced then Open AI or
+just using an API reference. Please refer to the [Ollama website](https://ollama.com/) for instructions for
+your system.
 
 ## Open AI
 
@@ -387,3 +422,4 @@ Use the following command.
 ```bash
  /home/Companion/LauncherCompanion
 ```
+
