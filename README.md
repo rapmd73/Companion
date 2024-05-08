@@ -329,10 +329,13 @@ responsing that may not be wanted or solicited.
 
 #### Companion tokens
 
-Use the below reference material to obtain you token and API.
+Use the below reference material to obtain you token and API, if needed.
 
 The **Companion.tokens** file is where you tell the bot what your Discord token is (line 1) and your OpenAI
-API (line 2). **NEVER SHARE OR GIVE OUT THIS INFORMATION!** 
+API (line 2). When using Ollama, there is no API, so the second line is just a placeholder for future
+expansion/services.
+
+**NEVER SHARE OR GIVE OUT THIS INFORMATION!**
 
 ```TXT
 1111111111111111111111.22222222222222.333333333333
