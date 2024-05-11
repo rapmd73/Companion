@@ -37,6 +37,7 @@ CompanionStorage='/home/Companion/Personas'
 # Global lock for managing sequential access to the AI api and file safety.
 
 MasterLock=threading.Lock()
+LockTimeout=300
 
 # This is required for the bot to work properly.
 
@@ -66,7 +67,7 @@ def ReadFile(fn):
         buffer=None
     return buffer
 
-# Building the leet derivitives. This was a royal pain in the ass, but by doing so, it any user trying to
+# Building the leet derivitives. This was a royal pain in the ass, but by doing so, if any user trying to
 # bypass the edit detection can be persumed to have malicious intent.
 
 def BuildDerivitives(word):
@@ -194,7 +195,7 @@ def GetSteering(bot,input_text):
                 prompts=ReadFile(SteerDir+'/'+word+'.txt').strip().split('\n')
                 return prompts
     except Exception as err:
-        print(f"{err}")
+        print(f"Steering: {err}")
 
     # No txt file found. No prompts available
     return None
@@ -242,6 +243,8 @@ def GetCompanionPersona(channel):
         bot|=settings
 
     # Run through some sanity checks.
+    if 'Engine' not in bot:
+        bot['Engine']="openai"
     if 'Model' not in bot:
         bot['Model']="gpt-3.5-turbo"
     if 'FreqPenality' not in bot:
@@ -454,7 +457,7 @@ async def send_response(message, response):
 async def update_response_data():
     global request_list
 
-    if MasterLock.acquire(timeout=60):
+    if MasterLock.acquire(timeout=LockTimeout):
         if request_list:
             request = request_list.pop(0)
 
@@ -577,7 +580,7 @@ async def on_message(message):
             input_text+=' [warm, friendly]'
 
         # Give the AI the message
-        if MasterLock.acquire(timeout=60):
+        if MasterLock.acquire(timeout=LockTimeout):
             request_list.append({'arg': input_text, 'message': message} )
             MasterLock.release()
         else:
