@@ -146,6 +146,15 @@ Configuring Companion is technically easy. Lets start with the personas. These a
 personalities of your bot. Each channel can have its own personality. We will use Tipsy as the blueprint for
 this demonstration. Each persona has its own folder to keep things easily organized.
 
+#### Logging
+
+This software logs **all**, including other bots, interactions on the server in the logging folder buy user
+ID. While this may be disturbing to many, Discord, OpenAI, Ollama, and many other services have requirements
+that must be fullfiled for any given legal juristictions. The Discord bot *Cylde* is an exampe of how bad AI
+can go down the wrong path. These logs server to ensure that any puclic server can quickly address and
+correct any errors caused by any AI engine or model as quickly as possible. It is important to remember that
+this software does/will have *automated* moderation abilities. Such meassures must be carefully monitored.
+
 #### Persona configuration
 
 We'll start with **Tipsy.cfg**. This is the OpenAI setup.
