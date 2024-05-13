@@ -65,12 +65,11 @@ def WriteLog(uid,channel,text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
         txt=text.replace('\n','\\n').replace('\r','\\r')
 
-        pid=os.getpid()
         time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
 
-        s=f'{time} {pid:7.0f} {uid} {channel} {txt}\n'
+        s=f'{time} {uid} {channel} {txt}\n'
 
-        fn=LoggingDir+'/'+str(uid)+'.log'
+        fn=LoggingDir+'/'+str(channel)+'.log'
         fh=open(fn,'a+')
         fh.write(s)
         fh.close()
