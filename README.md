@@ -148,12 +148,15 @@ this demonstration. Each persona has its own folder to keep things easily organi
 
 #### Logging
 
-This software logs **all**, including other bots, interactions on the server in the logging folder buy user
+This software logs **all**, including other bots, interactions on the server in the logging folder by user
 ID. While this may be disturbing to many, Discord, OpenAI, Ollama, and many other services have requirements
-that must be fullfiled for any given legal juristictions. The Discord bot *Cylde* is an exampe of how bad AI
-can go down the wrong path. These logs server to ensure that any puclic server can quickly address and
+that must be fulfilled for any given legal jurisdiction. The Discord bot *Clyde* is an example of how bad AI
+can go down the wrong path. These logs serve to ensure that any public server can quickly address and
 correct any errors caused by any AI engine or model as quickly as possible. It is important to remember that
-this software does/will have *automated* moderation abilities. Such meassures must be carefully monitored.
+this software does/will have *automated* moderation abilities. Such measures must be carefully monitored.
+The only difference between this bot and any other moderation bot available for Discord is that I have
+deliberately and publicly made this information openly known. Additionally, direct messages and other
+PRIVATE conversations cannot be monitored by this software.
 
 #### Persona configuration
 
