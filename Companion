@@ -36,8 +36,11 @@ CompanionStorage='/home/Companion/Personas'
 
 # Global lock for managing sequential access to the AI api and file safety.
 
-MasterLock=threading.Lock()
-LockTimeout=300
+ResponseLock=threading.Lock()
+ResponseTimeout=300
+
+BabbleLock=threading.Lock()
+BabbleTimeout=300
 
 # This is required for the bot to work properly.
 
@@ -457,17 +460,25 @@ async def send_response(message, response):
 async def update_response_data():
     global request_list
 
-    if MasterLock.acquire(timeout=LockTimeout):
+    # Pull the next request
+
+    request=None
+    if ResponseLock.acquire(timeout=ResponseTimeout):
         if request_list:
             request = request_list.pop(0)
+        ResponseLock.release()
 
+    # Only 1 AI request at a time
+
+    if request!=None:
+        if BabbleLock.acquire(timeout=BabbleTimeout):
             try:
                 await HandleOneMessage(request)
             except Exception as err:
                 print(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-        MasterLock.release()
-    else:
-        print("Lock Failed URD")
+            BabbleLock.release()
+        else:
+            print("Lock Failed URD")
 
 # This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
 # many sides to an octogon?"
@@ -580,9 +591,9 @@ async def on_message(message):
             input_text+=' [warm, friendly]'
 
         # Give the AI the message
-        if MasterLock.acquire(timeout=LockTimeout):
+        if ResponseLock.acquire(timeout=ResponseTimeout):
             request_list.append({'arg': input_text, 'message': message} )
-            MasterLock.release()
+            ResponseLock.release()
         else:
             print("Lock failed OM")
 
@@ -616,5 +627,5 @@ if __name__=='__main__':
     except Exception as err: # Make sure the lock is released
         print(f"Broken MAIN: {err}")
 
-    if MasterLock.locked():
-        MasterLock.release()
+    if ResponseLock.locked():
+        ResponseLock.release()
