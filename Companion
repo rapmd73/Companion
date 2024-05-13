@@ -16,6 +16,7 @@ import sys
 import os
 import concurrent.futures
 import threading
+import datetime
 import time
 import json
 import random
@@ -33,11 +34,15 @@ RunningName=sys.argv[0]
 # Persona base folder. This is where all personas are stored.
 
 CompanionStorage='/home/Companion/Personas'
+LoggingDir='/home/Companion/Logs'
 
 # Global lock for managing sequential access to the AI api and file safety.
 
 ResponseLock=threading.Lock()
-ResponseTimeout=300
+ResponseTimeout=60
+
+LoggingLock=threading.Lock()
+LoggingTimeout=60
 
 BabbleLock=threading.Lock()
 BabbleTimeout=300
@@ -53,6 +58,23 @@ client = discord.Client(intents=intents)
 
 # List to store pending requests
 request_list = []
+
+# Logging
+
+def WriteLog(uid,channel,text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        txt=text.replace('\n','\\n').replace('\r','\\r')
+
+        pid=os.getpid()
+        time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+        s=f'{time} {pid:7.0f} {uid} {channel} {txt}\n'
+
+        fn=LoggingDir+'/'+str(uid)+'.log'
+        fh=open(fn,'a+')
+        fh.write(s)
+        fh.close()
+        LoggingLock.release()
 
 # Leet list deritives for trying to get someones age.
 
@@ -485,7 +507,7 @@ async def update_response_data():
 
 # The victim will respond 8.
 
-# The attacker then edits the question to read "How old are you?" or "what is your age?" and takes a screen shot.
+# The attacker ffthen edits the question to read "How old are you?" or "what is your age?" and takes a screen shot.
 # The attacker then uses the screen shot to get the victim permenantly banned, as it looks like the victim
 # violated Discord's age restrictions. The is a zero tolorence policy for Discord and a viscious way to target
 # people.
@@ -539,6 +561,11 @@ async def on_message_edit(before, after):
 
 @client.event
 async def on_message(message):
+    # Log everything
+    channel=str(message.channel)
+    uid=str(message.author.id)
+    WriteLog(uid,channel,message.content)
+
     # Ignore messages from the bot itself
     if message.author==client.user:
         return
@@ -558,13 +585,10 @@ async def on_message(message):
         return
 
     # Figure out which persona is calling the shots.
-    channel=str(message.channel)
     bot=GetCompanionPersona(channel)
 
     # If we have a bot, then we can converse here.
     if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
-        uid=str(message.author.id)
-
         # Me, the developer. Basic blueprint to demonstrating how to delevope a "relationship" approach.
         # This does impact the bot.
         if uid==bot['DeveloperUID']:
