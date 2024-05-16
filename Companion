@@ -49,12 +49,13 @@ BabbleTimeout=300
 
 # This is required for the bot to work properly.
 
-intents = discord.Intents.all()
+intents=discord.Intents.all()
 intents.messages=True
 intents.members=True
+intents.guilds=True
 
 # Create a Discord client
-client = discord.Client(intents=intents)
+client=discord.Client(intents=intents)
 
 # List to store pending requests
 request_list = []
@@ -194,7 +195,7 @@ def GetWordList(text):
 # Get "steering" prompts, if there are any
 
 # Steering files are a way of providing reinforcement to a pattern or paticular question/response designed
-# to maintain the persona. Often times this may be used to enforce platform TOS/AUP. 
+# to maintain the persona. Often times this may be used to enforce platform TOS/AUP.
 
 # While we can dive into the nuances on unbiased AI material, we'll just skip to the finality: NOTHING IS
 # UNBIASED. This will NEVER change simply because of how we learn, develop, and grow both as a family and
@@ -463,13 +464,29 @@ async def HandleOneMessage(request):
 
 async def send_response(message, response):
     try:
-        if len(response) > 1997:
+        if len(response)<1900:
+            await message.channel.send(response)
+        else:
+            # Break this up into multiple messages
+            x1=response
+            l=len(x1)
+            while l>1900:
+                p=1900
+                while x1[p]!='\n':
+                    p-=1
+                await message.channel.send(x1[:p])
+                x1=x1[p:]
+                l=len(x1)
+            if l>0:
+                await message.channel.send(x1)
+
+            """ # Attach response
             with open("response.txt", "w", encoding="utf-8") as file:
                 file.write(response)
-            await message.channel.send(file=discord.File("response.txt"))
+            author=str(message.author.mention)
+            await message.channel.send(author,file=discord.File("response.txt"))
             os.remove("response.txt")
-        else:
-            await message.channel.send(response)
+            """
     except discord.errors.HTTPException as e:
         print(f'Error sending message: {str(e)}')
 
@@ -649,6 +666,3 @@ if __name__=='__main__':
         client.run(TOKEN,log_handler=None)
     except Exception as err: # Make sure the lock is released
         print(f"Broken MAIN: {err}")
-
-    if ResponseLock.locked():
-        ResponseLock.release()
