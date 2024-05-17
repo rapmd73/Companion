@@ -76,6 +76,22 @@ def WriteLog(uid,channel,text):
         fh.close()
         LoggingLock.release()
 
+# Log errors
+
+def ErrorLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        txt=text.replace('\n','\\n').replace('\r','\\r')
+
+        time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+        s=f'{time} {txt}\n'
+
+        fn=LoggingDir+'/Errors.log'
+        fh=open(fn,'a+')
+        fh.write(s)
+        fh.close()
+        LoggingLock.release()
+
 # Leet list deritives for trying to get someones age.
 
 lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
@@ -220,7 +236,7 @@ def GetSteering(bot,input_text):
                 prompts=ReadFile(SteerDir+'/'+word+'.txt').strip().split('\n')
                 return prompts
     except Exception as err:
-        print(f"Steering: {err}")
+        ErrorLog(f"Steering: {sys.exc_info()[-1].tb_lineno}/{err}")
 
     # No txt file found. No prompts available
     return None
@@ -233,8 +249,8 @@ def GetCompanionPersona(channel):
     try:
         Config=json.loads(jsonFilter(ReadFile(cfg)))
     except Exception as err:
-        print(f"{cfg} damaged: {err}")
-        sys.exit(1)
+        ErrorLog(f"{cfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return
 
     if 'Channels' not in Config:
         Config['Channels']={}
@@ -261,7 +277,7 @@ def GetCompanionPersona(channel):
         else:
             settings={}
     except Exception as err:
-        print(f"{bcfg} damaged: {err}")
+        ErrorLog(f"{bcfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
 
     # Merge the persona settings into the controlling dictionary
     if settings!={}:
@@ -325,7 +341,8 @@ def GetOllama(persona,bot):
                 options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
                 messages=persona )
     except Exception as err:
-        print("Ollama:",str(err))
+        ErrorLog(f"Ollama: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
     response=completion['message']['content']
     return response
 
@@ -365,7 +382,7 @@ def GetBabble(text):
             try:
                 persona.append(json.loads(s))
             except:
-                print("Broke:",s)
+                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
 
         # Add user input
 
@@ -405,7 +422,7 @@ def GetBabble(text):
 
         return response
     except Exception as err:
-        print(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
+        ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
         # Something broke. Keep the responses in character
         responses=ReadFile(bot['Broken']).strip().split('\n')
         selected_response=random.choice(responses)
@@ -438,7 +455,7 @@ async def HandleOneMessage(request):
             fh.close()
             await client.user.edit(avatar=png)
         except Exception as err:
-            print(f"Broken Nick/Avatar: {err}")
+            ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
 
         async with message.channel.typing():
             # Handle any vulgarity
@@ -487,8 +504,8 @@ async def send_response(message, response):
             await message.channel.send(author,file=discord.File("response.txt"))
             os.remove("response.txt")
             """
-    except discord.errors.HTTPException as e:
-        print(f'Error sending message: {str(e)}')
+    except discord.errors.HTTPException as err:
+        ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # The dirty part. I wanted to serialize requests for the bot, so i timer approach is used coupled with a locking
 # method. This keep a rate limit approach for the open AI api in accordance to its policies. Sleeping method can
@@ -513,10 +530,10 @@ async def update_response_data():
             try:
                 await HandleOneMessage(request)
             except Exception as err:
-                print(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
             BabbleLock.release()
         else:
-            print("Lock Failed URD")
+            ErrorLog("Lock Failed URD")
 
 # This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
 # many sides to an octogon?"
@@ -565,11 +582,11 @@ async def on_message_edit(before, after):
                 color=discord.Color.red() )
             await after.channel.send(embed=msg)
     except Exception as err:
-        print('Broken Edit:', str(err))
-        print('  UID:',after.author.id)
-        print('  User:',after.author)
-        print('  Before:',before.content)
-        print('  After:',after.content)
+        ErrorLog('Broken Edit:', str(err))
+        ErrorLog('  UID:',after.author.id)
+        ErrorLog('  User:',after.author)
+        ErrorLog('  Before:',before.content)
+        ErrorLog('  After:',after.content)
 
 # Get the user message and add it to a processing list. This really is the driving point of the AI responses.
 # Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
@@ -635,7 +652,7 @@ async def on_message(message):
             request_list.append({'arg': input_text, 'message': message} )
             ResponseLock.release()
         else:
-            print("Lock failed OM")
+            ErrorLog("Lock failed OM")
 
 # Start the timer task for responses.
 
@@ -645,6 +662,18 @@ async def on_ready():
 
     # Start the task when the bot is ready
     update_response_data.start()
+
+# Make a nice announcement welcoming the user to the server.
+
+@client.event
+async def on_member_join(member):
+    ErrorLog(f"OMJ: {member}")
+
+# Record the user leaving the server in the designated moderator area.
+
+@client.event
+async def on_member_remove(member):
+    ErrorLog(f"OMR: {member}")
 
 # starts the bot with the corresponding token
 
@@ -664,5 +693,6 @@ if __name__=='__main__':
 
     try:
         client.run(TOKEN,log_handler=None)
-    except Exception as err: # Make sure the lock is released
-        print(f"Broken MAIN: {err}")
+    except Exception as err:
+        ErrorLog(f"Broken MAIN: {err}")
+
