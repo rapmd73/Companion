@@ -16,6 +16,7 @@ import sys
 import os
 import concurrent.futures
 import threading
+import asyncio
 import datetime
 import time
 import json
@@ -99,14 +100,24 @@ rside=['over','old','young','under','teen','tween','tweenie','born','date','year
 
 # General file tools
 
-def ReadFile(fn):
+def ReadFile(fn,binary=False):
     if os.path.exists(fn):
-        cf=open(fn,'r')
-        buffer=cf.read().strip()
-        cf.close()
+        if binary:
+            cf=open(fn,'rb')
+            buffer=cf.read()
+            cf.close()
+        else:
+            cf=open(fn,'r')
+            buffer=cf.read().strip()
+            cf.close()
     else:
         buffer=None
     return buffer
+
+def WriteFile(fn,data):
+    cf=open(fn,'w')
+    cf.write(data)
+    cf.close()
 
 # Building the leet derivitives. This was a royal pain in the ass, but by doing so, if any user trying to
 # bypass the edit detection can be persumed to have malicious intent.
@@ -445,17 +456,23 @@ async def HandleOneMessage(request):
 
         print('U',uid,message.author,message.channel,message.content)
 
-        # Only seems to work with Administrator priviledges
-        # Change the nickname if the bot.
-        try:
-            await message.guild.me.edit(nick=bot['BotName'])
-            pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
-            fh=open(pname,'rb')
-            png=fh.read()
-            fh.close()
-            await client.user.edit(avatar=png)
-        except Exception as err:
-            ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
+        # Only change avatar if channels change.
+        cname=ReadFile(RunningName+'.lastchannel')
+        if cname==None or channel.strip()!=cname:
+            WriteFile(RunningName+'.lastchannel',channel+'\n')
+
+            # Only seems to work with Administrator priviledges
+            # Change the nickname if the bot.
+            try:
+                # Add code to check avatar name and channel. Only change avatar when channel changes.
+                await message.guild.me.edit(nick=bot['BotName'])
+                pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+                png=ReadFile(pname,binary=True)
+                await client.user.edit(avatar=png)
+            except Exception as err:
+                ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
+
+        # Type out the response
 
         async with message.channel.typing():
             # Handle any vulgarity
