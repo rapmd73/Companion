@@ -93,6 +93,85 @@ def ErrorLog(text):
         fh.close()
         LoggingLock.release()
 
+# Disect discord messages. Forensic logging
+
+def DisectMessage(message):
+    # Set up convience variables
+    channel=str(message.channel)
+    uid=str(message.author.id)
+    author = message.author
+    member = message.guild.get_member(author.id) if message.guild else None
+    nickname = member.nick if member and member.nick else author.name
+
+    try:
+        WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
+        WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
+        WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
+        WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{message.author.id} Bot: {message.author.bot}")
+        WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
+        WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
+        # Check if the message was sent via a webhook
+        if message.webhook_id:
+            WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
+        # List the users mentioned, if any
+        if message.mentions:
+            WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
+        if message.role_mentions:
+            WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
+        if message.channel_mentions:
+            WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
+        if str(message.content).strip()!='':
+            WriteLog(uid,channel,f"Message Content: {message.content}")
+        else:
+            WriteLog(uid,channel,f"Message Content: Empty content field")
+        if message.reactions:
+            WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
+
+        # Log sticker information
+        if message.stickers:
+            WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
+
+        # Log reference information (for replies)
+        if message.reference:
+            ref = message.reference
+            WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
+
+        # Log details about each embed
+        if message.embeds:
+            WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
+            for index, embed in enumerate(message.embeds):
+                WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
+                WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
+                WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
+                WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
+                WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
+                WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
+                WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
+                WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
+                WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
+                WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
+                WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
+
+        # Log detailed information about each attachment
+        if message.attachments:
+            WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
+            for index, attachment in enumerate(message.attachments):
+                WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
+                WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
+                WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
+                WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
+                WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
+                WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
+
+        # Log message components (if any)
+        if message.components:
+            WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
+    except AttributeError as e:
+        WriteLog(uid,channel,f"Error accessing message attributes: {e}")
+
+# Example usage (assuming you have a Discord message object):
+# log_discord_message(discord_message_object)
+
 # Leet list deritives for trying to get someones age.
 
 lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
@@ -254,7 +333,7 @@ def GetSteering(bot,input_text):
 
 # Read channel list and set bot persona
 
-def GetCompanionPersona(channel):
+def GetCompanionPersona(channel,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
     cfg=RunningName+'.cfg'
     try:
@@ -267,15 +346,23 @@ def GetCompanionPersona(channel):
         Config['Channels']={}
 
     bot={}
-    Channels=Config['Channels']
-    if channel in Channels:
-        bot['BotName']=Channels[channel]
-        bot['Channel']=channel
-    else:
-        bot['BotName']=Config['Default']
+    if Welcome==True:
+        bot['BotName']=Config['Welcome']
         bot['Channel']=None
+    else:
+        Channels=Config['Channels']
+        if channel in Channels:
+            bot['BotName']=Channels[channel]
+            bot['Channel']=channel
+        else:
+            bot['BotName']=Config['Default']
+            bot['Channel']=None
+
+    if 'Forensic' in Config:
+        bot['Forensic']='Yes'
 
     bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+    bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
@@ -439,6 +526,26 @@ def GetBabble(text):
         selected_response=random.choice(responses)
         return selected_response
 
+# Change the nick name and avatar
+
+async def ChangeNickAvatar(bot,message):
+    # Only change avatar if channels change.
+    channel=str(message.channel)
+    cname=ReadFile(RunningName+'.lastchannel')
+    if cname==None or channel.strip()!=cname:
+        WriteFile(RunningName+'.lastchannel',channel+'\n')
+
+        # Only seems to work with Administrator priviledges
+        # Change the nickname if the bot.
+        try:
+            # Add code to check avatar name and channel. Only change avatar when channel changes.
+            await message.guild.me.edit(nick=bot['BotName'])
+            pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+            png=ReadFile(pname,binary=True)
+            await client.user.edit(avatar=png)
+        except Exception as err:
+            ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
+
 # Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
 
 async def HandleOneMessage(request):
@@ -456,21 +563,7 @@ async def HandleOneMessage(request):
 
         print('U',uid,message.author,message.channel,message.content)
 
-        # Only change avatar if channels change.
-        cname=ReadFile(RunningName+'.lastchannel')
-        if cname==None or channel.strip()!=cname:
-            WriteFile(RunningName+'.lastchannel',channel+'\n')
-
-            # Only seems to work with Administrator priviledges
-            # Change the nickname if the bot.
-            try:
-                # Add code to check avatar name and channel. Only change avatar when channel changes.
-                await message.guild.me.edit(nick=bot['BotName'])
-                pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
-                png=ReadFile(pname,binary=True)
-                await client.user.edit(avatar=png)
-            except Exception as err:
-                ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
+        await ChangeNickAvatar(bot,message)
 
         # Type out the response
 
@@ -611,10 +704,16 @@ async def on_message_edit(before, after):
 
 @client.event
 async def on_message(message):
-    # Log everything
+    # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
-    WriteLog(uid,channel,message.content)
+    bot=GetCompanionPersona(channel)
+
+    # Log everything
+    if 'Forensic' in bot:
+        DisectMessage(message)
+    else:
+        WriteLog(uid,channel,message.content)
 
     # Ignore messages from the bot itself
     if message.author==client.user:
@@ -633,9 +732,6 @@ async def on_message(message):
         msg=f"{len(request_list)} pending requests"
         await send_response(message,msg)
         return
-
-    # Figure out which persona is calling the shots.
-    bot=GetCompanionPersona(channel)
 
     # If we have a bot, then we can converse here.
     if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
@@ -682,9 +778,25 @@ async def on_ready():
 
 # Make a nice announcement welcoming the user to the server.
 
+# Currently, the last avtive personality will be the welcoming party. Really should force load a bot
+# personality by name.
+
 @client.event
 async def on_member_join(member):
     ErrorLog(f"OMJ: {member}")
+    # Handle any vulgarity
+    try:
+        bot=GetCompanionPersona(None,Welcome=True)
+        if os.path.exists(bot['Welcome']):
+            # Figure out which persona is calling the shots.
+            # ChangeNickAvatar(bot,member)
+            responses=ReadFile(bot['Welcome']).strip().split('\n')
+            response=random.choice(responses).replace('{username}',f'**{member.mention}**')
+            # Get the system welcome channel and send message there.
+            syschannel=member.guild.system_channel
+            await syschannel.send(response)
+    except Exception as err:
+        ErrorLog(f'OMJ: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # Record the user leaving the server in the designated moderator area.
 

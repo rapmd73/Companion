@@ -318,6 +318,9 @@ Default Persona: The "Default" parameter specifies the default persona to be use
 from a channel that is not explicitly defined in the "Channels" section. This ensures consistent behavior
 across channels if no specific persona is assigned.
 
+Forensic logging: Please note that if the "Forensic" key is in the config, value is ignored, this bog will
+log details on a forensic level. This provides significantly more detail about each message.
+
 Channel Assignments: The "Channels" section maps each channel name to its corresponding persona. This allows
 for tailored interactions based on the context of the conversation within each channel. For example,
 channels dedicated to specific topics or themes can have personas assigned to match those themes, enhancing
@@ -330,6 +333,7 @@ responsing that may not be wanted or solicited.
 ```JSON
 {
     "Default":"Overmind",
+    "Forensic":"Yes",
     "Channels":
     {
         "tipsys-room":"Tipsy",
