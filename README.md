@@ -155,8 +155,8 @@ can go down the wrong path. These logs serve to ensure that any public server ca
 correct any errors caused by any AI engine or model as quickly as possible. It is important to remember that
 this software does/will have *automated* moderation abilities. Such measures must be carefully monitored.
 The only difference between this bot and any other moderation bot available for Discord is that I have
-deliberately and publicly made this information openly known. Additionally, direct messages and other
-PRIVATE conversations cannot be monitored by this software.
+deliberately and publicly made this information openly known. Additionally, direct messages that do not
+involve the bot cannot be monitored by this software.
 
 #### Persona configuration
 
@@ -318,9 +318,6 @@ Default Persona: The "Default" parameter specifies the default persona to be use
 from a channel that is not explicitly defined in the "Channels" section. This ensures consistent behavior
 across channels if no specific persona is assigned.
 
-Forensic logging: Please note that if the "Forensic" key is in the config, value is ignored, this bog will
-log details on a forensic level. This provides significantly more detail about each message.
-
 Channel Assignments: The "Channels" section maps each channel name to its corresponding persona. This allows
 for tailored interactions based on the context of the conversation within each channel. For example,
 channels dedicated to specific topics or themes can have personas assigned to match those themes, enhancing
@@ -333,7 +330,6 @@ responsing that may not be wanted or solicited.
 ```JSON
 {
     "Default":"Overmind",
-    "Forensic":"Yes",
     "Channels":
     {
         "tipsys-room":"Tipsy",
