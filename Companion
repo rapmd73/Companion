@@ -68,32 +68,38 @@ request_list = []
 
 def WriteLog(uid,channel,text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
-        txt=text.replace('\n','\\n').replace('\r','\\r')
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
 
-        time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
 
-        s=f'{time} {uid} {channel} {txt}\n'
+            s=f'{time} {uid} {channel} {txt}\n'
 
-        fn=LoggingDir+'/'+str(channel)+'.log'
-        fh=open(fn,'a+')
-        fh.write(s)
-        fh.close()
+            fn=LoggingDir+'/'+str(channel)+'.log'
+            fh=open(fn,'a+')
+            fh.write(s)
+            fh.close()
+        except:
+            pass
         LoggingLock.release()
 
 # Log errors
 
 def ErrorLog(text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
-        txt=text.replace('\n','\\n').replace('\r','\\r')
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
 
-        time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
 
-        s=f'{time} {txt}\n'
+            s=f'{time} {txt}\n'
 
-        fn=LoggingDir+'/Errors.log'
-        fh=open(fn,'a+')
-        fh.write(s)
-        fh.close()
+            fn=LoggingDir+'/Errors.log'
+            fh=open(fn,'a+')
+            fh.write(s)
+            fh.close()
+        except:
+            pass
         LoggingLock.release()
 
 # Disect discord messages. Forensic logging
@@ -171,9 +177,9 @@ def DisectMessage(event,message):
             # Log message components (if any)
             if message.components:
                 WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
+            WriteLog(uid,channel,f"{'-'*80}")
         except AttributeError as e:
             WriteLog(uid,channel,f"Error accessing message attributes: {e}")
-        WriteLog(uid,channel,f"{'-'*80}")
         DisectLock.release()
 
 # Example usage (assuming you have a Discord message object):
@@ -364,9 +370,6 @@ def GetCompanionPersona(channel,Welcome=False):
         else:
             bot['BotName']=Config['Default']
             bot['Channel']=None
-
-    if 'Forensic' in Config:
-        bot['Forensic']='Yes'
 
     bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
@@ -689,9 +692,8 @@ async def on_message_edit(before, after):
 
     try:
     # Log everything
-        if 'Forensic' in bot:
-            DisectMessage("Message edited (before)",before)
-            DisectMessage("Message edited (after)",after)
+        DisectMessage("Message edited (before)",before)
+        DisectMessage("Message edited (after)",after)
 
         # Build leet lists
 
@@ -759,10 +761,7 @@ async def on_message(message):
     bot=GetCompanionPersona(channel)
 
     # Log everything
-    if 'Forensic' in bot:
-        DisectMessage("Received message",message)
-    else:
-        WriteLog(uid,channel,message.content)
+    DisectMessage("Received message",message)
 
     # Ignore messages from the bot itself
     if message.author==client.user:
