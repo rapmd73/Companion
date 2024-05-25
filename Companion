@@ -42,6 +42,9 @@ LoggingDir='/home/Companion/Logs'
 ResponseLock=threading.Lock()
 ResponseTimeout=60
 
+DisectLock=threading.Lock()
+DisectTimeout=300
+
 LoggingLock=threading.Lock()
 LoggingTimeout=60
 
@@ -95,79 +98,83 @@ def ErrorLog(text):
 
 # Disect discord messages. Forensic logging
 
-def DisectMessage(message):
-    # Set up convience variables
-    channel=str(message.channel)
-    uid=str(message.author.id)
-    author = message.author
-    member = message.guild.get_member(author.id) if message.guild else None
-    nickname = member.nick if member and member.nick else author.name
+def DisectMessage(event,message):
+    if DisectLock.acquire(timeout=DisectTimeout):
+        # Set up convience variables
+        channel=str(message.channel)
+        uid=str(message.author.id)
+        author = message.author
+        member = message.guild.get_member(author.id) if message.guild else None
+        nickname = member.nick if member and member.nick else author.name
 
-    try:
-        WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
-        WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
-        WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
-        WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{message.author.id} Bot: {message.author.bot}")
-        WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
-        WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
-        # Check if the message was sent via a webhook
-        if message.webhook_id:
-            WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
-        # List the users mentioned, if any
-        if message.mentions:
-            WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
-        if message.role_mentions:
-            WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
-        if message.channel_mentions:
-            WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
-        if str(message.content).strip()!='':
-            WriteLog(uid,channel,f"Message Content: {message.content}")
-        else:
-            WriteLog(uid,channel,f"Message Content: Empty content field")
-        if message.reactions:
-            WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
+        try:
+            WriteLog(uid,channel,f"Event trigger: {event}")
+            WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
+            WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
+            WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
+            WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{message.author.id} Bot: {message.author.bot}")
+            WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
+            WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
+            # Check if the message was sent via a webhook
+            if message.webhook_id:
+                WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
+            # List the users mentioned, if any
+            if message.mentions:
+                WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
+            if message.role_mentions:
+                WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
+            if message.channel_mentions:
+                WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
+            if str(message.content).strip()!='':
+                WriteLog(uid,channel,f"Message Content: {message.content}")
+            else:
+                WriteLog(uid,channel,f"Message Content: Empty content field")
+            if message.reactions:
+                WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
 
-        # Log sticker information
-        if message.stickers:
-            WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
+            # Log sticker information
+            if message.stickers:
+                WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
 
-        # Log reference information (for replies)
-        if message.reference:
-            ref = message.reference
-            WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
+            # Log reference information (for replies)
+            if message.reference:
+                ref = message.reference
+                WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
 
-        # Log details about each embed
-        if message.embeds:
-            WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
-            for index, embed in enumerate(message.embeds):
-                WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
-                WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
-                WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
-                WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
-                WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
-                WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
-                WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
-                WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
-                WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
-                WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
-                WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
+            # Log details about each embed
+            if message.embeds:
+                WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
+                for index, embed in enumerate(message.embeds):
+                    WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
+                    WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
 
-        # Log detailed information about each attachment
-        if message.attachments:
-            WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
-            for index, attachment in enumerate(message.attachments):
-                WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
-                WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
-                WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
-                WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
-                WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
-                WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
+            # Log detailed information about each attachment
+            if message.attachments:
+                WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
+                for index, attachment in enumerate(message.attachments):
+                    WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
+                    WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
 
-        # Log message components (if any)
-        if message.components:
-            WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
-    except AttributeError as e:
-        WriteLog(uid,channel,f"Error accessing message attributes: {e}")
+            # Log message components (if any)
+            if message.components:
+                WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
+        except AttributeError as e:
+            WriteLog(uid,channel,f"Error accessing message attributes: {e}")
+        WriteLog(uid,channel,f"{'-'*80}")
+        DisectLock.release()
 
 # Example usage (assuming you have a Discord message object):
 # log_discord_message(discord_message_object)
@@ -659,11 +666,10 @@ async def update_response_data():
 # after the fact, the bot won't receive the edit notification. THIS IS A MAJOR LOOPHOLE, but one only DISCORD can
 # fix.
 
+# It seems one of the best ways to defeat this is just to delete the original message.
+
 @client.event
 async def on_message_edit(before, after):
-    if after.content==before.content:
-        return
-
     # Search for word in list
     def CheckWordList(side,sampleText):
         Found=False
@@ -673,7 +679,20 @@ async def on_message_edit(before, after):
                 break
         return Found
 
+    # if before and after content are the same, nothing to do
+    if after.content==before.content:
+        return
+
+    channel=str(after.channel)
+    uid=str(after.author.id)
+    bot=GetCompanionPersona(channel)
+
     try:
+    # Log everything
+        if 'Forensic' in bot:
+            DisectMessage("Message edited (before)",before)
+            DisectMessage("Message edited (after)",after)
+
         # Build leet lists
 
         leftside=BuildLeetList(lside)
@@ -685,18 +704,48 @@ async def on_message_edit(before, after):
         rightFound=CheckWordList(rightside,sampleText)
 
         if leftFound and rightFound:
-            uid=str(after.author.id)
+            # This seems to be a better way to ruin the attacker's plan
             msg=discord.Embed(
-                title='Possible edit attack detected',
+                title='Message edited',
                 description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
                 color=discord.Color.red() )
+            try: # delete the edited message
+                await after.delete()
+            except:
+                pass
             await after.channel.send(embed=msg)
+            return
+
+        # Check for vulgarity in the edited response
+        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no':
+            if bool(pc.predict([ after.content ]))==True:
+                responses=ReadFile(bot['Vulgarity']).strip().split('\n')
+                response=random.choice(responses)
+                try: # delete the offending message
+                    await after.delete()
+                except:
+                    pass
+                await send_response(after,response)
+                return
+
     except Exception as err:
         ErrorLog('Broken Edit:', str(err))
         ErrorLog('  UID:',after.author.id)
         ErrorLog('  User:',after.author)
         ErrorLog('  Before:',before.content)
         ErrorLog('  After:',after.content)
+
+# Log deleted messages. Nothing escapes the watchful eye of the moderation system
+
+@client.event
+async def on_message_delete(message):
+    # Figure out which persona is calling the shots.
+    channel=str(message.channel)
+    uid=str(message.author.id)
+    bot=GetCompanionPersona(channel)
+
+    # Log everything
+    DisectMessage("Deleted message",message)
 
 # Get the user message and add it to a processing list. This really is the driving point of the AI responses.
 # Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
@@ -711,7 +760,7 @@ async def on_message(message):
 
     # Log everything
     if 'Forensic' in bot:
-        DisectMessage(message)
+        DisectMessage("Received message",message)
     else:
         WriteLog(uid,channel,message.content)
 
