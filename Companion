@@ -346,7 +346,7 @@ def GetSteering(bot,input_text):
 
 # Read channel list and set bot persona
 
-def GetCompanionPersona(channel,Welcome=False):
+def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
     cfg=RunningName+'.cfg'
     try:
@@ -371,7 +371,32 @@ def GetCompanionPersona(channel,Welcome=False):
             bot['BotName']=Config['Default']
             bot['Channel']=None
 
-    bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+    # Sort out loading a persona by channel and NSFW possibilities.
+
+    # possibilities are that a persona can be:
+    #   1. global (SFW)
+    #   2. global, NSFW
+    #   3. channel, (SFW)
+    #   4. channel, NSFW
+
+    # Test channel NSFW
+    BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona.nsfw"
+    if os.path.exists(BotPersona):
+        bot['Persona']=BotPersona
+    else:
+        # Test channel SFW
+        BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona"
+        if os.path.exists(BotPersona):
+            bot['Persona']=BotPersona
+        else:
+            # Test global NSFW
+            BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona.nsfw"
+            if os.path.exists(BotPersona):
+                bot['Persona']=BotPersona
+            else:
+                # global SFW
+                bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
@@ -435,7 +460,10 @@ def GetOpenAI(AIAPI,persona,bot):
             temperature=bot['Temperature'],
             messages=persona )
 
-    response=completion.choices[0].message.content
+    try:
+        response=completion.choices[0].message.content.strip()
+    except:
+        response=None
     clientAI.close()
     return response
 
@@ -451,7 +479,10 @@ def GetOllama(persona,bot):
     except Exception as err:
         ErrorLog(f"Ollama: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
-    response=completion['message']['content']
+    try:
+        response=completion['message']['content'].strip()
+    except:
+        response=None
     return response
 
 # This function handle the actual responses.
@@ -463,11 +494,12 @@ def GetBabble(text):
 
         dataline=text.split('/')
         uid=dataline[0]
-        channel=dataline[1]
+        channel,cnsfw=dataline[1].split(':')
+        nsfw=(cnsfw=='T')
         input_text=dataline[2]
 
         # Load the persona and memory files
-        bot=GetCompanionPersona(channel)
+        bot=GetCompanionPersona(channel,nsfw)
 
         persona=[]
         mList=[]
@@ -479,7 +511,7 @@ def GetBabble(text):
             pList+=sList
 
         # Load memory files, if one exists.
-        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.memory"
+        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
         if os.path.exists(fn):
             mList=ReadFile(fn).strip().split('\n')
             pList+=mList
@@ -567,11 +599,12 @@ async def HandleOneMessage(request):
         channel=str(message.channel)
 
         # Figure out which persona is calling the shots.
-        bot=GetCompanionPersona(channel)
+        bot=GetCompanionPersona(channel,message.channel.nsfw)
 
         input_text=request['arg']
 
-        print('U',uid,message.author,message.channel,message.content)
+        nsfw=str(message.channel.nsfw)[0]
+        print('U',nsfw,uid,message.author,message.channel,message.content)
 
         await ChangeNickAvatar(bot,message)
 
@@ -579,7 +612,7 @@ async def HandleOneMessage(request):
 
         async with message.channel.typing():
             # Handle any vulgarity
-            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no':
+            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
                 if bool(pc.predict([ input_text ]))==True:
                     responses=ReadFile(bot['Vulgarity']).strip().split('\n')
                     response=random.choice(responses)
@@ -588,9 +621,9 @@ async def HandleOneMessage(request):
                     except:
                         pass
                 else:
-                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+'/'+input_text)
+                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
             else:
-                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+'/'+input_text)
+                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
 
             print('B',client.user.id,bot['BotName'],message.channel,response)
 
@@ -691,7 +724,7 @@ async def on_message_edit(before, after):
     bot=GetCompanionPersona(channel)
 
     try:
-    # Log everything
+        # Log everything
         DisectMessage("Message edited (before)",before)
         DisectMessage("Message edited (after)",after)
 
@@ -711,10 +744,10 @@ async def on_message_edit(before, after):
                 title='Message edited',
                 description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
                 color=discord.Color.red() )
-            try: # delete the edited message
-                await after.delete()
-            except:
-                pass
+#            try: # delete the edited message
+#                await after.delete()
+#            except:
+#                pass
             await after.channel.send(embed=msg)
             return
 
@@ -758,7 +791,8 @@ async def on_message(message):
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
-    bot=GetCompanionPersona(channel)
+
+    bot=GetCompanionPersona(channel,message.channel.nsfw)
 
     # Log everything
     DisectMessage("Received message",message)
@@ -786,7 +820,7 @@ async def on_message(message):
         # Me, the developer. Basic blueprint to demonstrating how to delevope a "relationship" approach.
         # This does impact the bot.
         if uid==bot['DeveloperUID']:
-            imput_text="[Your developer, endearing, warm, loving] "+message.content.strip()
+            imput_text="{[(* endearing, warm, loving, passionate, intimate *)]} "+message.content.strip()
         else: # Not me, the rest of the world
             input_text = message.content.strip()
 

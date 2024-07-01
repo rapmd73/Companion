@@ -113,6 +113,7 @@ cd /home/GitHub/Companion
 - **Tipsy.broke** A list on responses where one will be given to the user is the OpenAI API doesn't respond. The more the better and one response per line. Responses should be in-line with the persona you are creating.
 - **Tipsy.cfg** Configuration settings, like how much to remember, for this persona.
 - **Tipsy.persona** The actual persona of the character you are creating. Consists os a system role that define the personality amd multiple user/assissant line the refine/shape the persona with mock questions/responses.
+- **Tipsy.persona.nsfw** The NSFW version of the persona. It is only loaded if the channel is age restricted.
 - **Tipsy.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.
 - **Tipsy.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
 
