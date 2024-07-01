@@ -11,7 +11,7 @@ cd /home/GitHub/Companion
 
 mkdir -p $BaseDir > /dev/null 2>&1
 git pull https://github.com/rapmd73/Companion
-#cp -r * /home/Companion > /dev/null 2>&1
+cp -r * /home/Companion > /dev/null 2>&1
 
 python3 -m pip install --upgrade pip --break-system-packages
 
