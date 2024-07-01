@@ -2,3 +2,5 @@ openai
 ollama
 discord
 alt-profanity-check
+numpy
+scipy
