@@ -549,7 +549,7 @@ def GetBabble(text):
 
         # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
 
-        if bot['MaxMemory']>0:
+        if bot['MaxMemory']>0 and memA['content']!=None:
             if len(mList)>(bot['MaxMemory']*2):
                 mList=mList[2:]
 
@@ -591,51 +591,66 @@ async def ChangeNickAvatar(bot,message):
 # Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
 
 async def HandleOneMessage(request):
+    global request_list
+
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        message=request['message']
+        try:
+            message=request['message']
 
-        uid=str(message.author.id)
-        author=str(message.author.mention)
-        channel=str(message.channel)
+            uid=str(message.author.id)
+            author=str(message.author.mention)
+            channel=str(message.channel)
 
-        # Figure out which persona is calling the shots.
-        bot=GetCompanionPersona(channel,message.channel.nsfw)
+            # Figure out which persona is calling the shots.
+            bot=GetCompanionPersona(channel,message.channel.nsfw)
 
-        input_text=request['arg']
+            input_text=request['arg']
 
-        nsfw=str(message.channel.nsfw)[0]
-        print('U',nsfw,uid,message.author,message.channel,message.content)
+            nsfw=str(message.channel.nsfw)[0]
+            print('U',nsfw,uid,message.author,message.channel,message.content)
 
-        await ChangeNickAvatar(bot,message)
+            await ChangeNickAvatar(bot,message)
 
-        # Type out the response
+            # Type out the response
 
-        async with message.channel.typing():
-            # Handle any vulgarity
-            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
-                if bool(pc.predict([ input_text ]))==True:
-                    responses=ReadFile(bot['Vulgarity']).strip().split('\n')
-                    response=random.choice(responses)
-                    try: # delete the offending message
-                        await message.delete()
-                    except:
-                        pass
+            async with message.channel.typing():
+                # Handle any vulgarity
+                if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
+                    if bool(pc.predict([ input_text ]))==True:
+                        responses=ReadFile(bot['Vulgarity']).strip().split('\n')
+                        response=random.choice(responses)
+                        try: # delete the offending message
+                            await message.delete()
+                        except:
+                            pass
+                    else:
+                        response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
                 else:
                     response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
-            else:
-                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
 
-            print('B',client.user.id,bot['BotName'],message.channel,response)
+                print('B',client.user.id,bot['BotName'],message.channel,response)
 
-            resp=f"{author} {response}"
-            await send_response(message,resp)
+                # Check to see if we actually got a response
+                if response!=None and response.lower().strip()!="none":
+                    resp=f"{author} {response}"
+                    await send_response(message,response)
+#                    await send_response(message,resp)
+                else:
+                    # Communication with AI failed. Put message back in queue
+                    if ResponseLock.acquire(timeout=ResponseTimeout):
+                        request_list.append({'arg': input_text, 'message': message} )
+                        ResponseLock.release()
+                    else:
+                        ErrorLog("Lock failed Reput Message")
+        except Exception as err:
+            ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
 
 # Return the response to the user. messages over 1997 characters are returned as a message file attachment.
 
 async def send_response(message, response):
     try:
         if len(response)<1900:
-            await message.channel.send(response)
+            await message.channel.send(response,reference=message)
         else:
             # Break this up into multiple messages
             x1=response
@@ -644,11 +659,11 @@ async def send_response(message, response):
                 p=1900
                 while x1[p]!='\n':
                     p-=1
-                await message.channel.send(x1[:p])
+                await message.channel.send(x1[:p],reference=message)
                 x1=x1[p:]
                 l=len(x1)
             if l>0:
-                await message.channel.send(x1)
+                await message.channel.send(x1,reference=message)
 
             """ # Attach response
             with open("response.txt", "w", encoding="utf-8") as file:
@@ -748,7 +763,7 @@ async def on_message_edit(before, after):
 #                await after.delete()
 #            except:
 #                pass
-            await after.channel.send(embed=msg)
+            await after.channel.send(embed=msg,reference=before)
             return
 
         # Check for vulgarity in the edited response
@@ -801,8 +816,8 @@ async def on_message(message):
     if message.author==client.user:
         return
     # Don't respond to other bots.
-    if message.author.bot:
-        return
+#    if message.author.bot:
+#        return
 
     if '%CheckBot' in message.content:
         member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
