@@ -653,17 +653,19 @@ async def send_response(message, response):
             await message.channel.send(response,reference=message)
         else:
             # Break this up into multiple messages
-            x1=response
+            author=str(message.author.mention)
+            x1=f"{author} {response}"
             l=len(x1)
             while l>1900:
                 p=1900
                 while x1[p]!='\n':
                     p-=1
-                await message.channel.send(x1[:p],reference=message)
+                await message.channel.send(x1[:p])
+                First=False
                 x1=x1[p:]
                 l=len(x1)
             if l>0:
-                await message.channel.send(x1,reference=message)
+                await message.channel.send(x1)
 
             """ # Attach response
             with open("response.txt", "w", encoding="utf-8") as file:
