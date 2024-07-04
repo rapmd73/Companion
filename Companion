@@ -809,6 +809,11 @@ async def on_message(message):
     channel=str(message.channel)
     uid=str(message.author.id)
 
+    # Handle auto publish
+    if message.channel.type==discord.ChannelType.news:
+        await message.publish()
+        ErrorLog(f"AutoPublish: {channel}/{message.id}")
+
     bot=GetCompanionPersona(channel,message.channel.nsfw)
 
     # Log everything
@@ -818,8 +823,8 @@ async def on_message(message):
     if message.author==client.user:
         return
     # Don't respond to other bots.
-#    if message.author.bot:
-#        return
+    if message.author.bot:
+        return
 
     if '%CheckBot' in message.content:
         member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
