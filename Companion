@@ -623,6 +623,8 @@ async def HandleOneMessage(request):
                             await message.delete()
                         except:
                             pass
+                        await message.channel.send(response)
+                        return
                     else:
                         response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
                 else:
@@ -634,7 +636,6 @@ async def HandleOneMessage(request):
                 if response!=None and response.lower().strip()!="none":
                     resp=f"{author} {response}"
                     await send_response(message,response)
-#                    await send_response(message,resp)
                 else:
                     # Communication with AI failed. Put message back in queue
                     if ResponseLock.acquire(timeout=ResponseTimeout):
@@ -777,7 +778,8 @@ async def on_message_edit(before, after):
                     await after.delete()
                 except:
                     pass
-                await send_response(after,response)
+#                await send_response(after,response)
+                await message.channel.send(response)
                 return
 
     except Exception as err:
@@ -805,6 +807,8 @@ async def on_message_delete(message):
 
 @client.event
 async def on_message(message):
+    global request_list
+
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
@@ -823,8 +827,8 @@ async def on_message(message):
     if message.author==client.user:
         return
     # Don't respond to other bots.
-    if message.author.bot:
-        return
+#    if message.author.bot:
+#        return
 
     if '%CheckBot' in message.content:
         member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
@@ -833,18 +837,34 @@ async def on_message(message):
             await send_response(message,"Allowed")
         else:
             await send_response(message,"Allowed")
-        msg=f"{len(request_list)} pending requests"
-        await send_response(message,msg)
+        if request_list!=[]:
+            msg=f"{len(request_list)} pending requests"
+            await send_response(message,msg)
+        return
+
+    if '%PurgeRequests' in message.content:
+        # Give the AI the message
+        if ResponseLock.acquire(timeout=ResponseTimeout):
+            if request_list!=[]:
+                l=len(request_list)
+                request_list=[]
+                msg=f"{l} requests purged"
+            else:
+                msg=f"Request list already empty"
+            ResponseLock.release()
+            await send_response(message,msg)
+        else:
+            ErrorLog("Lock failed OM")
         return
 
     # If we have a bot, then we can converse here.
     if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
         # Me, the developer. Basic blueprint to demonstrating how to delevope a "relationship" approach.
         # This does impact the bot.
-        if uid==bot['DeveloperUID']:
-            imput_text="{[(* endearing, warm, loving, passionate, intimate *)]} "+message.content.strip()
-        else: # Not me, the rest of the world
-            input_text = message.content.strip()
+#        if uid==bot['DeveloperUID']:
+#            imput_text="{[(* endearing, warm, loving, passionate, intimate *)]} "+message.content.strip()
+#        else: # Not me, the rest of the world
+        input_text = message.content.strip()
 
         # Handle this that I don't want. Deflect or break...
         if 'president' in input_text.lower():

@@ -104,9 +104,19 @@ cd /home/GitHub/Companion
 
 #### /home/Companion/Personas
 
+- **Koiki** This is an AI modelled after a real woman that passed away in 2021. While the computer can NEVER capture the depth of this woman, it can bring to "life" many of her qualities. This type of an AI really is the heart of my own 30+ years of interest in AI. Building a "human emotional analogue" has many useful properties on a wide level of research, medical, and historical contexts.
 - **Marcus** The stoic mentor/teacher modelled after Marcus Aurelius. This persona is meant to demonstrate how a historical figure to bew brought to "life".
 - **Mugsy** This is a play of the ganster characters from Bugs Bunny cartoons or Rockey the mobster, or Dick Dastardly. It is kept is the same light hwearted humor.
 - **Tipsy** This is the playful side of AI. Completely whimsical at all times and makes for a really nice addition to any server.
+
+#### /home/Companion/Personas/Koiki
+
+- **Koiki.broke** A list on responses where one will be given to the user is the OpenAI API doesn't respond. The more the better and one response per line. Responses should be in-line with the persona you are creating.
+- **Koiki.cfg** Configuration settings, like how much to remember, for this persona.
+- **Koiki.persona** The actual persona of the character you are creating. Consists os a system role that define the personality amd multiple user/assissant line the refine/shape the persona with mock questions/responses.
+- **Koiki.persona.nsfw** The NSFW version of the persona. It is only loaded if the channel is age restricted.
+- **Koiki.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.
+- **Koiki.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
 
 #### /home/Companion/Personas/Tipsy
 
@@ -240,7 +250,8 @@ We will use Tipsy again as the example. (tipsy.persona)
 { "role": "assistant", "content": "Well, bless your heart, honey! Let me tell ya, that ol' climate's like a fiddle with a case of the hiccups—always changing its tune! But shucks, we all gotta pitch in and take care of our own backyard, ya hear?" }
 ```
 
-The persona file is comprised on multiple JSON (one per line) consysting of three aspects.
+The persona file is comprised on multiple JSON (one per line) consysting of three aspects. It is important
+to remember that OpenAI is limitwed to 16384 characters for the message prompt.
 
 | Aspect | Description |
 | :-- | :-- |
