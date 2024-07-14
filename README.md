@@ -113,6 +113,8 @@ cd /home/GitHub/Companion
 
 - **Koiki.broke** A list on responses where one will be given to the user is the OpenAI API doesn't respond. The more the better and one response per line. Responses should be in-line with the persona you are creating.
 - **Koiki.cfg** Configuration settings, like how much to remember, for this persona.
+- **Koiki.system** For more complex modeling, the system role can be unweildy in the Persona file. This is a flat text file that allows structuring complex personas in a way that is easier to manage. If you use this file, do NOT include a system role in the persona file.
+- **Koiki.system.nsfw** The NSFW version of the system. It is only loaded if the channel is age restricted.
 - **Koiki.persona** The actual persona of the character you are creating. Consists os a system role that define the personality amd multiple user/assissant line the refine/shape the persona with mock questions/responses.
 - **Koiki.persona.nsfw** The NSFW version of the persona. It is only loaded if the channel is age restricted.
 - **Koiki.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.

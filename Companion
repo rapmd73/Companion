@@ -22,11 +22,12 @@ import time
 import json
 import random
 import string
-import openai
-import ollama
 import discord
 from discord.ext import commands, tasks
 import profanity_check as pc
+import ollama
+import tiktoken
+import openai
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -311,6 +312,39 @@ def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
     return [word for word in words if word]     # Filter out empty strings (including spaces)
 
+# Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
+# request.
+
+def MaintainTokenLimit(messages, max_tokens=16000, model="gpt-3.5-turbo"):
+    enc = tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+
+    try:
+        # Calculate current tokens in the message list
+        current_tokens = sum(len(enc.encode(message["content"])) for message in messages)
+        print(current_tokens)
+        # While tokens exceed the limit, remove elements
+        while current_tokens > max_tokens:
+            for i in range(len(messages) - 1):
+                if i < len(messages) - 1:
+                    # Check if the current pair is user/assistant
+                    if ("User" in messages[i] and "Assistant" in messages[i + 1]):
+                        # Remove the pair (two items)
+                        messages.pop(i)
+                        messages.pop(i)
+                        break
+                    elif "User" in messages[i] and "User" in messages[i + 1]:
+                        # Remove only one item if two adjacent items are user/user
+                        messages.pop(i)
+                        break
+
+            # Recalculate current tokens after removal
+            current_tokens = sum(len(enc.encode(message["content"])) for message in messages)
+            print(current_tokens)
+    except Exception as err:
+        ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+
+    return messages
+
 # Get "steering" prompts, if there are any
 
 # Steering files are a way of providing reinforcement to a pattern or paticular question/response designed
@@ -379,6 +413,26 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     #   3. channel, (SFW)
     #   4. channel, NSFW
 
+    # System Role
+    # Test channel NSFW
+    BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.system.nsfw"
+    if os.path.exists(BotSystem):
+        bot['System']=BotSystem
+    else:
+        # Test channel SFW
+        BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.system"
+        if os.path.exists(BotSystem):
+            bot['System']=BotSystem
+        else:
+            # Test global NSFW
+            BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.system.nsfw"
+            if os.path.exists(BotSystem):
+                bot['System']=BotSystem
+            else:
+                # global SFW
+                bot['System']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.system"
+
+    # Persona file
     # Test channel NSFW
     BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona.nsfw"
     if os.path.exists(BotPersona):
@@ -450,6 +504,8 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 # Initiate the OpenAI call.
 
 def GetOpenAI(AIAPI,persona,bot):
+    persona=MaintainTokenLimit(persona)
+
     clientAI=openai.OpenAI(api_key=AIAPI)
 
     # frequency_penalty=2 causes problems if you want your bot to write code.
@@ -503,7 +559,22 @@ def GetBabble(text):
 
         persona=[]
         mList=[]
-        pList=ReadFile(bot['Persona']).strip().split('\n')
+
+        # Read system role from system tag file
+        # { "role": "system", "content": ""}
+
+        if os.path.exists(bot['System']):
+            buff=ReadFile(bot['System']).replace('\n\n',' ').replace('\n',' ').strip()
+            sysList=[ '{'+f'"role": "system", "content": "{buff}"''}' ]
+        else:
+            sysList=[]
+
+        # Read the persona file
+        if os.path.exists(bot['Persona']):
+            pfList=ReadFile(bot['Persona']).strip().split('\n')
+        else:
+            pfList=[]
+        pList=sysList+pfList
 
         # Look for a "steering" file
         sList=GetSteering(bot,input_text)
@@ -619,11 +690,12 @@ async def HandleOneMessage(request):
                     if bool(pc.predict([ input_text ]))==True:
                         responses=ReadFile(bot['Vulgarity']).strip().split('\n')
                         response=random.choice(responses)
+                        resp=f"{author} {response}"
+                        await message.channel.send(resp)
                         try: # delete the offending message
                             await message.delete()
                         except:
                             pass
-                        await message.channel.send(response)
                         return
                     else:
                         response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
@@ -661,8 +733,8 @@ async def send_response(message, response):
                 p=1900
                 while x1[p]!='\n':
                     p-=1
-                await message.channel.send(x1[:p])
-                First=False
+                if len(x1[:p])>0:
+                    await message.channel.send(x1[:p])
                 x1=x1[p:]
                 l=len(x1)
             if l>0:
@@ -756,6 +828,24 @@ async def on_message_edit(before, after):
         leftFound=CheckWordList(leftside,sampleText)
         rightFound=CheckWordList(rightside,sampleText)
 
+        # NEED a global moderation switch
+        # Check for vulgarity in the edited response
+
+        # This could be a problem at the global level of a server, where partial moderation may be desired,
+        # vs an absolute approach.
+
+        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not after.channel.nsfw:
+            if bool(pc.predict([ after.content ]))==True:
+                responses=ReadFile(bot['Vulgarity']).strip().split('\n')
+                response=random.choice(responses)
+                resp=f"{author} {response}"
+                await after.channel.send(resp)
+                try: # delete the offending message
+                    await after.delete()
+                except:
+                    pass
+                return
+
         if leftFound and rightFound:
             # This seems to be a better way to ruin the attacker's plan
             msg=discord.Embed(
@@ -768,19 +858,6 @@ async def on_message_edit(before, after):
 #                pass
             await after.channel.send(embed=msg,reference=before)
             return
-
-        # Check for vulgarity in the edited response
-        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no':
-            if bool(pc.predict([ after.content ]))==True:
-                responses=ReadFile(bot['Vulgarity']).strip().split('\n')
-                response=random.choice(responses)
-                try: # delete the offending message
-                    await after.delete()
-                except:
-                    pass
-#                await send_response(after,response)
-                await message.channel.send(response)
-                return
 
     except Exception as err:
         ErrorLog('Broken Edit:', str(err))
