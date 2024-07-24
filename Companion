@@ -14,14 +14,17 @@
 
 import sys
 import os
-import concurrent.futures
-import threading
-import asyncio
+import copy
 import datetime
 import time
 import json
 import random
 import string
+import concurrent.futures
+import threading
+import urllib.request
+import re
+import asyncio
 import discord
 from discord.ext import commands, tasks
 import profanity_check as pc
@@ -64,6 +67,19 @@ client=discord.Client(intents=intents)
 
 # List to store pending requests
 request_list = []
+
+# Raw dump
+
+def RawLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            fn=LoggingDir+'/RAWDUMP.log'
+            fh=open(fn,'w')
+            fh.write(text)
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
 
 # Logging
 
@@ -454,6 +470,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
+    bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.brokebroke"
     bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
 
     # Load bot config file.
@@ -504,24 +521,29 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 # Initiate the OpenAI call.
 
 def GetOpenAI(AIAPI,persona,bot):
-    persona=MaintainTokenLimit(persona)
-
-    clientAI=openai.OpenAI(api_key=AIAPI)
-
-    # frequency_penalty=2 causes problems if you want your bot to write code.
-    # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
-    completion=clientAI.chat.completions.create( \
-            model=bot['Model'], \
-            frequency_penalty=bot['FreqPenality'],
-            temperature=bot['Temperature'],
-            messages=persona )
-
     try:
-        response=completion.choices[0].message.content.strip()
-    except:
-        response=None
-    clientAI.close()
-    return response
+        persona=MaintainTokenLimit(persona)
+
+        clientAI=openai.OpenAI(api_key=AIAPI)
+
+        # frequency_penalty=2 causes problems if you want your bot to write code.
+        # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
+        completion=clientAI.chat.completions.create( \
+                model=bot['Model'], \
+                frequency_penalty=bot['FreqPenality'],
+                temperature=bot['Temperature'],
+                messages=persona )
+
+        try:
+            response=completion.choices[0].message.content.strip()
+        except:
+            response=None
+        clientAI.close()
+        RawLog(str(completion))
+        return response
+    except Exception as err:
+        ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
 
 # Use the Ollama API
 
@@ -530,7 +552,7 @@ def GetOllama(persona,bot):
         completion=ollama.chat( \
                 stream=False,
                 model=bot['Model'], \
-                options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
+                options={ "num_ctx":4096,"temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
                 messages=persona )
     except Exception as err:
         ErrorLog(f"Ollama: {sys.exc_info()[-1].tb_lineno}/{err}")
@@ -539,7 +561,46 @@ def GetOllama(persona,bot):
         response=completion['message']['content'].strip()
     except:
         response=None
+    RawLog(json.dumps(completion))
     return response
+
+# Get a URL and scrub it to pure text
+
+def html2text(url):
+    try:
+        # Set the user agent
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+        request = urllib.request.Request(url, headers=headers)
+
+        # Fetch the HTML content from the URL
+        with urllib.request.urlopen(request) as response:
+            html = response.read().decode('utf-8')
+
+        if response.code>=400:
+            return None
+
+        # Remove the entire head section
+        html = re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
+
+        # Remove script and style elements
+        html = re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.DOTALL)
+
+        # Reduce <a> elements to their text content
+        html = re.sub(r'<a[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
+
+        # Remove all other HTML tags
+        text = re.sub(r'<[^>]+>', '', html)
+
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        print(len(text),url)
+
+        return text
+    except Exception as err:
+        ErrorLog(f"Broke html2text: {sys.exc_info()[-1].tb_lineno}/{err}")
+
+    return None
 
 # This function handle the actual responses.
 
@@ -552,7 +613,7 @@ def GetBabble(text):
         uid=dataline[0]
         channel,cnsfw=dataline[1].split(':')
         nsfw=(cnsfw=='T')
-        input_text=dataline[2]
+        input_text=str(dataline[2:])
 
         # Load the persona and memory files
         bot=GetCompanionPersona(channel,nsfw)
@@ -576,11 +637,6 @@ def GetBabble(text):
             pfList=[]
         pList=sysList+pfList
 
-        # Look for a "steering" file
-        sList=GetSteering(bot,input_text)
-        if sList!=None:
-            pList+=sList
-
         # Load memory files, if one exists.
         fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
         if os.path.exists(fn):
@@ -595,6 +651,11 @@ def GetBabble(text):
             except:
                 ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
 
+        # Look for a "steering" file. Should be last to ensurew its not chopped of.
+        sList=GetSteering(bot,input_text)
+        if sList!=None:
+            pList+=sList
+
         # Add user input
 
         memU={ "role": "user", "content": input_text }
@@ -605,11 +666,37 @@ def GetBabble(text):
         tfile=RunningName+'.tokens'
         TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
 
+        # Process API for the request
+
+        el=list(bot['Engine'].split(','))   # Engine list
+        ec=len(el)                          # Engine list length
+        ml=list(bot['Model'].split(','))    # Model list
+        mc=len(ml)                          # Model list length
+
+        # The number of models MUST equal the number of engines. 1 model per engine
+
+        if ec!=mc:
+            ErrorLog(f"Broke GB (models!=engines): {sys.exc_info()[-1].tb_lineno}/{err}")
+            # Something broke. Keep the responses in character
+            responses=ReadFile(bot['Broken']).strip().split('\n')
+            selected_response=random.choice(responses)
+            return selected_response
+
         response=None
-        if bot['Engine'].lower()=='openai':
-            response=GetOpenAI(AIAPI,persona,bot)
-        elif bot['Engine'].lower()=='ollama':
-            response=GetOllama(persona,bot)
+        ecounter=0
+        while response==None and ecounter<ec:
+            cbot=copy.deepcopy(bot)             # Make a copy
+            cbot['Engine']=el[ecounter]
+            cbot['Model']=ml[ecounter]
+
+            if cbot['Engine'].lower()=='openai':
+                response=GetOpenAI(AIAPI,persona,cbot)
+            elif cbot['Engine'].lower()=='ollama':
+                response=GetOllama(persona,cbot)
+            if response==None:
+                ecounter+=1
+            else:
+                break
 
         # Save "memory" to disk
 
@@ -722,23 +809,36 @@ async def HandleOneMessage(request):
 
 async def send_response(message, response):
     try:
-        if len(response)<1900:
+        if len(response)<=1900:
             await message.channel.send(response,reference=message)
         else:
-            # Break this up into multiple messages
+            # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
+            # message parts.
             author=str(message.author.mention)
             x1=f"{author} {response}"
             l=len(x1)
             while l>1900:
-                p=1900
-                while x1[p]!='\n':
-                    p-=1
+                # We need to deal with the possibility that a \n doesn't exist in the input data.
+                pmax=1900
+                # Look for new line first
+                p=x1.rfind('\n',0,pmax)
+                if p==-1:
+                    # Look for a period  Separate at a sentence
+                    p=x1.rfind('.',0,pmax)
+                    if p==-1:
+                        # Look for a space  Separate at a word
+                        p=x1.rfind(' ',0,pmax)
+                        if p==-1:
+                            # Brute split
+                            pmax=1900
                 if len(x1[:p])>0:
-                    await message.channel.send(x1[:p])
-                x1=x1[p:]
+                    await message.channel.send(x1[:p].strip())
+                if x1[p]=='.' or x1[p]==' ':
+                    p+=1
+                x1=x1[p:].strip()
                 l=len(x1)
             if l>0:
-                await message.channel.send(x1)
+                await message.channel.send(x1.strip())
 
             """ # Attach response
             with open("response.txt", "w", encoding="utf-8") as file:
@@ -904,8 +1004,8 @@ async def on_message(message):
     if message.author==client.user:
         return
     # Don't respond to other bots.
-#    if message.author.bot:
-#        return
+    if message.author.bot:
+        return
 
     if '%CheckBot' in message.content:
         member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
@@ -944,17 +1044,31 @@ async def on_message(message):
         input_text = message.content.strip()
 
         # Handle this that I don't want. Deflect or break...
-        if 'president' in input_text.lower():
-            input_text+=' [deflect politics]'
+#        if 'president' in input_text.lower():
+#            input_text+=' [deflect politics]'
 
         # Check to see if the message is directed to another user. If it is, don't respond.
         if not message.reference:
             pass
+
         # Check if the message is a reply to the AI
         elif message.reference and message.reference.resolved.author.id==client.user.id:
             pass
         else:
             return
+
+        # if the input text starts with "%http", replace it with the actual URL text
+        try:
+            if '%http' in  input_text.lower():
+                url= input_text.replace(' ','')[1:]
+                input_text=html2text(url)
+                if input_text==None:
+                    # Something broke. Keep the responses in character
+                    responses=ReadFile(bot['URLBroken']).strip().split('\n')
+                    selected_response=random.choice(responses)
+                    await send_response(message,selected_response)
+        except Exception as err:
+            ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
         # If this is a direct reply or a mention, give a slightly more personal response
         if (message.reference and message.reference.resolved.author.id==client.user.id) \
