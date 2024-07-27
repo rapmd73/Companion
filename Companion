@@ -32,6 +32,10 @@ import ollama
 import tiktoken
 import openai
 
+# Active version
+
+Version="0.0.0.0.10"
+
 # The running name of the program. Must be global and NEVER changing.
 
 RunningName=sys.argv[0]
@@ -47,7 +51,7 @@ ResponseLock=threading.Lock()
 ResponseTimeout=60
 
 DisectLock=threading.Lock()
-DisectTimeout=300
+DisectTimeout=60
 
 LoggingLock=threading.Lock()
 LoggingTimeout=60
@@ -68,7 +72,7 @@ client=discord.Client(intents=intents)
 # List to store pending requests
 request_list = []
 
-# Raw dump
+# Raw dump. For diagnostics purposes to see the actual return response from the AI model.
 
 def RawLog(text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
@@ -470,7 +474,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
-    bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.brokebroke"
+    bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
     bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
 
     # Load bot config file.
@@ -530,8 +534,8 @@ def GetOpenAI(AIAPI,persona,bot):
         # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
         completion=clientAI.chat.completions.create( \
                 model=bot['Model'], \
-                frequency_penalty=bot['FreqPenality'],
-                temperature=bot['Temperature'],
+                frequency_penalty=bot['FreqPenality'], \
+                temperature=bot['Temperature'], \
                 messages=persona )
 
         try:
@@ -539,29 +543,29 @@ def GetOpenAI(AIAPI,persona,bot):
         except:
             response=None
         clientAI.close()
-        RawLog(str(completion))
+        RawLog(bot['Model']+': '+str(completion))
         return response
     except Exception as err:
         ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
 
-# Use the Ollama API
+# Use the Ollama API, "num_ctx":4096,
 
 def GetOllama(persona,bot):
     try:
         completion=ollama.chat( \
                 stream=False,
                 model=bot['Model'], \
-                options={ "num_ctx":4096,"temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
+                options={"temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
                 messages=persona )
     except Exception as err:
-        ErrorLog(f"Ollama: {sys.exc_info()[-1].tb_lineno}/{err}")
+        ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
     try:
         response=completion['message']['content'].strip()
     except:
         response=None
-    RawLog(json.dumps(completion))
+    RawLog(bot['Model']+': '+json.dumps(completion))
     return response
 
 # Get a URL and scrub it to pure text
@@ -573,8 +577,11 @@ def html2text(url):
         request = urllib.request.Request(url, headers=headers)
 
         # Fetch the HTML content from the URL
-        with urllib.request.urlopen(request) as response:
-            html = response.read().decode('utf-8')
+        try:
+            with urllib.request.urlopen(request) as response:
+                html = response.read().decode('utf-8')
+        except Exception as err:
+            return None
 
         if response.code>=400:
             return None
@@ -625,7 +632,7 @@ def GetBabble(text):
         # { "role": "system", "content": ""}
 
         if os.path.exists(bot['System']):
-            buff=ReadFile(bot['System']).replace('\n\n',' ').replace('\n',' ').strip()
+            buff=ReadFile(bot['System']).replace('\n\n',' ').replace('\n',' ').replace('"',"'").strip()
             sysList=[ '{'+f'"role": "system", "content": "{buff}"''}' ]
         else:
             sysList=[]
@@ -1067,6 +1074,7 @@ async def on_message(message):
                     responses=ReadFile(bot['URLBroken']).strip().split('\n')
                     selected_response=random.choice(responses)
                     await send_response(message,selected_response)
+                    return
         except Exception as err:
             ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
@@ -1122,6 +1130,8 @@ async def on_member_remove(member):
 # starts the bot with the corresponding token
 
 if __name__=='__main__':
+    print(f'Companion {Version}')
+
     tfile=RunningName+'.tokens'
     if os.path.exists(tfile):
         try:

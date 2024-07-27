@@ -69,6 +69,8 @@ Ubuntu.you will need to use the package manager appropriate to your VPS.
 
 ### Installing and setting up
 
+**IMPORTANT**: You need to be ***root*** user for the installation to work properly.
+
 Start with these shell commands
 
 ```bash
