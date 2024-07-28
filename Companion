@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.10"
+Version="0.0.0.0.235"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -203,6 +203,16 @@ def DisectMessage(event,message):
             WriteLog(uid,channel,f"Error accessing message attributes: {e}")
         DisectLock.release()
 
+# Pick one line from a file as a response
+
+def PickRandomResponse(fname):
+    # Something broke. Keep the responses in character
+    responses=ReadFile(fname).strip().split('\n')
+    while '' in responses:
+        responses.remove('')
+    selected_response=random.choice(responses)
+    return selected_response
+
 # Example usage (assuming you have a Discord message object):
 # log_discord_message(discord_message_object)
 
@@ -340,26 +350,31 @@ def MaintainTokenLimit(messages, max_tokens=16000, model="gpt-3.5-turbo"):
 
     try:
         # Calculate current tokens in the message list
-        current_tokens = sum(len(enc.encode(message["content"])) for message in messages)
-        print(current_tokens)
+        current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        old_tokens=current_tokens
+        print("Tokens:",current_tokens,len(messages))
         # While tokens exceed the limit, remove elements
         while current_tokens > max_tokens:
             for i in range(len(messages) - 1):
                 if i < len(messages) - 1:
-                    # Check if the current pair is user/assistant
-                    if ("User" in messages[i] and "Assistant" in messages[i + 1]):
+                    if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
                         # Remove the pair (two items)
                         messages.pop(i)
                         messages.pop(i)
                         break
-                    elif "User" in messages[i] and "User" in messages[i + 1]:
+                    elif messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="user":
                         # Remove only one item if two adjacent items are user/user
                         messages.pop(i)
                         break
 
             # Recalculate current tokens after removal
-            current_tokens = sum(len(enc.encode(message["content"])) for message in messages)
-            print(current_tokens)
+            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+            # Check for the situation that we can't reduce the number of tokens.
+            if old_tokens==current_tokens:
+                print("No token reduction available")
+                return None
+            old_tokens=current_tokens
+            print("New Tokens:",current_tokens,len(messages))
     except Exception as err:
         ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
 
@@ -473,6 +488,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
+    bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
     bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
@@ -527,6 +543,9 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 def GetOpenAI(AIAPI,persona,bot):
     try:
         persona=MaintainTokenLimit(persona)
+        # Over limit and not able to reduce
+        if persona==None:
+            return PickRandomResponse(bot['TooMuchInformation'])
 
         clientAI=openai.OpenAI(api_key=AIAPI)
 
@@ -581,6 +600,7 @@ def html2text(url):
             with urllib.request.urlopen(request) as response:
                 html = response.read().decode('utf-8')
         except Exception as err:
+            print("URL status:",html.code)
             return None
 
         if response.code>=400:
@@ -601,7 +621,7 @@ def html2text(url):
         # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text).strip()
 
-        print(len(text),url)
+        print("URL:",len(text),url)
 
         return text
     except Exception as err:
@@ -684,10 +704,7 @@ def GetBabble(text):
 
         if ec!=mc:
             ErrorLog(f"Broke GB (models!=engines): {sys.exc_info()[-1].tb_lineno}/{err}")
-            # Something broke. Keep the responses in character
-            responses=ReadFile(bot['Broken']).strip().split('\n')
-            selected_response=random.choice(responses)
-            return selected_response
+            return PickRandomResponse(bot['Broken'])
 
         response=None
         ecounter=0
@@ -728,10 +745,7 @@ def GetBabble(text):
         return response
     except Exception as err:
         ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
-        # Something broke. Keep the responses in character
-        responses=ReadFile(bot['Broken']).strip().split('\n')
-        selected_response=random.choice(responses)
-        return selected_response
+        return PickRandomResponse(bot['Broken'])
 
 # Change the nick name and avatar
 
@@ -782,9 +796,7 @@ async def HandleOneMessage(request):
                 # Handle any vulgarity
                 if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
                     if bool(pc.predict([ input_text ]))==True:
-                        responses=ReadFile(bot['Vulgarity']).strip().split('\n')
-                        response=random.choice(responses)
-                        resp=f"{author} {response}"
+                        resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
                         await message.channel.send(resp)
                         try: # delete the offending message
                             await message.delete()
@@ -943,9 +955,7 @@ async def on_message_edit(before, after):
 
         if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not after.channel.nsfw:
             if bool(pc.predict([ after.content ]))==True:
-                responses=ReadFile(bot['Vulgarity']).strip().split('\n')
-                response=random.choice(responses)
-                resp=f"{author} {response}"
+                resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
                 await after.channel.send(resp)
                 try: # delete the offending message
                     await after.delete()
@@ -1070,10 +1080,7 @@ async def on_message(message):
                 url= input_text.replace(' ','')[1:]
                 input_text=html2text(url)
                 if input_text==None:
-                    # Something broke. Keep the responses in character
-                    responses=ReadFile(bot['URLBroken']).strip().split('\n')
-                    selected_response=random.choice(responses)
-                    await send_response(message,selected_response)
+                    await send_response(message,PickRandomResponse(bot['URLBroken']))
                     return
         except Exception as err:
             ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
@@ -1113,8 +1120,7 @@ async def on_member_join(member):
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
             # ChangeNickAvatar(bot,member)
-            responses=ReadFile(bot['Welcome']).strip().split('\n')
-            response=random.choice(responses).replace('{username}',f'**{member.mention}**')
+            response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
             # Get the system welcome channel and send message there.
             syschannel=member.guild.system_channel
             await syschannel.send(response)
