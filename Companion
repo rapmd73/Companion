@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.235"
+Version="0.0.0.0.250"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -353,6 +353,9 @@ def MaintainTokenLimit(messages, max_tokens=16000, model="gpt-3.5-turbo"):
         current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
         old_tokens=current_tokens
         print("Tokens:",current_tokens,len(messages))
+        if max_tokens==0:
+            return messages
+
         # While tokens exceed the limit, remove elements
         while current_tokens > max_tokens:
             for i in range(len(messages) - 1):
@@ -572,6 +575,11 @@ def GetOpenAI(AIAPI,persona,bot):
 
 def GetOllama(persona,bot):
     try:
+        persona=MaintainTokenLimit(persona,max_tokens=0)
+        # Over limit and not able to reduce
+        if persona==None:
+            return PickRandomResponse(bot['TooMuchInformation'])
+
         completion=ollama.chat( \
                 stream=False,
                 model=bot['Model'], \
@@ -1076,7 +1084,7 @@ async def on_message(message):
 
         # if the input text starts with "%http", replace it with the actual URL text
         try:
-            if '%http' in  input_text.lower():
+            if os.path.exists(bot['TooMuchInformation']) and '%http' in input_text.lower():
                 url= input_text.replace(' ','')[1:]
                 input_text=html2text(url)
                 if input_text==None:
