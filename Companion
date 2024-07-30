@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.250"
+Version="0.0.0.0.265"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -544,6 +544,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 # Initiate the OpenAI call.
 
 def GetOpenAI(AIAPI,persona,bot):
+    print("OpenAI",bot['Model'])
     try:
         persona=MaintainTokenLimit(persona)
         # Over limit and not able to reduce
@@ -574,6 +575,7 @@ def GetOpenAI(AIAPI,persona,bot):
 # Use the Ollama API, "num_ctx":4096,
 
 def GetOllama(persona,bot):
+    print("Ollama",bot['Model'])
     try:
         persona=MaintainTokenLimit(persona,max_tokens=0)
         # Over limit and not able to reduce
@@ -608,7 +610,6 @@ def html2text(url):
             with urllib.request.urlopen(request) as response:
                 html = response.read().decode('utf-8')
         except Exception as err:
-            print("URL status:",html.code)
             return None
 
         if response.code>=400:
