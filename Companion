@@ -661,8 +661,8 @@ def GetBabble(text):
         # { "role": "system", "content": ""}
 
         if os.path.exists(bot['System']):
-            buff=ReadFile(bot['System']).replace('\n\n',' ').replace('\n',' ').replace('"',"'").strip()
-            sysList=[ '{'+f'"role": "system", "content": "{buff}"''}' ]
+            buff=ReadFile(bot['System']).replace('\n','\\n').replace('"',"'").strip()
+            sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
         else:
             sysList=[]
 
