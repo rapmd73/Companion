@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.265"
+Version="0.0.0.0.291"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -247,7 +247,7 @@ def WriteFile(fn,data):
 
 def BuildDerivitives(word):
     substitutions={
-        'a': ['@'],
+        'a': ['@','4'],
         'e': ['3'],
         'o': ['0'],
         'l': ['1', '|', '!', 'i'],
@@ -546,7 +546,12 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 def GetOpenAI(AIAPI,persona,bot):
     print("OpenAI",bot['Model'])
     try:
-        persona=MaintainTokenLimit(persona)
+        mt=16000
+        if 'MaxTokens' in bot:
+            mt=bot['MaxTokens']
+        if mt>16000:
+            mt=16000
+        persona=MaintainTokenLimit(persona,max_tokens=mt)
         # Over limit and not able to reduce
         if persona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -577,15 +582,21 @@ def GetOpenAI(AIAPI,persona,bot):
 def GetOllama(persona,bot):
     print("Ollama",bot['Model'])
     try:
-        persona=MaintainTokenLimit(persona,max_tokens=0)
+        mt=0
+        if 'MaxTokens' in bot:
+            mt=bot['MaxTokens']
+        persona=MaintainTokenLimit(persona,max_tokens=mt)
         # Over limit and not able to reduce
         if persona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
+        if mt==0:
+            mt=2048
+
         completion=ollama.chat( \
-                stream=False,
+                stream=False, \
                 model=bot['Model'], \
-                options={"temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'] }, \
+                options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'],"num_ctx":mt }, \
                 messages=persona )
     except Exception as err:
         ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
@@ -704,15 +715,17 @@ def GetBabble(text):
 
         # Process API for the request
 
-        el=list(bot['Engine'].split(','))   # Engine list
-        ec=len(el)                          # Engine list length
-        ml=list(bot['Model'].split(','))    # Model list
-        mc=len(ml)                          # Model list length
+        el=list(bot['Engine'].split(','))       # Engine list
+        ec=len(el)                              # Engine list length
+        ml=list(bot['Model'].split(','))        # Model list
+        mc=len(ml)                              # Model list length
+        tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
+        mt=len(tl)                              # Max Tokens list length
 
         # The number of models MUST equal the number of engines. 1 model per engine
 
-        if ec!=mc:
-            ErrorLog(f"Broke GB (models!=engines): {sys.exc_info()[-1].tb_lineno}/{err}")
+        if ec!=mc!=mt:
+            ErrorLog(f"Broke GB (models!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
             return PickRandomResponse(bot['Broken'])
 
         response=None
@@ -721,6 +734,7 @@ def GetBabble(text):
             cbot=copy.deepcopy(bot)             # Make a copy
             cbot['Engine']=el[ecounter]
             cbot['Model']=ml[ecounter]
+            cbot['MaxTokens']=int(tl[ecounter])
 
             if cbot['Engine'].lower()=='openai':
                 response=GetOpenAI(AIAPI,persona,cbot)
