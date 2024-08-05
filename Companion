@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.291"
+Version="0.0.0.0.293"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -728,6 +728,8 @@ def GetBabble(text):
             ErrorLog(f"Broke GB (models!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
             return PickRandomResponse(bot['Broken'])
 
+        # Run through the engins/models until we have a response.
+
         response=None
         ecounter=0
         while response==None and ecounter<ec:
@@ -744,6 +746,12 @@ def GetBabble(text):
                 ecounter+=1
             else:
                 break
+
+        # check to see if we got a response
+
+        if response==None:
+            ErrorLog(f"Broke GB (models!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
+            return PickRandomResponse(bot['Broken'])
 
         # Save "memory" to disk
 
