@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.295"
+Version="0.0.0.0.305"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -345,8 +345,11 @@ def GetWordList(text):
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
 # request.
 
-def MaintainTokenLimit(messages, max_tokens=16000, model="gpt-3.5-turbo"):
-    enc = tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+def MaintainTokenLimit(orgmessages, max_tokens=16000, model="gpt-3.5-turbo"):
+    enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+
+    # Make a separate working copy of the original messages.
+    messages=orgmessages.copy()
 
     try:
         # Calculate current tokens in the message list
@@ -546,14 +549,14 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 def GetOpenAI(AIAPI,persona,bot):
     print("OpenAI",bot['Model'])
     try:
-        mt=16000
+        mt=16000                    # GPT3.5 default
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
         if mt>16000:
             mt=16000
-        persona=MaintainTokenLimit(persona,max_tokens=mt)
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
         # Over limit and not able to reduce
-        if persona==None:
+        if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
         clientAI=openai.OpenAI(api_key=AIAPI)
@@ -564,7 +567,7 @@ def GetOpenAI(AIAPI,persona,bot):
                 model=bot['Model'], \
                 frequency_penalty=bot['FreqPenality'], \
                 temperature=bot['Temperature'], \
-                messages=persona )
+                messages=WorkingPersona )
 
         try:
             response=completion.choices[0].message.content.strip()
@@ -585,9 +588,9 @@ def GetOllama(persona,bot):
         mt=0
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
-        persona=MaintainTokenLimit(persona,max_tokens=mt)
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
         # Over limit and not able to reduce
-        if persona==None:
+        if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
         # Ollama default
@@ -605,7 +608,7 @@ def GetOllama(persona,bot):
                 stream=False, \
                 model=bot['Model'], \
                 options=options, \
-                messages=persona )
+                messages=WorkingPersona )
     except Exception as err:
         ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
