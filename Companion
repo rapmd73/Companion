@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.305"
+Version="0.0.0.0.307"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -629,7 +629,7 @@ def html2text(url):
 
         # Fetch the HTML content from the URL
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(request,timeout=60) as response:
                 html = response.read().decode('utf-8')
         except Exception as err:
             return None
