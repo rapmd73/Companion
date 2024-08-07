@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.307"
+Version="0.0.0.0.310"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -355,7 +355,6 @@ def MaintainTokenLimit(orgmessages, max_tokens=16000, model="gpt-3.5-turbo"):
         # Calculate current tokens in the message list
         current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
         old_tokens=current_tokens
-        print("Tokens:",current_tokens,len(messages))
         if max_tokens==0:
             return messages
 
@@ -380,9 +379,8 @@ def MaintainTokenLimit(orgmessages, max_tokens=16000, model="gpt-3.5-turbo"):
                 print("No token reduction available")
                 return None
             old_tokens=current_tokens
-            print("New Tokens:",current_tokens,len(messages))
     except Exception as err:
-        ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+        ErrorLog(f"MaintainTokens: {sys.exc_info()[-1].tb_lineno}/{err}")
 
     return messages
 
@@ -632,9 +630,11 @@ def html2text(url):
             with urllib.request.urlopen(request,timeout=60) as response:
                 html = response.read().decode('utf-8')
         except Exception as err:
+            print("URL Error:",url,str(err))
             return None
 
         if response.code>=400:
+            print("URL Code:",response.code,url)
             return None
 
         # Remove the entire head section
