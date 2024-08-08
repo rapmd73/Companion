@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.310"
+Version="0.0.0.0.315"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -565,7 +565,8 @@ def GetOpenAI(AIAPI,persona,bot):
                 model=bot['Model'], \
                 frequency_penalty=bot['FreqPenality'], \
                 temperature=bot['Temperature'], \
-                messages=WorkingPersona )
+                messages=WorkingPersona, \
+                timeout=60 )
 
         try:
             response=completion.choices[0].message.content.strip()
@@ -606,7 +607,8 @@ def GetOllama(persona,bot):
                 stream=False, \
                 model=bot['Model'], \
                 options=options, \
-                messages=WorkingPersona )
+                messages=WorkingPersona, \
+                timeout=60 )
     except Exception as err:
         ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
