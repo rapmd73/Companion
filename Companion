@@ -34,7 +34,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.315"
+Version="0.0.0.0.320"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -604,11 +604,11 @@ def GetOllama(persona,bot):
         options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'],"seed":seed,"num_ctx":mt }
 
         completion=ollama.chat( \
+                keep_alive=60, \
                 stream=False, \
                 model=bot['Model'], \
                 options=options, \
-                messages=WorkingPersona, \
-                timeout=60 )
+                messages=WorkingPersona )
     except Exception as err:
         ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
@@ -673,7 +673,7 @@ def GetBabble(text):
         uid=dataline[0]
         channel,cnsfw=dataline[1].split(':')
         nsfw=(cnsfw=='T')
-        input_text=str(dataline[2:])
+        input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
 
         # Load the persona and memory files
         bot=GetCompanionPersona(channel,nsfw)
@@ -685,7 +685,7 @@ def GetBabble(text):
         # { "role": "system", "content": ""}
 
         if os.path.exists(bot['System']):
-            buff=ReadFile(bot['System']).replace('\n','\\n').replace('"',"'").strip()
+            buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
             sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
         else:
             sysList=[]
