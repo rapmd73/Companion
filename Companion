@@ -6,6 +6,8 @@
 # pip3 install discord
 # pip3 install alt-profanity-check
 
+# add together.ai
+
 # ***** IMPORTANT:
 
 #       For some weird reason, the only way I can get the changing of nickname/avatar to work proper it to
@@ -34,7 +36,7 @@ import openai
 
 # Active version
 
-Version="0.0.0.0.320"
+Version="0.0.0.0.330"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -44,6 +46,11 @@ RunningName=sys.argv[0]
 
 CompanionStorage='/home/Companion/Personas'
 LoggingDir='/home/Companion/Logs'
+
+# This is a list of domains that are scams, frauds, or malitiouc. It is exists, it is read and message that
+# have links listed are removed. Requires the persona text file as well for responses.
+
+CompanionScamURLS='/home/Companion/Companion.scam-urls'
 
 # Global lock for managing sequential access to the AI api and file safety.
 
@@ -492,6 +499,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
+    bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
     bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
@@ -1063,36 +1071,55 @@ async def on_message(message):
     # Ignore messages from the bot itself
     if message.author==client.user:
         return
+
+    # This is really the only absolute exception to BOT responsing...
+    # Check for scam links and delete them.
+
+    if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True:
+        scamurls=ReadFile(CompanionScamURLS).strip().split('\n')
+        while '' in scamurls:
+            scamurls.remove('')
+        for url in scamurls:
+            if url in message.content:
+                author=str(message.author.mention)
+                # If its a bot, it doesn't deserve a response
+                if not message.author.bot:
+                    resp=f"{author} {PickRandomResponse(bot['ScamURLS'])}"
+                    await message.channel.send(resp)
+                await message.delete()
+                return
+
     # Don't respond to other bots.
     if message.author.bot:
         return
 
-    if '%CheckBot' in message.content:
-        member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
-        # Check if the bot is a member of the channel
-        if member in message.channel.members:
-            await send_response(message,"Allowed")
-        else:
-            await send_response(message,"Allowed")
-        if request_list!=[]:
-            msg=f"{len(request_list)} pending requests"
-            await send_response(message,msg)
-        return
-
-    if '%PurgeRequests' in message.content:
-        # Give the AI the message
-        if ResponseLock.acquire(timeout=ResponseTimeout):
-            if request_list!=[]:
-                l=len(request_list)
-                request_list=[]
-                msg=f"{l} requests purged"
+    if 'DeveloperUID' in bot and uid==bot['DeveloperUID']:
+        if '%CheckBot' in message.content:
+            member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
+            # Check if the bot is a member of the channel
+            if member in message.channel.members:
+                await send_response(message,"Allowed")
             else:
-                msg=f"Request list already empty"
-            ResponseLock.release()
-            await send_response(message,msg)
-        else:
-            ErrorLog("Lock failed OM")
-        return
+                await send_response(message,"Allowed")
+            if request_list!=[]:
+                msg=f"{len(request_list)} pending requests"
+                await send_response(message,msg)
+            return
+
+        if '%PurgeRequests' in message.content:
+            # Give the AI the message
+            if ResponseLock.acquire(timeout=ResponseTimeout):
+                if request_list!=[]:
+                    l=len(request_list)
+                    request_list=[]
+                    msg=f"{l} requests purged"
+                else:
+                    msg=f"Request list already empty"
+                ResponseLock.release()
+                await send_response(message,msg)
+            else:
+                ErrorLog("Lock failed OM")
+            return
 
     # If we have a bot, then we can converse here.
     if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):

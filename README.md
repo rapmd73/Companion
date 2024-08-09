@@ -95,6 +95,7 @@ cd /home/GitHub/Companion
 - **Companion** Main program
 - **Companion.cfg** JSON file of the channel name (text only) and the persona for that channel. Each channel can have its own persona or can share a persona.
 - **Companion.tokens** This file doesn't exist until YOU create it. The first line of the file is the Discord token. The second line of the file is the OpenAI API key. Just these two lines ONLY, exactly as each service provides them.
+- **Companion.scam-urls** This is an example file for domains that are scams/frauds/malicious.
 - **install** The inataller that create the /home/Companion folder
 - **requirements.txt** The pip3 requirements that will load the neccessry packages.
 - **README.md** This file.
@@ -122,6 +123,7 @@ cd /home/GitHub/Companion
 - **Koiki.persona.nsfw** The NSFW version of the persona. It is only loaded if the channel is age restricted.
 - **Koiki.png** Any PNG allowed by the Discord TOS. This one was created by an AI generator.
 - **Koiki.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
+- **Koiki.scamurls** A list of responses when the user posts scam/fraud links lsted in the `Companion.scam-urls` file. one per line and the more responses the better.
 
 #### /home/Companion/Personas/Tipsy
 
