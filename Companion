@@ -33,10 +33,11 @@ import profanity_check as pc
 import ollama
 import tiktoken
 import openai
+import together
 
 # Active version
 
-Version="0.0.0.0.330"
+Version="0.0.0.0.340"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -78,6 +79,25 @@ client=discord.Client(intents=intents)
 
 # List to store pending requests
 request_list = []
+
+# Read the token file into a token dictionary.
+
+def ReadTokens():
+    tokens={}
+    tfile=RunningName+'.tokens'
+    if os.path.exists(tfile):
+        try:
+            tokens=json.loads(jsonFilter(ReadFile(tfile)))
+        except Exception as err:
+            ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
+            print("Error token file is not in JSON format. Please see README.md for new layout")
+            sys.exit(1)
+    else:
+        ErrorLog(f"Missing token file: {tfile}")
+        print(f"Missing token file: {tfile}")
+        sys.exit(1)
+
+    return tokens
 
 # Raw dump. For diagnostics purposes to see the actual return response from the AI model.
 
@@ -550,11 +570,13 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     # return the current bot
     return bot
 
-# Initiate the OpenAI call.
+# Use the OpenAI call.
 
-def GetOpenAI(AIAPI,persona,bot):
+def GetOpenAI(persona,bot):
     print("OpenAI",bot['Model'])
     try:
+        Tokens=ReadTokens()
+
         mt=16000                    # GPT3.5 default
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
@@ -565,7 +587,7 @@ def GetOpenAI(AIAPI,persona,bot):
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
-        clientAI=openai.OpenAI(api_key=AIAPI)
+        clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
 
         # frequency_penalty=2 causes problems if you want your bot to write code.
         # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
@@ -587,7 +609,42 @@ def GetOpenAI(AIAPI,persona,bot):
         ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
 
-# Use the Ollama API, "num_ctx":4096,
+# Use TogetherAI call.
+
+def GetTogetherAI(persona,bot):
+    print("TogetherAI",bot['Model'])
+    try:
+        Tokens=ReadTokens()
+
+        mt=4096
+        if 'MaxTokens' in bot:
+            mt=bot['MaxTokens']
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
+        # Over limit and not able to reduce
+        if WorkingPersona==None:
+            return PickRandomResponse(bot['TooMuchInformation'])
+
+        clientAI=together.Together(api_key=Tokens['TogetherAI'],timeout=60)
+
+        completion=clientAI.chat.completions.create( \
+                model=bot['Model'], \
+                frequency_penalty=bot['FreqPenality'], \
+                temperature=bot['Temperature'], \
+                messages=persona, \
+                stream=False )
+
+        try:
+            response=completion.choices[0].message.content.strip()
+        except:
+            response=None
+
+        RawLog(bot['Model']+': '+str(completion))
+        return response
+    except Exception as err:
+        ErrorLog(f"TogetherAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+# Use the Ollama API
 
 def GetOllama(persona,bot):
     print("Ollama",bot['Model'])
@@ -729,11 +786,6 @@ def GetBabble(text):
         memU={ "role": "user", "content": input_text }
         persona.append(memU)
 
-        # Read token and API, already verified at program start.
-
-        tfile=RunningName+'.tokens'
-        TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
-
         # Process API for the request
 
         el=list(bot['Engine'].split(','))       # Engine list
@@ -760,7 +812,9 @@ def GetBabble(text):
             cbot['MaxTokens']=int(tl[ecounter])
 
             if cbot['Engine'].lower()=='openai':
-                response=GetOpenAI(AIAPI,persona,cbot)
+                response=GetOpenAI(persona,cbot)
+            elif cbot['Engine'].lower()=='togetherai':
+                response=GetTogetherAI(persona,cbot)
             elif cbot['Engine'].lower()=='ollama':
                 response=GetOllama(persona,cbot)
             if response==None:
@@ -1208,21 +1262,104 @@ async def on_member_remove(member):
 if __name__=='__main__':
     print(f'Companion {Version}')
 
-    tfile=RunningName+'.tokens'
-    if os.path.exists(tfile):
-        try:
-            TOKEN,AIAPI=ReadFile(tfile).strip().split('\n')
-        except Exception as err:
-            print(f"The Discord token must be the first line of {tfile}")
-            print(f"The OpenAI API must be the second line of {tfile}")
-            sys.exit(1)
-
-    else:
-        print(f"Missing token file: {tfile}")
-        sys.exit(1)
+    Tokens=ReadTokens()
 
     try:
-        client.run(TOKEN,log_handler=None)
+        client.run(Tokens['Discord'],log_handler=None)
     except Exception as err:
         ErrorLog(f"Broken MAIN: {err}")
 
+
+
+
+
+
+
+
+
+
+
+"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# pip3 install alt-profanity-check
+# export OLLAMA_HOST=http://fully-shareware.gl.at.ply.gg:19758/api/generate
+
+import sys
+sys.path.append('/home/GitHub/JackrabbitRelay/Base/Library')
+import os
+import time
+import json
+import openai
+import ollama
+import together
+
+import JRRsupport
+import JackrabbitRelay as JRR
+
+# Create an Intents object to specify which events the bot should listen to
+AIAPI="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"
+
+#                model="eramax/starling-lm-7b-beta:q6", \
+
+def generate_ollama_response(persona):
+#                options={ "temperature":2,"frequency_penalty":1 }, \
+    response=ollama.chat( \
+                stream=False,
+                model="gemma2", \
+                messages=persona )
+    return response['message']['content']
+
+def GetTogether(persona):
+    client = together.Together(api_key='1eb07111de773ea5c37294e0c79caea5086def77a496ba8bb42daada79e3e51f')
+
+    response = client.chat.completions.create(
+        model="meta-llama/Llama-2-13b-chat-hf",
+        messages=persona,
+        temperature=0.31,
+        frequency_penalty=0.67,
+        stream=False
+    )
+    return(response.choices[0].message.content)
+
+def GetBabble(input_text):
+    persona=[]
+    pList=[]
+    mList=[]
+    if os.path.exists('aiCLI.memory'):
+        mList=JRRsupport.ReadFile('aiCLI.memory').strip().split('\n')
+        pList+=mList
+
+    for s in pList:
+        try:
+            persona.append(json.loads(s))
+        except:
+            print("Broke:",s)
+
+    memU={ "role": "user", "content": input_text }
+    persona.append(memU)
+
+#    clientAI = openai.OpenAI(api_key=AIAPI)
+#    completion=clientAI.chat.completions.create( \
+#        model="gpt-3.5-turbo", \
+#        temperature=0.3,
+#        messages=persona )
+#    response=completion.choices[0].message.content
+#    clientAI.close()
+
+#    response=generate_ollama_response(persona)
+    response=GetTogether(persona)
+
+    memA={ "role": "assistant", "content": response }
+
+    mList.append(json.dumps(memU))
+    mList.append(json.dumps(memA))
+
+    fh=open('aiCLI.memory','w')
+    for i in mList:
+        fh.write(i+'\n')
+    fh.close()
+
+    return response
+"""

@@ -28,6 +28,12 @@ acceptable use policy of Discord, OpenAI or any software referred to. The creato
 be liable for any damages, including but not limited to, direct, indirect, incidental, or consequential
 damages, arising from the use or inability to use this software. Use at your own risk.
 
+## Important update
+
+Companion now supports [Together.AI](https://www.together.ai/). It is very compatible with OpenAI, and
+provides a wide range of models. It does require an API key (provided by them).  Subsequently, the
+Companion.tokens file has had a major rewrite and now it in JSON format.
+
 ## Companion
 
 This is the actual discord bot. This section will go through the installation and setup process.
@@ -94,7 +100,7 @@ cd /home/GitHub/Companion
 - **Personas** This is where the various personas (personalities) are kept.
 - **Companion** Main program
 - **Companion.cfg** JSON file of the channel name (text only) and the persona for that channel. Each channel can have its own persona or can share a persona.
-- **Companion.tokens** This file doesn't exist until YOU create it. The first line of the file is the Discord token. The second line of the file is the OpenAI API key. Just these two lines ONLY, exactly as each service provides them.
+- **Companion.tokens** This file doesn't exist until YOU create it. **JSON** format. Please see below for file layout.
 - **Companion.scam-urls** This is an example file for domains that are scams/frauds/malicious.
 - **install** The inataller that create the /home/Companion folder
 - **requirements.txt** The pip3 requirements that will load the neccessry packages.
@@ -160,9 +166,23 @@ cd /home/GitHub/Companion
 
 ### Configuring
 
-Configuring Companion is technically easy. Lets start with the personas. These are what define the
-personalities of your bot. Each channel can have its own personality. We will use Tipsy as the blueprint for
-this demonstration. Each persona has its own folder to keep things easily organized.
+Configuring Companion is technically easy. Lets start with the tokens (API keys) then the personas. These
+are what define the personalities of your bot. Each channel can have its own personality. We will use Tipsy
+as the blueprint for this demonstration. Each persona has its own folder to keep things easily organized.
+
+#### Tokens
+
+Companion now uses JSON for the tokens file. Below is an example:
+
+```JSON
+{
+    "Discord":"11111111111111111111.2222222222222222222222",
+    "OpenAI":"12-1234567890",
+    "TogetherAI":"111111111222222233333334444444444"
+}
+```
+
+The **Discord** item is **REQUIRED**. OpenAI and TogetherAI are only required if you use that service.
 
 #### Logging
 
