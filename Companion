@@ -37,7 +37,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.340"
+Version="0.0.0.0.350"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1269,3 +1269,5 @@ if __name__=='__main__':
     except Exception as err:
         ErrorLog(f"Broken MAIN: {err}")
         print(f"Broken MAIN: {err}")
+
+### END OF PROGRAM
