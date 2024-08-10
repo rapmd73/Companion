@@ -37,7 +37,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.350"
+Version="0.0.0.0.360"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -95,6 +95,11 @@ def ReadTokens():
     else:
         ErrorLog(f"Missing token file: {tfile}")
         print(f"Missing token file: {tfile}")
+        sys.exit(1)
+
+    if 'Discord' not in tokens:
+        ErrorLog("The MUST be a Discord API reference in the tokens file")
+        print("The MUST be a Discord API reference in the tokens file")
         sys.exit(1)
 
     return tokens
@@ -740,6 +745,13 @@ def GetBabble(text):
         nsfw=(cnsfw=='T')
         input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
 
+        # Don't remember this request. does NOT bypass logging
+
+        ForgetThisMessage=False
+        if '%#>' in text:
+            ForgetThisMessage=True
+            input_text=input_text[3:]
+
         # Load the persona and memory files
         bot=GetCompanionPersona(channel,nsfw)
 
@@ -836,7 +848,7 @@ def GetBabble(text):
 
         # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
 
-        if bot['MaxMemory']>0 and memA['content']!=None:
+        if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
             if len(mList)>(bot['MaxMemory']*2):
                 mList=mList[2:]
 
@@ -1146,6 +1158,15 @@ async def on_message(message):
     # Don't respond to other bots.
     if message.author.bot:
         return
+
+    # Allow the user to erase their own stored conversation
+
+    if '%Forget' in message.content:
+        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
+        if os.path.exists(fn):
+            os.remove(fn)
+            await send_response(message,"Conversation forgotten")
+            return
 
     if 'DeveloperUID' in bot and uid==bot['DeveloperUID']:
         if '%CheckBot' in message.content:
