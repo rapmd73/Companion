@@ -37,7 +37,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.360"
+Version="0.0.0.0.362"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -407,12 +407,12 @@ def MaintainTokenLimit(orgmessages, max_tokens=16000, model="gpt-3.5-turbo"):
             # Recalculate current tokens after removal
             current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
             # Check for the situation that we can't reduce the number of tokens.
-            if old_tokens==current_tokens:
-                print("No token reduction available")
+            if old_tokens==current_tokens and current_tokens>max_tokens:
                 return None
             old_tokens=current_tokens
     except Exception as err:
         ErrorLog(f"MaintainTokens: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
 
     return messages
 
@@ -631,12 +631,15 @@ def GetTogetherAI(persona,bot):
 
         clientAI=together.Together(api_key=Tokens['TogetherAI'],timeout=60)
 
-        completion=clientAI.chat.completions.create( \
+        try:
+            completion=clientAI.chat.completions.create( \
                 model=bot['Model'], \
                 frequency_penalty=bot['FreqPenality'], \
                 temperature=bot['Temperature'], \
                 messages=persona, \
                 stream=False )
+        except Exception as err:
+            return PickRandomResponse(bot['TooMuchInformation'])
 
         try:
             response=completion.choices[0].message.content.strip()
