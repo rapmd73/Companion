@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# pip3 install openai
-# pip3 install ollama
-# pip3 install discord
-# pip3 install alt-profanity-check
+# added openai
+# added ollama
+# added together.ai
 
-# add together.ai
+# --> Not in a specific order
+
+# add google.ai (genini)
+# add huggingface
+# add perplexity.ai
+# add anthropic
+# add cohere
+# add AI21labs
 
 # ***** IMPORTANT:
 
@@ -37,7 +43,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.362"
+Version="0.0.0.0.370"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -639,6 +645,7 @@ def GetTogetherAI(persona,bot):
                 messages=persona, \
                 stream=False )
         except Exception as err:
+            ErrorLog(f"TogetherAI: {sys.exc_info()[-1].tb_lineno}/{err}")
             return PickRandomResponse(bot['TooMuchInformation'])
 
         try:
@@ -751,7 +758,7 @@ def GetBabble(text):
         # Don't remember this request. does NOT bypass logging
 
         ForgetThisMessage=False
-        if '%#>' in text:
+        if text.strip().startswith('%#>'):
             ForgetThisMessage=True
             input_text=input_text[3:]
 
@@ -1164,7 +1171,7 @@ async def on_message(message):
 
     # Allow the user to erase their own stored conversation
 
-    if '%Forget' in message.content:
+    if str(message.content).strip().startswith('%Forget'):
         fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
         if os.path.exists(fn):
             os.remove(fn)
@@ -1172,7 +1179,7 @@ async def on_message(message):
             return
 
     if 'DeveloperUID' in bot and uid==bot['DeveloperUID']:
-        if '%CheckBot' in message.content:
+        if str(message.content).strip().startswith('%CheckBot'):
             member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
             # Check if the bot is a member of the channel
             if member in message.channel.members:
@@ -1184,7 +1191,7 @@ async def on_message(message):
                 await send_response(message,msg)
             return
 
-        if '%PurgeRequests' in message.content:
+        if str(message.content).strip().startswith('%PurgeRequests'):
             # Give the AI the message
             if ResponseLock.acquire(timeout=ResponseTimeout):
                 if request_list!=[]:
@@ -1224,7 +1231,7 @@ async def on_message(message):
 
         # if the input text starts with "%http", replace it with the actual URL text
         try:
-            if os.path.exists(bot['TooMuchInformation']) and '%http' in input_text.lower():
+            if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
                 url= input_text.replace(' ','')[1:]
                 input_text=html2text(url)
                 if input_text==None:
