@@ -3,4 +3,5 @@ alt-profanity-check
 ollama
 tiktoken
 openai
-
+tldextract
+together
