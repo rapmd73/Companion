@@ -5,14 +5,23 @@
 # added ollama
 # added together.ai
 
-# --> Not in a specific order
+# --> Not in a specific order, add support for the following engines:
 
-# add google.ai (genini)
-# add huggingface
-# add perplexity.ai
-# add anthropic
-# add cohere
-# add AI21labs
+#   DeepInfra           https://deepinfra.com/pricing
+#   google.ai (genini)
+#   huggingface
+#   perplexity.ai
+#   fireworks.ai
+#   OctoML AI
+#   Vertex AI
+#   anthropic
+#   cohere
+#   AI21labs
+#   Deep Infra
+#   Azure
+#   Anyscale
+#   Replicate
+#   octo.ai
 
 # ***** IMPORTANT:
 
@@ -43,7 +52,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.370"
+Version="0.0.0.0.385"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -586,6 +595,12 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 def GetOpenAI(persona,bot):
     print("OpenAI",bot['Model'])
     try:
+        # Default connection timeout
+
+        tout=60
+        if 'Timeout' in bot:
+            tout=bot['Timeout']
+
         Tokens=ReadTokens()
 
         mt=16000                    # GPT3.5 default
@@ -607,7 +622,7 @@ def GetOpenAI(persona,bot):
                 frequency_penalty=bot['FreqPenality'], \
                 temperature=bot['Temperature'], \
                 messages=WorkingPersona, \
-                timeout=60 )
+                timeout=tout )
 
         try:
             response=completion.choices[0].message.content.strip()
@@ -625,6 +640,12 @@ def GetOpenAI(persona,bot):
 def GetTogetherAI(persona,bot):
     print("TogetherAI",bot['Model'])
     try:
+        # Default connection timeout
+
+        tout=60
+        if 'Timeout' in bot:
+            tout=bot['Timeout']
+
         Tokens=ReadTokens()
 
         mt=4096
@@ -635,7 +656,7 @@ def GetTogetherAI(persona,bot):
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
-        clientAI=together.Together(api_key=Tokens['TogetherAI'],timeout=60)
+        clientAI=together.Together(api_key=Tokens['TogetherAI'],timeout=tout)
 
         try:
             completion=clientAI.chat.completions.create( \
@@ -645,8 +666,8 @@ def GetTogetherAI(persona,bot):
                 messages=persona, \
                 stream=False )
         except Exception as err:
-            ErrorLog(f"TogetherAI: {sys.exc_info()[-1].tb_lineno}/{err}")
-            return PickRandomResponse(bot['TooMuchInformation'])
+            ErrorLog(f"TogetherAI {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
+            return None
 
         try:
             response=completion.choices[0].message.content.strip()
@@ -656,7 +677,7 @@ def GetTogetherAI(persona,bot):
         RawLog(bot['Model']+': '+str(completion))
         return response
     except Exception as err:
-        ErrorLog(f"TogetherAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+        ErrorLog(f"TogetherAI {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
 
 # Use the Ollama API
@@ -664,6 +685,12 @@ def GetTogetherAI(persona,bot):
 def GetOllama(persona,bot):
     print("Ollama",bot['Model'])
     try:
+        # Default connection timeout
+
+        tout=60
+        if 'Timeout' in bot:
+            tout=bot['Timeout']
+
         mt=0
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
@@ -684,7 +711,7 @@ def GetOllama(persona,bot):
         options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'],"seed":seed,"num_ctx":mt }
 
         completion=ollama.chat( \
-                keep_alive=60, \
+                keep_alive=tout, \
                 stream=False, \
                 model=bot['Model'], \
                 options=options, \
