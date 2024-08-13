@@ -52,7 +52,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.385"
+Version="0.0.0.0.395"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -545,13 +545,16 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
     bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
 
-    # Load bot config file.
+    # Load bot config file. Channel CFg always has priority.
+    settings={}
     try:
-        bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
+        bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.cfg"
         if os.path.exists(bcfg):
             settings=json.loads(jsonFilter(ReadFile(bcfg)))
         else:
-            settings={}
+            bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
+            if os.path.exists(bcfg):
+                settings=json.loads(jsonFilter(ReadFile(bcfg)))
     except Exception as err:
         ErrorLog(f"{bcfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
 
@@ -873,7 +876,7 @@ def GetBabble(text):
 
         # check to see if we got a response
 
-        if response==None:
+        if response==None or response=='':
             return PickRandomResponse(bot['Broken'])
 
         # Save "memory" to disk
@@ -1177,6 +1180,8 @@ async def on_message(message):
 
     # This is really the only absolute exception to BOT responsing...
     # Check for scam links and delete them.
+
+    # BUILD FALSE POSITIVES LIST
 
     if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True:
         scamurls=ReadFile(CompanionScamURLS).strip().split('\n')
