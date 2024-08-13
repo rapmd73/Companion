@@ -1208,7 +1208,7 @@ async def on_message(message):
         if os.path.exists(fn):
             os.remove(fn)
             await send_response(message,"Conversation forgotten")
-            return
+        return
 
     if 'DeveloperUID' in bot and uid==bot['DeveloperUID']:
         if str(message.content).strip().startswith('%CheckBot'):
@@ -1217,7 +1217,7 @@ async def on_message(message):
             if member in message.channel.members:
                 await send_response(message,"Allowed")
             else:
-                await send_response(message,"Allowed")
+                await send_response(message,"Not Allowed")
             if request_list!=[]:
                 msg=f"{len(request_list)} pending requests"
                 await send_response(message,msg)
