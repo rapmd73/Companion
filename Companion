@@ -52,7 +52,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.397"
+Version="0.0.0.0.405"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1210,7 +1210,7 @@ async def on_message(message):
             await send_response(message,"Conversation forgotten")
         return
 
-    if 'DeveloperUID' in bot and uid==bot['DeveloperUID']:
+    if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
         if str(message.content).strip().startswith('%CheckBot'):
             member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
             # Check if the bot is a member of the channel
