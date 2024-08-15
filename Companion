@@ -52,7 +52,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.395"
+Version="0.0.0.0.397"
 
 # The running name of the program. Must be global and NEVER changing.
 
