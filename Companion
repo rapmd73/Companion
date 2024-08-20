@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.435"
+Version="0.0.0.0.440"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -803,7 +803,8 @@ def html2text(url):
 def youtube2text(video_url):
     try:
         # Extract the video ID from the URL
-        video_id = video_url.split('v=')[1]
+        #video_id = video_url.split('v=')[1]
+        video_id=re.search(r'(v=|be/|embed/|v/|youtu\.be/|\/videos\/|\/shorts\/|\/watch\?v=|\/watch\?si=|\/watch\?.*?&v=)([a-zA-Z0-9_-]{11})',video_url).group(2)
 
         # Fetch the transcript using the YouTubeTranscriptApi
         transcript_list=youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
@@ -1318,7 +1319,7 @@ async def on_message(message):
         try:
             if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
                 # Video transcript?
-                if 'youtube.com/watch' in input_text:
+                if 'youtube.com/watch' in input_text or 'youtu.be/' in input_text:
                     url=input_text.replace(' ','')[1:]
                     input_text=youtube2text(url)
                     if input_text==None:
