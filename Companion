@@ -49,10 +49,11 @@ import ollama
 import tiktoken
 import openai
 import together
+import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.425"
+Version="0.0.0.0.435"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -761,6 +762,7 @@ def html2text(url):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
         request = urllib.request.Request(url, headers=headers)
 
+        print("Fetch:",url)
         # Fetch the HTML content from the URL
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
@@ -794,6 +796,24 @@ def html2text(url):
     except Exception as err:
         ErrorLog(f"Broke html2text: {sys.exc_info()[-1].tb_lineno}/{err}")
 
+    return None
+
+# Read a YouTube URL and pull the transcript
+
+def youtube2text(video_url):
+    try:
+        # Extract the video ID from the URL
+        video_id = video_url.split('v=')[1]
+
+        # Fetch the transcript using the YouTubeTranscriptApi
+        transcript_list=youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
+
+        # Use the TextFormatter to convert the transcript into plain text
+        transcript_text='\n'.join(line['text'] for line in transcript_list)
+
+        return transcript_text
+    except Exception as err:
+        ErrorLog(f"Broke youtube2text: {sys.exc_info()[-1].tb_lineno}/{err}")
     return None
 
 # This function handle the actual responses.
@@ -1297,11 +1317,20 @@ async def on_message(message):
         # if the input text starts with "%http", replace it with the actual URL text
         try:
             if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
-                url= input_text.replace(' ','')[1:]
-                input_text=html2text(url)
-                if input_text==None:
-                    await send_response(message,PickRandomResponse(bot['URLBroken']))
-                    return
+                # Video transcript?
+                if 'youtube.com/watch' in input_text:
+                    url=input_text.replace(' ','')[1:]
+                    input_text=youtube2text(url)
+                    if input_text==None:
+                        await send_response(message,PickRandomResponse(bot['URLBroken']))
+                        return
+                else:
+                    # Web page
+                    url=input_text.replace(' ','')[1:]
+                    input_text=html2text(url)
+                    if input_text==None:
+                        await send_response(message,PickRandomResponse(bot['URLBroken']))
+                        return
         except Exception as err:
             ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
