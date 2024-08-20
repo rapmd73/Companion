@@ -204,6 +204,7 @@ We'll start with **Tipsy.cfg**. This is the OpenAI setup.
 { 
     "Engine":"OpenAI",
     "Model":"gpt-3.5-turbo",
+    "Encoding":"cl100k_base",
     "FreqPenality":2,
     "Temperature":1,
     "DeveloperUID":123456789, 
@@ -230,6 +231,7 @@ Above is an example of the config file(s) for this persona. Here is a table that
 | :--  | :-: | :-- |
 | Engine| OpenAI | Currently *OpenAI* and *Ollama* are the only engines supported. More to come. |
 | Model | gpt-3.5-turbo | This is the supported model that OpenAI allows. If you use Ollama, GPT4ALL, or similar, it will match your AI engine. |
+| Encoding | cl100k_base | This is the encoding the model uses. Non OpenAI models will most likely need this over Model for proper token counting. |
 | FreqPenality | 2 | You can pick a number between -2.0 and 2.0 when you use the OpenAI API. If you choose a positive number, it means the system will penalize repeating the same words too often. This helps make the responses more varied and avoids repeating the same lines over and over again. |
 | Temperature | 1 |Choose a sampling temperature between 0 and 2. If you go for a higher number like 0.8, the output will be more random. But if you pick a lower number like 0.2, the output will be more focused and predictable. |
 | DeveloperUID | 123456789 | The developer, YOU. This is just a cutezy way for the bot to know if you that it is talking to. This can be used to add warmness and other mofifiers to behavior and responses. Its really a steping stone to developing "relation" between the bot and human |

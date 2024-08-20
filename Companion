@@ -52,7 +52,7 @@ import together
 
 # Active version
 
-Version="0.0.0.0.405"
+Version="0.0.0.0.425"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -392,8 +392,11 @@ def GetWordList(text):
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
 # request.
 
-def MaintainTokenLimit(orgmessages, max_tokens=16000, model="gpt-3.5-turbo"):
-    enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=None):
+    if encoding!=None:
+        enc=tiktoken.get_encoding(encoding)
+    else:
+        enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
 
     # Make a separate working copy of the original messages.
     messages=orgmessages.copy()
@@ -596,7 +599,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 # Use the OpenAI call.
 
 def GetOpenAI(persona,bot):
-    print("OpenAI",bot['Model'])
+    print("OpenAI",bot.get('Model'),bot.get('Encoding'))
     try:
         # Default connection timeout
 
@@ -611,7 +614,14 @@ def GetOpenAI(persona,bot):
             mt=bot['MaxTokens']
         if mt>16000:
             mt=16000
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
+
+        model=None
+        encoding=None
+        if 'Model' in bot:
+            model=bot['Model']
+        if 'Encoding' in bot:
+            encoding=bot['Encoding']
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
         # Over limit and not able to reduce
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -641,7 +651,7 @@ def GetOpenAI(persona,bot):
 # Use TogetherAI call.
 
 def GetTogetherAI(persona,bot):
-    print("TogetherAI",bot['Model'])
+    print("TogetherAI",bot.get('Model'),bot.get('Encoding'))
     try:
         # Default connection timeout
 
@@ -654,7 +664,14 @@ def GetTogetherAI(persona,bot):
         mt=4096
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
+
+        model=None
+        encoding=None
+        if 'Model' in bot:
+            model=bot['Model']
+        if 'Encoding' in bot:
+            encoding=bot['Encoding']
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
         # Over limit and not able to reduce
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -686,7 +703,7 @@ def GetTogetherAI(persona,bot):
 # Use the Ollama API
 
 def GetOllama(persona,bot):
-    print("Ollama",bot['Model'])
+    print("Ollama",bot.get('Model'),bot.get('Encoding'))
     try:
         # Default connection timeout
 
@@ -697,7 +714,14 @@ def GetOllama(persona,bot):
         mt=0
         if 'MaxTokens' in bot:
             mt=bot['MaxTokens']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt)
+
+        model=None
+        encoding=None
+        if 'Model' in bot:
+            model=bot['Model']
+        if 'Encoding' in bot:
+            encoding=bot['Encoding']
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
         # Over limit and not able to reduce
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -842,15 +866,20 @@ def GetBabble(text):
 
         el=list(bot['Engine'].split(','))       # Engine list
         ec=len(el)                              # Engine list length
-        ml=list(bot['Model'].split(','))        # Model list
-        mc=len(ml)                              # Model list length
         tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
         mt=len(tl)                              # Max Tokens list length
+        # Encoding alwayys takes priority over modem
+        if 'Encoding' in bot:
+            ml=list(bot['Encoding'].split(','))        # Model list
+            mc=len(ml)                              # Model list length
+        else:
+            ml=list(bot['Model'].split(','))        # Model list
+            mc=len(ml)                              # Model list length
 
         # The number of models MUST equal the number of engines. 1 model per engine
 
         if ec!=mc!=mt:
-            ErrorLog(f"Broke GB (models!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
+            ErrorLog(f"Broke GB ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
             return PickRandomResponse(bot['Broken'])
 
         # Run through the engins/models until we have a response.
@@ -860,8 +889,12 @@ def GetBabble(text):
         while response==None and ecounter<ec:
             cbot=copy.deepcopy(bot)             # Make a copy
             cbot['Engine']=el[ecounter]
-            cbot['Model']=ml[ecounter]
             cbot['MaxTokens']=int(tl[ecounter])
+            # Encoding or Model
+            if 'Encoding' in cbot:
+                cbot['Encoding']=ml[ecounter]
+            else:
+                cbot['Model']=ml[ecounter]
 
             if cbot['Engine'].lower()=='openai':
                 response=GetOpenAI(persona,cbot)
