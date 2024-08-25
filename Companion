@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.440"
+Version="0.0.0.0.450"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -253,11 +253,18 @@ def DisectMessage(event,message):
 
 # Pick one line from a file as a response
 
-def PickRandomResponse(fname):
+def ReadFile2List(fname,ForceLower=False):
     # Something broke. Keep the responses in character
     responses=ReadFile(fname).strip().split('\n')
     while '' in responses:
         responses.remove('')
+    if ForceLower==True:
+        responses=[item.lower() for item in responses]
+    return responses
+
+def PickRandomResponse(fname):
+    # Something broke. Keep the responses in character
+    responses=ReadFile2List(fname)
     selected_response=random.choice(responses)
     return selected_response
 
@@ -1294,16 +1301,24 @@ async def on_message(message):
 
     # If we have a bot, then we can converse here.
     if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
-        # Me, the developer. Basic blueprint to demonstrating how to delevope a "relationship" approach.
-        # This does impact the bot.
-#        if uid==bot['DeveloperUID']:
-#            imput_text="{[(* endearing, warm, loving, passionate, intimate *)]} "+message.content.strip()
-#        else: # Not me, the rest of the world
         input_text = message.content.strip()
 
-        # Handle this that I don't want. Deflect or break...
-#        if 'president' in input_text.lower():
-#            input_text+=' [deflect politics]'
+        # If a trigger file exists, check to see if one on the trigger words are in the user message.
+        trigger=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.trigger"
+        if os.path.exists(trigger):
+            wfound=False
+            twords=ReadFile2List(trigger,ForceLower=True)
+            inwords=StripPunctuation(input_text.replace('  ',' ')).split(' ')
+            while '' in inwords:
+                inwords.remove('')
+            # Search the list word by word
+            for w in inwords:
+                if w.lower() in twords:
+                    wfound=True
+                    break
+            # A trigger word was not found, don't continue.
+            if wfound==False:
+                return
 
         # Check to see if the message is directed to another user. If it is, don't respond.
         if not message.reference:

@@ -131,6 +131,16 @@ cd /home/GitHub/Companion
 - **Koiki.vulgarity** A list of responses when the user uses vulgarities, one per line and the more responses the better.
 - **Koiki.scamurls** A list of responses when the user posts scam/fraud links lsted in the `Companion.scam-urls` file. one per line and the more responses the better.
 
+##### Special files
+
+These files are unique in that they can operate for specific channels. For the purpose of the examples,
+the channel name **cooking** will be used. Be sure to use the proper chanel for **YOUR** server.
+
+- **Koiki.cooking.cfg** Configuration settings fot THIS channel.
+- **Koiki.cooking.persona** The persona for THIS specific channel. It will be loaded, if present, overriding the default one. Also applies to NSFW files
+- **Koiki.cooking.system** The system role for THIS specific channel. It will be loaded, if present, overriding the default one. Also applies to NSFW files
+- **Koiki.cooking.trigger** If this file is present, the bot will only respond if a **word** from this file is in the user input.  This allows the bot to communicate when appripriate based upon need. Words are one per line and case doesn't matter.
+
 #### /home/Companion/Personas/Tipsy
 
 - **Tipsy.broke** A list on responses where one will be given to the user is the OpenAI API doesn't respond. The more the better and one response per line. Responses should be in-line with the persona you are creating.
