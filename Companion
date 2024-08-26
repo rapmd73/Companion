@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.470"
+Version="0.0.0.0.490"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -96,6 +96,42 @@ client=discord.Client(intents=intents)
 
 # List to store pending requests
 request_list = []
+
+# Check a string for numbers only.
+
+def NumberOnly(s):
+    # Replace common look-alikes with their numeric equivalents
+    look_alike_replacements = {
+        'I': '1',  # Uppercase 'i' as '1'
+        'l': '1',  # Lowercase 'L' as '1'
+        'O': '0',  # Uppercase 'O' as '0'
+    }
+
+    # Replace look-alikes in the input string
+    for look_alike, digit in look_alike_replacements.items():
+        s = s.replace(look_alike, digit)
+
+    s=s.strip().replace(' ','')
+
+    # Define valid characters, including look-alikes and numeric equivalents
+    valid_chars = set("0123456789.,")  # Regular digits, comma, and period
+    look_alike_chars = set("٠١٢٣٤٥٦٧٨٩")  # Arabic-Indic digits
+    full_width_digits = set("０１２３４５６７８９")  # Full-width digits
+
+    # Combine all valid characters into one set
+    valid_chars.update(look_alike_chars)
+    valid_chars.update(full_width_digits)
+
+    # Check each character in the string
+    for char in s:
+        if char not in valid_chars:
+            return False
+
+    # Basic number validation: ensure the string isn't just commas or periods
+    if s.replace(",", "").replace(".", "").isdigit():
+        return True
+
+    return False
 
 # Read the token file into a token dictionary.
 
@@ -553,6 +589,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
     bot['AutoFilter']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.autofilter"
+    bot['AgeExploit']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.ageexploit"
     bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
@@ -1239,6 +1276,15 @@ async def on_message(message):
 
     # Ignore messages from the bot itself
     if message.author==client.user:
+        return
+
+    if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
+        author=str(message.author.mention)
+        # If its a bot, it doesn't deserve a response
+        if not message.author.bot:
+            resp=f"{author} {PickRandomResponse(bot['AgeExploit'])}"
+            await message.channel.send(resp)
+        await message.delete()
         return
 
     # This is really the only absolute exception to BOT responsing...
