@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.455"
+Version="0.0.0.0.470"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -68,6 +68,7 @@ LoggingDir='/home/Companion/Logs'
 # have links listed are removed. Requires the persona text file as well for responses.
 
 CompanionScamURLS='/home/Companion/Companion.scam-urls'
+CompanionAutoFilter='/home/Companion/Companion.autofilter'
 
 # Global lock for managing sequential access to the AI api and file safety.
 
@@ -551,6 +552,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
+    bot['AutoFilter']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.autofilter"
     bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
@@ -1244,16 +1246,26 @@ async def on_message(message):
 
     # BUILD FALSE POSITIVES LIST
 
-    if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True:
-        scamurls=ReadFile(CompanionScamURLS).strip().split('\n')
-        while '' in scamurls:
-            scamurls.remove('')
+    if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
+        scamurls=ReadFile2List(CompanionScamURLS)
         for url in scamurls:
             if url in message.content:
                 author=str(message.author.mention)
                 # If its a bot, it doesn't deserve a response
                 if not message.author.bot:
                     resp=f"{author} {PickRandomResponse(bot['ScamURLS'])}"
+                    await message.channel.send(resp)
+                await message.delete()
+                return
+
+    if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
+        autofilter=ReadFile2List(CompanionAutoFilter)
+        for text in autofilter:
+            if text in message.content:
+                author=str(message.author.mention)
+                # If its a bot, it doesn't deserve a response
+                if not message.author.bot:
+                    resp=f"{author} {PickRandomResponse(bot['AutoFilter'])}"
                     await message.channel.send(resp)
                 await message.delete()
                 return

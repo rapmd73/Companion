@@ -101,6 +101,7 @@ cd /home/GitHub/Companion
 - **Companion** Main program
 - **Companion.cfg** JSON file of the channel name (text only) and the persona for that channel. Each channel can have its own persona or can share a persona.
 - **Companion.tokens** This file doesn't exist until YOU create it. **JSON** format. Please see below for file layout.
+- **Companion.autofilter** Not neccessarily vulgarity, but text that should be automatically remove. Example: URL shorteners.
 - **Companion.scam-urls** This is an example file for domains that are scams/frauds/malicious.
 - **install** The inataller that create the /home/Companion folder
 - **requirements.txt** The pip3 requirements that will load the neccessry packages.
