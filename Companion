@@ -97,6 +97,27 @@ client=discord.Client(intents=intents)
 # List to store pending requests
 request_list = []
 
+# General file tools
+
+def ReadFile(fn,binary=False):
+    if os.path.exists(fn):
+        if binary:
+            cf=open(fn,'rb')
+            buffer=cf.read()
+            cf.close()
+        else:
+            cf=open(fn,'r')
+            buffer=cf.read().strip()
+            cf.close()
+    else:
+        buffer=None
+    return buffer
+
+def WriteFile(fn,data):
+    cf=open(fn,'w')
+    cf.write(data)
+    cf.close()
+
 # Check a string for numbers only.
 
 def NumberOnly(s):
@@ -312,27 +333,6 @@ def PickRandomResponse(fname):
 
 lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
 rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
-
-# General file tools
-
-def ReadFile(fn,binary=False):
-    if os.path.exists(fn):
-        if binary:
-            cf=open(fn,'rb')
-            buffer=cf.read()
-            cf.close()
-        else:
-            cf=open(fn,'r')
-            buffer=cf.read().strip()
-            cf.close()
-    else:
-        buffer=None
-    return buffer
-
-def WriteFile(fn,data):
-    cf=open(fn,'w')
-    cf.write(data)
-    cf.close()
 
 # Building the leet derivitives. This was a royal pain in the ass, but by doing so, if any user trying to
 # bypass the edit detection can be persumed to have malicious intent.

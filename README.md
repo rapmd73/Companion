@@ -19,6 +19,9 @@ If you find this software useful, please give it a star and consider
 [sponsoring](https://github.com/sponsors/rapmd73) it to support its ongoing development and enhancement.
 Please also join the [support server](https://discord.gg/8jFFQMgV8Z).
 
+I now have the starts of a [wiki](https://github.com/rapmd73/Companion/wiki). Please check it out and
+provide feedback.
+
 ##### Disclaimer
 
 This software is provided AS-IS, without warranty of any kind, express or implied. While every effort is
