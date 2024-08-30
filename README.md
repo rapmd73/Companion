@@ -235,6 +235,7 @@ Here is what the Ollama setup would look like:
     "FreqPenality":2,
     "Temperature":0.31,
     "DeveloperUID":123456789, 
+    "AllowBot":"Yes",
     "MaxMemory":50
 }
 ```
@@ -251,6 +252,7 @@ Above is an example of the config file(s) for this persona. Here is a table that
 | DeveloperUID | 123456789 | The developer, YOU. This is just a cutezy way for the bot to know if you that it is talking to. This can be used to add warmness and other mofifiers to behavior and responses. Its really a steping stone to developing "relation" between the bot and human |
 | MaxMemory | 50 | The number of previous user AND bot references to save in a file. Using the example, this will cause the bot to store 50 user AND 50 bot responses to disk for EACH user it interacts with. |
 | AlowVulgarity | Yes | This tells the bot to allow vulgarity. Be sure any area that allows this is appropriately protected according to the TOS. |
+| AllowBot | Yes | This tell the bot that it will respond to other bots. **Not recomentded as a global setting**, but can be very useful in repeater situations. *Use with care on paid services*. |
 
 ##### Persona construction
 

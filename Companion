@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.490"
+Version="0.0.0.0.500"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -613,6 +613,9 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         bot|=settings
 
     # Run through some sanity checks.
+    # Default: NO bot will be processed
+    if 'AllowBot' not in bot:
+        bot['AllowBot']='no'
     if 'Engine' not in bot:
         bot['Engine']="openai"
     if 'Model' not in bot:
@@ -1210,7 +1213,7 @@ async def on_message_edit(before, after):
         # This could be a problem at the global level of a server, where partial moderation may be desired,
         # vs an absolute approach.
 
-        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not after.channel.nsfw:
+        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()!='yes' and not after.channel.nsfw:
             if bool(pc.predict([ after.content ]))==True:
                 resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
                 await after.channel.send(resp)
@@ -1317,7 +1320,7 @@ async def on_message(message):
                 return
 
     # Don't respond to other bots.
-    if message.author.bot:
+    if message.author.bot and bot['AllowBot'].lower()!='yes':
         return
 
     # Allow the user to erase their own stored conversation
