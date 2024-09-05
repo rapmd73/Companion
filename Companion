@@ -53,7 +53,7 @@ import youtube_transcript_api
 
 # Active version
 
-Version="0.0.0.0.500"
+Version="0.0.0.0.520"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -324,6 +324,9 @@ def PickRandomResponse(fname):
     # Something broke. Keep the responses in character
     responses=ReadFile2List(fname)
     selected_response=random.choice(responses)
+    if selected_response.startswith('{[(*') and selected_response.endswith('*)]}'):
+        buffer=ReadFile(selected_response[4:-4].strip()).strip()
+        return buffer
     return selected_response
 
 # Example usage (assuming you have a Discord message object):
@@ -1285,8 +1288,7 @@ async def on_message(message):
         author=str(message.author.mention)
         # If its a bot, it doesn't deserve a response
         if not message.author.bot:
-            resp=f"{author} {PickRandomResponse(bot['AgeExploit'])}"
-            await message.channel.send(resp)
+            await send_response(message,PickRandomResponse(bot['AgeExploit']))
         await message.delete()
         return
 
@@ -1299,11 +1301,11 @@ async def on_message(message):
         scamurls=ReadFile2List(CompanionScamURLS)
         for url in scamurls:
             if url in message.content:
+                print(f"ScamURL: {url} {message.content}")
                 author=str(message.author.mention)
                 # If its a bot, it doesn't deserve a response
                 if not message.author.bot:
-                    resp=f"{author} {PickRandomResponse(bot['ScamURLS'])}"
-                    await message.channel.send(resp)
+                    await send_response(message,PickRandomResponse(bot['ScamURLS']))
                 await message.delete()
                 return
 
@@ -1314,8 +1316,7 @@ async def on_message(message):
                 author=str(message.author.mention)
                 # If its a bot, it doesn't deserve a response
                 if not message.author.bot:
-                    resp=f"{author} {PickRandomResponse(bot['AutoFilter'])}"
-                    await message.channel.send(resp)
+                    await send_response(message,PickRandomResponse(bot['AutoFilter']))
                 await message.delete()
                 return
 
