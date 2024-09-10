@@ -7,6 +7,7 @@
 
 # --> Not in a specific order, add support for the following engines:
 
+#   cohere
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
 #   huggingface
@@ -15,7 +16,6 @@
 #   OctoML AI
 #   Vertex AI
 #   anthropic
-#   cohere
 #   AI21labs
 #   Deep Infra
 #   Azure
@@ -29,8 +29,19 @@
 #       give the bot administrator preiviledges. It works exceptionally well, but you MUST pay attention to
 #       the details.
 
+# Special USER commands:
+
+#   %http
+#   %Forget
+
+# Developer only:
+
+#   %PurgeRequests
+#   %CheckBot
+
 import sys
 import os
+import io
 import copy
 import datetime
 import time
@@ -45,15 +56,17 @@ import asyncio
 import discord
 from discord.ext import commands, tasks
 import profanity_check as pc
+import pdfplumber
 import ollama
 import tiktoken
 import openai
 import together
 import youtube_transcript_api
+from transformers import AutoTokenizer
 
 # Active version
 
-Version="0.0.0.0.520"
+Version="0.0.0.0.535"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -438,20 +451,31 @@ def GetWordList(text):
     return [word for word in words if word]     # Filter out empty strings (including spaces)
 
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
-# request.
+# request. HuggingFace = Ollama, Together.AI -> NOT OpenAI.
 
-def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=None):
-    if encoding!=None:
-        enc=tiktoken.get_encoding(encoding)
-    else:
-        enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=None,HuggingFace=False):
+    if not HuggingFace:
+        if encoding!=None:
+            enc=tiktoken.get_encoding(encoding)
+        else:
+            enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+#    else:
+        # Gated, needs env HF_HUB_READ_TOKEN
+#        enc=AutoTokenizer.from_pretrained(encoding)
 
     # Make a separate working copy of the original messages.
     messages=orgmessages.copy()
 
     try:
         # Calculate current tokens in the message list
-        current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        if not HuggingFace:
+            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        else:
+            current_tokens=0
+            for message in messages:
+#                current_tokens=len(enc(message["content"], add_special_tokens=False)["input_ids"])
+                current_tokens=int(len(message["content"])/4)
+
         old_tokens=current_tokens
         if max_tokens==0:
             return messages
@@ -724,7 +748,7 @@ def GetTogetherAI(persona,bot):
             model=bot['Model']
         if 'Encoding' in bot:
             encoding=bot['Encoding']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding,HuggingFace=True)
         # Over limit and not able to reduce
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -774,7 +798,7 @@ def GetOllama(persona,bot):
             model=bot['Model']
         if 'Encoding' in bot:
             encoding=bot['Encoding']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
+        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding,HuggingFace=True)
         # Over limit and not able to reduce
         if WorkingPersona==None:
             return PickRandomResponse(bot['TooMuchInformation'])
@@ -806,6 +830,15 @@ def GetOllama(persona,bot):
     RawLog(bot['Model']+': '+json.dumps(completion))
     return response
 
+# Read PDF from buffer
+
+def PDF2Text(pdf_buffer):
+    with pdfplumber.open(io.BytesIO(pdf_buffer)) as pdf:
+        text=""
+        for page in pdf.pages:
+            text+=page.extract_text()
+        return text
+
 # Get a URL and scrub it to pure text
 
 def html2text(url):
@@ -818,7 +851,7 @@ def html2text(url):
         # Fetch the HTML content from the URL
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
-                html = response.read().decode('utf-8')
+                html = response.read().decode('utf-8',errors='ignore')
         except Exception as err:
             print("URL Error:",url,str(err))
             return None
@@ -826,6 +859,12 @@ def html2text(url):
         if response.code>=400:
             print("URL Code:",response.code,url)
             return None
+
+        # Check for PDF signature
+        if html[:5]=='%PDF-':
+            text=PDF2Text(html).strip()
+            print("PDF:",len(text),url)
+            return text
 
         # Remove the entire head section
         html = re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
@@ -1479,3 +1518,4 @@ if __name__=='__main__':
         print(f"Broken MAIN: {err}")
 
 ### END OF PROGRAM
+

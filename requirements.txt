@@ -5,3 +5,6 @@ tiktoken
 openai
 tldextract
 together
+transformers
+youtube-transcript-api
+pdfplumber
