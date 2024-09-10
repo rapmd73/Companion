@@ -66,7 +66,7 @@ from transformers import AutoTokenizer
 
 # Active version
 
-Version="0.0.0.0.535"
+Version="0.0.0.0.540"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -851,7 +851,7 @@ def html2text(url):
         # Fetch the HTML content from the URL
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
-                html = response.read().decode('utf-8',errors='ignore')
+                html = response.read()
         except Exception as err:
             print("URL Error:",url,str(err))
             return None
@@ -865,6 +865,9 @@ def html2text(url):
             text=PDF2Text(html).strip()
             print("PDF:",len(text),url)
             return text
+
+        # Decoding MUST be done AFTER pdf test
+        html=html.decode('utf-8',errors='ignore')
 
         # Remove the entire head section
         html = re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
