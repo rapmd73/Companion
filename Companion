@@ -31,13 +31,29 @@
 
 # Special USER commands:
 
-#   %http
+#   %http       Read URLs, YouTube transcripts, and PDFs
 #   %Forget
 
 # Developer only:
 
 #   %PurgeRequests
 #   %CheckBot
+
+# Wanted features:
+
+#   Anti raid/nuke
+#   Ticket management
+#   Auto slow mode
+#   Anti nudity verification for images.
+
+# Disable 3rd party logging.
+import warnings
+warnings.filterwarnings('ignore')
+import logging
+logging.basicConfig(level=logging.CRITICAL)
+logger=logging.getLogger('transformers')
+logger.setLevel(logging.CRITICAL)
+logger.handlers=[]
 
 import sys
 import os
@@ -51,10 +67,10 @@ import string
 import concurrent.futures
 import threading
 import urllib.request
+import requests
 import re
 import asyncio
 import discord
-from discord.ext import commands, tasks
 import profanity_check as pc
 import pdfplumber
 import ollama
@@ -62,11 +78,13 @@ import tiktoken
 import openai
 import together
 import youtube_transcript_api
+from discord.ext import commands, tasks
 from transformers import AutoTokenizer
+from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.575"
+Version="0.0.0.0.581"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -110,7 +128,9 @@ client=discord.Client(intents=intents)
 # List to store pending requests
 request_list = []
 
-# General file tools
+###
+### General file tools
+###
 
 def ReadFile(fn,binary=False):
     if os.path.exists(fn):
@@ -130,6 +150,30 @@ def WriteFile(fn,data):
     cf=open(fn,'w')
     cf.write(data)
     cf.close()
+
+# Pick one line from a file as a response
+
+def ReadFile2List(fname,ForceLower=False):
+    # Something broke. Keep the responses in character
+    responses=ReadFile(fname).strip().split('\n')
+    while '' in responses:
+        responses.remove('')
+    if ForceLower==True:
+        responses=[item.lower() for item in responses]
+    return responses
+
+def PickRandomResponse(fname):
+    # Something broke. Keep the responses in character
+    responses=ReadFile2List(fname)
+    selected_response=random.choice(responses)
+    if selected_response.startswith('{[(*') and selected_response.endswith('*)]}'):
+        buffer=ReadFile(selected_response[4:-4].strip()).strip()
+        return buffer
+    return selected_response
+
+###
+### Random support functions
+###
 
 # Check a string for numbers only.
 
@@ -167,185 +211,7 @@ def NumberOnly(s):
 
     return False
 
-# Read the token file into a token dictionary.
-
-def ReadTokens():
-    tokens={}
-    tfile=RunningName+'.tokens'
-    if os.path.exists(tfile):
-        try:
-            tokens=json.loads(jsonFilter(ReadFile(tfile)))
-        except Exception as err:
-            ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
-            print("Error token file is not in JSON format. Please see README.md for new layout")
-            sys.exit(1)
-    else:
-        ErrorLog(f"Missing token file: {tfile}")
-        print(f"Missing token file: {tfile}")
-        sys.exit(1)
-
-    if 'Discord' not in tokens:
-        ErrorLog("The MUST be a Discord API reference in the tokens file")
-        print("The MUST be a Discord API reference in the tokens file")
-        sys.exit(1)
-
-    return tokens
-
-# Raw dump. For diagnostics purposes to see the actual return response from the AI model.
-
-def RawLog(text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            fn=LoggingDir+'/RAWDUMP.log'
-            fh=open(fn,'w')
-            fh.write(text)
-            fh.close()
-        except:
-            pass
-        LoggingLock.release()
-
-# Logging
-
-def WriteLog(uid,channel,text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            txt=text.replace('\n','\\n').replace('\r','\\r')
-
-            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
-
-            s=f'{time} {uid} {channel} {txt}\n'
-
-            fn=LoggingDir+'/'+str(channel)+'.log'
-            fh=open(fn,'a+')
-            fh.write(s)
-            fh.close()
-        except:
-            pass
-        LoggingLock.release()
-
-# Log errors
-
-def ErrorLog(text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            txt=text.replace('\n','\\n').replace('\r','\\r')
-
-            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
-
-            s=f'{time} {txt}\n'
-
-            fn=LoggingDir+'/Errors.log'
-            fh=open(fn,'a+')
-            fh.write(s)
-            fh.close()
-        except:
-            pass
-        LoggingLock.release()
-
-# Disect discord messages. Forensic logging
-
-def DisectMessage(event,message):
-    if DisectLock.acquire(timeout=DisectTimeout):
-        # Set up convience variables
-        channel=str(message.channel)
-        uid=str(message.author.id)
-        author = message.author
-        member = message.guild.get_member(author.id) if message.guild else None
-        nickname = member.nick if member and member.nick else author.name
-
-        try:
-            WriteLog(uid,channel,f"Event trigger: {event}")
-            WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
-            WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
-            WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
-            WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{message.author.id} Bot: {message.author.bot}")
-            WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
-            WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
-            # Check if the message was sent via a webhook
-            if message.webhook_id:
-                WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
-            # List the users mentioned, if any
-            if message.mentions:
-                WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
-            if message.role_mentions:
-                WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
-            if message.channel_mentions:
-                WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
-            if str(message.content).strip()!='':
-                WriteLog(uid,channel,f"Message Content: {message.content}")
-            else:
-                WriteLog(uid,channel,f"Message Content: Empty content field")
-            if message.reactions:
-                WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
-
-            # Log sticker information
-            if message.stickers:
-                WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
-
-            # Log reference information (for replies)
-            if message.reference:
-                ref = message.reference
-                WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
-
-            # Log details about each embed
-            if message.embeds:
-                WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
-                for index, embed in enumerate(message.embeds):
-                    WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
-                    WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
-
-            # Log detailed information about each attachment
-            if message.attachments:
-                WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
-                for index, attachment in enumerate(message.attachments):
-                    WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
-                    WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
-
-            # Log message components (if any)
-            if message.components:
-                WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
-            WriteLog(uid,channel,f"{'-'*80}")
-        except AttributeError as e:
-            WriteLog(uid,channel,f"Error accessing message attributes: {e}")
-        DisectLock.release()
-
-# Pick one line from a file as a response
-
-def ReadFile2List(fname,ForceLower=False):
-    # Something broke. Keep the responses in character
-    responses=ReadFile(fname).strip().split('\n')
-    while '' in responses:
-        responses.remove('')
-    if ForceLower==True:
-        responses=[item.lower() for item in responses]
-    return responses
-
-def PickRandomResponse(fname):
-    # Something broke. Keep the responses in character
-    responses=ReadFile2List(fname)
-    selected_response=random.choice(responses)
-    if selected_response.startswith('{[(*') and selected_response.endswith('*)]}'):
-        buffer=ReadFile(selected_response[4:-4].strip()).strip()
-        return buffer
-    return selected_response
-
-# Example usage (assuming you have a Discord message object):
-# log_discord_message(discord_message_object)
-
-# Leet list deritives for trying to get someones age.
+# Leet list deritives for trying to get someone's age.
 
 lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
 rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
@@ -449,6 +315,85 @@ def jsonFilter(s,FilterSpace=True):
 def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
     return [word for word in words if word]     # Filter out empty strings (including spaces)
+
+###
+### Direct Companion functions
+###
+
+# Read the token file into a token dictionary.
+
+def ReadTokens():
+    tokens={}
+    tfile=RunningName+'.tokens'
+    if os.path.exists(tfile):
+        try:
+            tokens=json.loads(jsonFilter(ReadFile(tfile)))
+        except Exception as err:
+            ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
+            print("Error token file is not in JSON format. Please see README.md for new layout")
+            sys.exit(1)
+    else:
+        ErrorLog(f"Missing token file: {tfile}")
+        print(f"Missing token file: {tfile}")
+        sys.exit(1)
+
+    if 'Discord' not in tokens:
+        ErrorLog("The MUST be a Discord API reference in the tokens file")
+        print("The MUST be a Discord API reference in the tokens file")
+        sys.exit(1)
+
+    return tokens
+
+# Raw dump. For diagnostics purposes to see the actual return response from the AI model.
+
+def RawLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            fn=LoggingDir+'/RAWDUMP.log'
+            fh=open(fn,'w')
+            fh.write(text)
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
+
+# Logging
+
+def WriteLog(uid,channel,text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
+
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+            s=f'{time} {uid} {channel} {txt}\n'
+
+            fn=LoggingDir+'/'+str(channel)+'.log'
+            fh=open(fn,'a+')
+            fh.write(s)
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
+
+# Log errors
+
+def ErrorLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
+
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+            s=f'{time} {txt}\n'
+
+            fn=LoggingDir+'/Errors.log'
+            fh=open(fn,'a+')
+            fh.write(s)
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
 
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
 # request. HuggingFace = Ollama, Together.AI -> NOT OpenAI.
@@ -612,6 +557,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
                 # global SFW
                 bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
 
+    bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
@@ -620,7 +566,8 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
-    bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+    bot['YTtags']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.yttags"
+    bot['noYTtags']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.noyttags"
 
     # Load bot config file. Channel CFg always has priority.
     settings={}
@@ -672,6 +619,219 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 
     # return the current bot
     return bot
+
+# This function handle the actual responses.
+
+def GetBabble(text):
+    try:
+        # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
+        # we don't have any global variables.
+
+        dataline=text.split('/')
+        uid=dataline[0]
+        channel,cnsfw=dataline[1].split(':')
+        nsfw=(cnsfw=='T')
+        input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
+
+        # Don't remember this request. does NOT bypass logging
+
+        ForgetThisMessage=False
+        if text.strip().startswith('%#>'):
+            ForgetThisMessage=True
+            input_text=input_text[3:]
+
+        # Load the persona and memory files
+        bot=GetCompanionPersona(channel,nsfw)
+
+        persona=[]
+        mList=[]
+
+        # Read system role from system tag file
+        # { "role": "system", "content": ""}
+
+        if os.path.exists(bot['System']):
+            buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
+            sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
+        else:
+            sysList=[]
+
+        # Read the persona file
+        if os.path.exists(bot['Persona']):
+            pfList=ReadFile(bot['Persona']).strip().split('\n')
+        else:
+            pfList=[]
+        pList=sysList+pfList
+
+        # Load memory files, if one exists.
+        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
+        if os.path.exists(fn):
+            mList=ReadFile(fn).strip().split('\n')
+            pList+=mList
+
+        # Build the complete persona list
+
+        for s in pList:
+            try:
+                persona.append(json.loads(s))
+            except:
+                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
+
+        # Look for a "steering" file. Should be last to ensurew its not chopped of.
+        sList=GetSteering(bot,input_text)
+        if sList!=None:
+            pList+=sList
+
+        # Add user input
+
+        memU={ "role": "user", "content": input_text }
+        persona.append(memU)
+
+        # Process API for the request
+
+        el=list(bot['Engine'].split(','))       # Engine list
+        ec=len(el)                              # Engine list length
+        tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
+        mt=len(tl)                              # Max Tokens list length
+        # Encoding alwayys takes priority over modem
+        if 'Encoding' in bot:
+            ml=list(bot['Encoding'].split(','))        # Model list
+            mc=len(ml)                              # Model list length
+        else:
+            ml=list(bot['Model'].split(','))        # Model list
+            mc=len(ml)                              # Model list length
+
+        # The number of models MUST equal the number of engines. 1 model per engine
+
+        if ec!=mc!=mt:
+            ErrorLog(f"Broke GB ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
+            return PickRandomResponse(bot['Broken'])
+
+        # Run through the engins/models until we have a response.
+
+        response=None
+        ecounter=0
+        while response==None and ecounter<ec:
+            cbot=copy.deepcopy(bot)             # Make a copy
+            cbot['Engine']=el[ecounter]
+            cbot['MaxTokens']=int(tl[ecounter])
+            # Encoding or Model
+            if 'Encoding' in cbot:
+                cbot['Encoding']=ml[ecounter]
+            else:
+                cbot['Model']=ml[ecounter]
+
+            if cbot['Engine'].lower()=='openai':
+                response=GetOpenAI(persona,cbot)
+            elif cbot['Engine'].lower()=='togetherai':
+                response=GetTogetherAI(persona,cbot)
+            elif cbot['Engine'].lower()=='ollama':
+                response=GetOllama(persona,cbot)
+            if response==None:
+                ecounter+=1
+            else:
+                break
+
+        # check to see if we got a response
+
+        if response==None or response=='':
+            return PickRandomResponse(bot['Broken'])
+
+        # Save "memory" to disk
+
+        memA={ "role": "assistant", "content": response }
+
+        mList.append(json.dumps(memU))
+        mList.append(json.dumps(memA))
+
+        # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
+
+        if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
+            if len(mList)>(bot['MaxMemory']*2):
+                mList=mList[2:]
+
+            fh=open(fn,'w')
+            for i in mList:
+                fh.write(i+'\n')
+            fh.close()
+
+        # Return the AI response
+
+        return response
+    except Exception as err:
+        ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return PickRandomResponse(bot['Broken'])
+
+# Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
+
+async def HandleOneMessage(request):
+    global request_list
+
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        try:
+            message=request['message']
+
+            uid=str(message.author.id)
+            author=str(message.author.mention)
+            channel=str(message.channel)
+
+            # Figure out which persona is calling the shots.
+            bot=GetCompanionPersona(channel,message.channel.nsfw)
+
+            # User's responce/input
+            input_text=request['arg']
+
+            # Convert boolean to str as a passing argument.
+            nsfw=str(message.channel.nsfw)[0]
+            print('U',nsfw,uid,message.author,message.channel,message.content)
+
+###> Not needed with webhook and never worked right with multiple AI personas
+#            await ChangeNickAvatar(bot,message)
+
+            # Type out the response. using channel.typing() won't work with multiple AI personas as it
+            # relies on NICK and changing the nickname has a rate limit. The rate limit is 2 times per
+            # minute. The bot may end up sending more messages then that, especially across different
+            # channels. While the typing() functionality is nice, having the bot have its own name and
+            # avatar per persona is nicer.
+
+#            async with message.channel.typing():
+
+            # Handle any vulgarity
+            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
+                if bool(pc.predict([ input_text ]))==True:
+                    resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
+                    await send_response(bot,message,resp)
+                    try: # delete the offending message
+                        await message.delete()
+                    except:
+                        pass
+                    return
+                else:
+                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+            else:
+                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+
+            print('B',client.user.id,bot['BotName'],message.channel,response)
+
+            # Check to see if we actually got a response
+            if response!=None and response.lower().strip()!="none":
+                # Handle webhooks for response
+                await send_response(bot,message,response)
+            else:
+                # Communication with AI failed. Put message back in queue
+                if ResponseLock.acquire(timeout=ResponseTimeout):
+                    request_list.append({'arg': input_text, 'message': message} )
+                    ResponseLock.release()
+                else:
+                    ErrorLog("Lock failed Reput Message")
+        except Exception as err:
+            ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
+
+###
+### AI handlers
+###
+
+# NOTES: This area needs to be optimized for better performance. There is too much repetition between
+# the AI functions that can and should be combined into one layer.
 
 # Use the OpenAI call.
 
@@ -830,6 +990,51 @@ def GetOllama(persona,bot):
     RawLog(bot['Model']+': '+json.dumps(completion))
     return response
 
+###
+### Special features
+###
+
+# Read tags from a YouTube video
+
+def yttags2text(url):
+    def extract_video_id(url):
+        # Match either a youtu.be or youtube.com URL to extract the video ID
+        youtube_regex = r"(?:youtu\.be\/|youtube\.com\/(?:.*v=|.*\/|.*v\/|.*embed\/|.*shorts\/))([a-zA-Z0-9_-]{11})"
+        match = re.search(youtube_regex, url)
+
+        if match:
+            return match.group(1)
+        else:
+            return None
+
+    def get_video_tags(video_id):
+        # Fetch video details including tags
+        request = youtube.videos().list(
+            part="snippet",
+            id=video_id
+        )
+        response = request.execute()
+
+        if "items" in response and len(response["items"]) > 0:
+            video_snippet = response["items"][0]["snippet"]
+            if "tags" in video_snippet:
+                tags = video_snippet["tags"]
+                return tags
+            else:
+                return "No tags found for this video."
+        else:
+            return "Video not found."
+
+    # Create YouTube Object
+    youtube = build('youtube', 'v3', developerKey=Tokens['YouTube'])
+
+    # Retrieve and display tags
+    tags = get_video_tags(extract_video_id(url))
+
+    if isinstance(tags, list):
+        return '\n'.join(tags)
+    return None
+
 # Read a YouTube URL and pull the transcript
 
 def youtube2text(video_url):
@@ -918,146 +1123,89 @@ def html2text(url):
 
     return None
 
-# This function handle the actual responses.
+###
+### Direct Discord functions
+###
 
-def GetBabble(text):
-    try:
-        # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
-        # we don't have any global variables.
+# Disect discord messages. Forensic logging
 
-        dataline=text.split('/')
-        uid=dataline[0]
-        channel,cnsfw=dataline[1].split(':')
-        nsfw=(cnsfw=='T')
-        input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
+def DisectMessage(event,message):
+    if DisectLock.acquire(timeout=DisectTimeout):
+        # Set up convience variables
+        channel=str(message.channel)
+        uid=str(message.author.id)
+        author = message.author
+        member = message.guild.get_member(author.id) if message.guild else None
+        nickname = member.nick if member and member.nick else author.name
 
-        # Don't remember this request. does NOT bypass logging
-
-        ForgetThisMessage=False
-        if text.strip().startswith('%#>'):
-            ForgetThisMessage=True
-            input_text=input_text[3:]
-
-        # Load the persona and memory files
-        bot=GetCompanionPersona(channel,nsfw)
-
-        persona=[]
-        mList=[]
-
-        # Read system role from system tag file
-        # { "role": "system", "content": ""}
-
-        if os.path.exists(bot['System']):
-            buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
-            sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
-        else:
-            sysList=[]
-
-        # Read the persona file
-        if os.path.exists(bot['Persona']):
-            pfList=ReadFile(bot['Persona']).strip().split('\n')
-        else:
-            pfList=[]
-        pList=sysList+pfList
-
-        # Load memory files, if one exists.
-        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
-        if os.path.exists(fn):
-            mList=ReadFile(fn).strip().split('\n')
-            pList+=mList
-
-        # Build the complete persona list
-
-        for s in pList:
-            try:
-                persona.append(json.loads(s))
-            except:
-                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
-
-        # Look for a "steering" file. Should be last to ensurew its not chopped of.
-        sList=GetSteering(bot,input_text)
-        if sList!=None:
-            pList+=sList
-
-        # Add user input
-
-        memU={ "role": "user", "content": input_text }
-        persona.append(memU)
-
-        # Process API for the request
-
-        el=list(bot['Engine'].split(','))       # Engine list
-        ec=len(el)                              # Engine list length
-        tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
-        mt=len(tl)                              # Max Tokens list length
-        # Encoding alwayys takes priority over modem
-        if 'Encoding' in bot:
-            ml=list(bot['Encoding'].split(','))        # Model list
-            mc=len(ml)                              # Model list length
-        else:
-            ml=list(bot['Model'].split(','))        # Model list
-            mc=len(ml)                              # Model list length
-
-        # The number of models MUST equal the number of engines. 1 model per engine
-
-        if ec!=mc!=mt:
-            ErrorLog(f"Broke GB ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
-            return PickRandomResponse(bot['Broken'])
-
-        # Run through the engins/models until we have a response.
-
-        response=None
-        ecounter=0
-        while response==None and ecounter<ec:
-            cbot=copy.deepcopy(bot)             # Make a copy
-            cbot['Engine']=el[ecounter]
-            cbot['MaxTokens']=int(tl[ecounter])
-            # Encoding or Model
-            if 'Encoding' in cbot:
-                cbot['Encoding']=ml[ecounter]
+        try:
+            WriteLog(uid,channel,f"Event trigger: {event}")
+            WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
+            WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
+            WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
+            WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{message.author.id} Bot: {message.author.bot}")
+            WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
+            WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
+            # Check if the message was sent via a webhook
+            if message.webhook_id:
+                WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
+            # List the users mentioned, if any
+            if message.mentions:
+                WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
+            if message.role_mentions:
+                WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
+            if message.channel_mentions:
+                WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
+            if str(message.content).strip()!='':
+                WriteLog(uid,channel,f"Message Content: {message.content}")
             else:
-                cbot['Model']=ml[ecounter]
+                WriteLog(uid,channel,f"Message Content: Empty content field")
+            if message.reactions:
+                WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
 
-            if cbot['Engine'].lower()=='openai':
-                response=GetOpenAI(persona,cbot)
-            elif cbot['Engine'].lower()=='togetherai':
-                response=GetTogetherAI(persona,cbot)
-            elif cbot['Engine'].lower()=='ollama':
-                response=GetOllama(persona,cbot)
-            if response==None:
-                ecounter+=1
-            else:
-                break
+            # Log sticker information
+            if message.stickers:
+                WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
 
-        # check to see if we got a response
+            # Log reference information (for replies)
+            if message.reference:
+                ref = message.reference
+                WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
 
-        if response==None or response=='':
-            return PickRandomResponse(bot['Broken'])
+            # Log details about each embed
+            if message.embeds:
+                WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
+                for index, embed in enumerate(message.embeds):
+                    WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
+                    WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
+                    WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
 
-        # Save "memory" to disk
+            # Log detailed information about each attachment
+            if message.attachments:
+                WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
+                for index, attachment in enumerate(message.attachments):
+                    WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
+                    WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
+                    WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
 
-        memA={ "role": "assistant", "content": response }
-
-        mList.append(json.dumps(memU))
-        mList.append(json.dumps(memA))
-
-        # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
-
-        if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
-            if len(mList)>(bot['MaxMemory']*2):
-                mList=mList[2:]
-
-            fh=open(fn,'w')
-            for i in mList:
-                fh.write(i+'\n')
-            fh.close()
-
-        # Return the AI response
-
-        return response
-    except Exception as err:
-        ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return PickRandomResponse(bot['Broken'])
+            # Log message components (if any)
+            if message.components:
+                WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
+            WriteLog(uid,channel,f"{'-'*80}")
+        except AttributeError as e:
+            WriteLog(uid,channel,f"Error accessing message attributes: {e}")
+        DisectLock.release()
 
 # Change the nick name and avatar
 
@@ -1079,71 +1227,6 @@ async def ChangeNickAvatar(bot,message):
         except Exception as err:
             ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
 
-# Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
-
-async def HandleOneMessage(request):
-    global request_list
-
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        try:
-            message=request['message']
-
-            uid=str(message.author.id)
-            author=str(message.author.mention)
-            channel=str(message.channel)
-
-            # Figure out which persona is calling the shots.
-            bot=GetCompanionPersona(channel,message.channel.nsfw)
-
-            # User's responce/input
-            input_text=request['arg']
-
-            # Convert boolean to str as a passing argument.
-            nsfw=str(message.channel.nsfw)[0]
-            print('U',nsfw,uid,message.author,message.channel,message.content)
-
-###> Not needed with webhook and never worked right with multiple AI personas
-#            await ChangeNickAvatar(bot,message)
-
-            # Type out the response. using channel.typing() won't work with multiple AI personas as it
-            # relies on NICK and changing the nickname has a rate limit. The rate limit is 2 times per
-            # minute. The bot may end up sending more messages then that, especially across different
-            # channels. While the typing() functionality is nice, having the bot have its own name and
-            # avatar per persona is nicer.
-
-#            async with message.channel.typing():
-
-            # Handle any vulgarity
-            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
-                if bool(pc.predict([ input_text ]))==True:
-                    resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
-                    await send_response(bot,message,resp)
-                    try: # delete the offending message
-                        await message.delete()
-                    except:
-                        pass
-                    return
-                else:
-                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
-            else:
-                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
-
-            print('B',client.user.id,bot['BotName'],message.channel,response)
-
-            # Check to see if we actually got a response
-            if response!=None and response.lower().strip()!="none":
-                # Handle webhooks for response
-                await send_response(bot,message,response)
-            else:
-                # Communication with AI failed. Put message back in queue
-                if ResponseLock.acquire(timeout=ResponseTimeout):
-                    request_list.append({'arg': input_text, 'message': message} )
-                    ResponseLock.release()
-                else:
-                    ErrorLog("Lock failed Reput Message")
-        except Exception as err:
-            ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
-
 # Return the response to the user. messages over 1997 characters are returned as a message file attachment.
 # Adapt to webhooks...
 
@@ -1154,13 +1237,13 @@ async def send_response(bot,message,response,embed=None):
         # Purge all companion webhooks
         webhooks = await message.channel.webhooks()
 
-        # Delete all webhooks with the name "companion"
+        # Delete all webhooks with the name "Companion Temporary Webhook"
         for webhook in webhooks:
             if webhook.name=='Companion Temporary Webhook':
                 await webhook.delete()
 
         # Create a new webhook
-        if message==None:
+        if bot['Channel']==None:
             syschannel=member.guild.system_channel
             webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
             author=None
@@ -1168,7 +1251,6 @@ async def send_response(bot,message,response,embed=None):
             webhook=await message.channel.create_webhook(name='Companion Temporary Webhook')
             # Get the name of the person this message is going to
             author=str(message.author.mention)
-
 
         # If the message is less then 1900 characters, just send it with a reply.
         if len(response)<=1900 or embed!=None:
@@ -1184,7 +1266,6 @@ async def send_response(bot,message,response,embed=None):
                 else:
                     x1=f"{response}"
                 await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-#            await message.channel.send(response,reference=message)
         else:
             # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
             # message parts.
@@ -1206,14 +1287,12 @@ async def send_response(bot,message,response,embed=None):
                             pmax=1900
                 if len(x1[:p])>0:
                     await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-#                    await message.channel.send(x1[:p].strip())
                 if x1[p]=='.' or x1[p]==' ':
                     p+=1
                 x1=x1[p:].strip()
                 l=len(x1)
             if l>0:
                 await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-#                await message.channel.send(x1.strip())
 
             # Delete the webhook
 
@@ -1243,6 +1322,7 @@ async def update_response_data():
     if ResponseLock.acquire(timeout=ResponseTimeout):
         if request_list:
             request = request_list.pop(0)
+
         ResponseLock.release()
 
     # Only 1 AI request at a time
@@ -1495,6 +1575,21 @@ async def on_message(message):
             pass
         else:
             return
+
+        # Read tags from YouTune video
+        try:
+            if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
+            and input_text.lower().strip().startswith('%yttags'):
+                # Web/URL reference
+                url=input_text[7:].strip()
+                input_text=yttags2text(url)
+                if input_text==None:
+                    await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
+                else:
+                    await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
+                return
+        except Exception as err:
+            ErrorLog(f"Broke TAGS: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
         # if the input text starts with "%http", replace it with the actual URL text
         try:
