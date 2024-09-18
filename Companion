@@ -84,7 +84,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.581"
+Version="0.0.0.0.585"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1009,10 +1009,15 @@ def yttags2text(url):
 
     def get_video_tags(video_id):
         # Fetch video details including tags
-        request = youtube.videos().list(
-            part="snippet",
-            id=video_id
-        )
+        try:
+            request = youtube.videos().list(
+                part="snippet",
+                id=video_id
+            )
+        except Exception as err:
+            ErrorLog(f"Broke yttags: {sys.exc_info()[-1].tb_lineno}/{err}")
+            return '{[(*VNF*)]}'
+
         response = request.execute()
 
         if "items" in response and len(response["items"]) > 0:
@@ -1025,15 +1030,19 @@ def yttags2text(url):
         else:
             return '{[(*VNF*)]}'
 
-    # Create YouTube Object
-    youtube = build('youtube', 'v3', developerKey=Tokens['YouTube'])
+    try:
+        # Create YouTube Object
+        youtube = build('youtube', 'v3', developerKey=Tokens['YouTube'])
 
-    # Retrieve and display tags
-    tags = get_video_tags(extract_video_id(url))
+        # Retrieve and display tags
+        tags = get_video_tags(extract_video_id(url))
 
-    if isinstance(tags, list):
-        return '\n'.join(tags)
-    return tags
+        if isinstance(tags, list):
+            return '\n'.join(tags)
+        return tags
+    except Exception as err:
+        ErrorLog(f"Broke yttags: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return '{[(*VNF*)]}'
 
 # Read a YouTube URL and pull the transcript
 
@@ -1585,9 +1594,9 @@ async def on_message(message):
                 input_text=yttags2text(url)
                 if input_text==None:
                     await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
-                elif input+text=='{[(*VNF*)]}':
+                elif input_text=='{[(*VNF*)]}':
                     await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
-                else::
+                else:
                     await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
                 return
         except Exception as err:
