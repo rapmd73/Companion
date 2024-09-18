@@ -1021,9 +1021,9 @@ def yttags2text(url):
                 tags = video_snippet["tags"]
                 return tags
             else:
-                return "No tags found for this video."
+                return None
         else:
-            return "Video not found."
+            return '{[(*VNF*)]}'
 
     # Create YouTube Object
     youtube = build('youtube', 'v3', developerKey=Tokens['YouTube'])
@@ -1033,7 +1033,7 @@ def yttags2text(url):
 
     if isinstance(tags, list):
         return '\n'.join(tags)
-    return None
+    return tags
 
 # Read a YouTube URL and pull the transcript
 
@@ -1585,7 +1585,9 @@ async def on_message(message):
                 input_text=yttags2text(url)
                 if input_text==None:
                     await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
-                else:
+                elif input+text=='{[(*VNF*)]}':
+                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                else::
                     await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
                 return
         except Exception as err:
