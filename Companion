@@ -59,6 +59,7 @@ import sys
 import os
 import io
 import copy
+import itertools
 import datetime
 import time
 import json
@@ -84,7 +85,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.585"
+Version="0.0.0.0.590"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -94,6 +95,9 @@ RunningName=sys.argv[0]
 
 CompanionStorage='/home/Companion/Personas'
 LoggingDir='/home/Companion/Logs'
+
+# For anagram solver
+AnagramWordList="/home/Companion/AnagramSolver.txt"
 
 # This is a list of domains that are scams, frauds, or malitiouc. It is exists, it is read and message that
 # have links listed are removed. Requires the persona text file as well for responses.
@@ -994,6 +998,47 @@ def GetOllama(persona,bot):
 ### Special features
 ###
 
+def AnagramSolver(fromletters):
+    def load_dictionary(file_path):
+        # Load dictionary words from a file and return them as a set.
+        with open(file_path, 'r') as f:
+            words = set(word.strip().lower() for word in f.readlines())
+        return words
+
+    def find_valid_words_by_length(letters, dictionary):
+        # Find all valid words from combinations and permutations of the input letters grouped by length.
+        valid_words = {}
+        # Generate combinations of letters from 3 to the length of the input
+        for length in range(3, len(letters) + 1):
+            for combo in itertools.combinations(letters, length):
+                # For each combination, generate all permutations
+                for perm in itertools.permutations(combo):
+                    word = ''.join(perm)
+                    if word in dictionary:
+                        if length not in valid_words:
+                            valid_words[length] = set()
+                        valid_words[length].add(word)
+        # Sort each length's word list alphabetically
+        for length in valid_words:
+            valid_words[length] = sorted(valid_words[length])
+        return valid_words
+
+    # Load letters from the command line argument
+    letters=fromletters.lower()
+
+    # Load dictionary from the dictionary.txt file
+    dictionary=load_dictionary(AnagramWordList)
+
+    # Find valid words from the provided letters, grouped by length
+    valid_words_by_length=find_valid_words_by_length(letters, dictionary)
+
+    # Sorting the dictionary by word length in descending order and printing results
+    wstr=''
+    for length in sorted(valid_words_by_length.keys(), reverse=True):
+        wstr+=f"**Words of length {length}**:\n"
+        wstr+=' '.join(valid_words_by_length[length])+'\n\n'
+    return wstr
+
 # Read tags from a YouTube video
 
 def yttags2text(url):
@@ -1584,6 +1629,17 @@ async def on_message(message):
             pass
         else:
             return
+
+        # Anagram solver... how the hell did I end up don the rabbit hole? Really?
+
+        try:
+            if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
+                letters=input_text[14:].strip().lower()
+                input_text=AnagramSolver(letters)
+                await send_response(bot,message,input_text)
+                return
+        except Exception as err:
+            ErrorLog(f"Broke AnagramSolver: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
         # Read tags from YouTune video
         try:
