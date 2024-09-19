@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Simple OpenAI chat bot
+
+import sys
+import openai
+
+# Your OpenAI API key from the OpenAI ashboard. NEVER give out
+OpenAItoken="API-key"
+
+def GetOpenAI(input_text):
+    try:
+        inlist=[ { "role":"user", "content":input_text } ]
+
+        clientAI = openai.OpenAI(api_key=OpenAItoken)
+        completion=clientAI.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=inlist )
+        response=completion.choices[0].message.content
+        clientAI.close()
+
+        return response
+    except Exception as err:
+        print(f"GetOpenAI: {err}")
+    return None
+
+###
+### MAIN driver
+###
+
+def main():
+    while True:
+        input_text=input("Question? ").strip()
+
+        if input_text=='':
+            continue
+
+        if input_text.lower()=='quit' or input_text.lower()=='exit' or input_text.lower()=='bye':
+            sys.exit(0)
+
+        print()
+        response=GetOpenAI(input_text)
+        print(response)
+        print()
+
+if __name__=='__main__':
+    main()
