@@ -802,8 +802,7 @@ async def HandleOneMessage(request):
             # Handle any vulgarity
             if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
                 if bool(pc.predict([ input_text ]))==True:
-                    resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
-                    await send_response(bot,message,resp)
+                    await send_response(bot,message,PickRandomResponse(bot['Vulgarity']),delete=57)
                     try: # delete the offending message
                         await message.delete()
                     except:
@@ -1286,7 +1285,9 @@ async def ChangeNickAvatar(bot,message):
 
 # If message is None, use system channel
 
-async def send_response(bot,message,response,embed=None):
+# WRITE a task list to delete messages after X seconds
+
+async def send_response(bot,message,response,embed=None,delete=None):
     try:
         # Purge all companion webhooks
         webhooks = await message.channel.webhooks()
@@ -1351,14 +1352,6 @@ async def send_response(bot,message,response,embed=None):
             # Delete the webhook
 
             await webhook.delete()
-
-            """ # Attach response
-            with open("response.txt", "w", encoding="utf-8") as file:
-                file.write(response)
-            author=str(message.author.mention)
-            await message.channel.send(author,file=discord.File("response.txt"))
-            os.remove("response.txt")
-            """
     except discord.errors.HTTPException as err:
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1449,9 +1442,7 @@ async def on_message_edit(before, after):
 
         if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()!='yes' and not after.channel.nsfw:
             if bool(pc.predict([ after.content ]))==True:
-                resp=f"{author} {PickRandomResponse(bot['Vulgarity'])}"
-                await send_response(bot,after,resp)
-#                await after.channel.send(resp)
+                await send_response(bot,after,PickRandomResponse(bot['Vulgarity']),delete=57)
                 try: # delete the offending message
                     await after.delete()
                 except:
@@ -1551,7 +1542,7 @@ async def on_message(message):
             author=str(message.author.mention)
             # If its a bot, it doesn't deserve a response
             if not message.author.bot:
-                await send_response(bot,message,PickRandomResponse(bot['AgeExploit']))
+                await send_response(bot,message,PickRandomResponse(bot['AgeExploit']),delete=300)
             await message.delete()
             return
 
@@ -1568,7 +1559,7 @@ async def on_message(message):
                     author=str(message.author.mention)
                     # If its a bot, it doesn't deserve a response
                     if not message.author.bot:
-                        await send_response(bot,message,PickRandomResponse(bot['ScamURLS']))
+                        await send_response(bot,message,PickRandomResponse(bot['ScamURLS']),delete=57)
                     await message.delete()
                     return
 
@@ -1579,7 +1570,7 @@ async def on_message(message):
                     author=str(message.author.mention)
                     # If its a bot, it doesn't deserve a response
                     if not message.author.bot:
-                        await send_response(bot,message,PickRandomResponse(bot['AutoFilter']))
+                        await send_response(bot,message,PickRandomResponse(bot['AutoFilter']),delete=57)
                     await message.delete()
                     return
 
@@ -1593,7 +1584,7 @@ async def on_message(message):
             fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
             if os.path.exists(fn):
                 os.remove(fn)
-                await send_response(bot,message,"Conversation forgotten")
+                await send_response(bot,message,"Conversation forgotten",delete=57)
             return
 
         if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
@@ -1601,12 +1592,12 @@ async def on_message(message):
                 member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
                 # Check if the bot is a member of the channel
                 if member in message.channel.members:
-                    await send_response(bot,message,"Allowed")
+                    await send_response(bot,message,"Allowed",delete=57)
                 else:
-                    await send_response(bot,message,"Not Allowed")
+                    await send_response(bot,message,"Not Allowed",delete=57)
                 if request_list!=[]:
                     msg=f"{len(request_list)} pending requests"
-                    await send_response(bot,message,msg)
+                    await send_response(bot,message,msg,delete=57)
                 return
 
             if str(message.content).strip().startswith('%PurgeRequests'):
@@ -1619,7 +1610,7 @@ async def on_message(message):
                     else:
                         msg=f"Request list already empty"
                     ResponseLock.release()
-                    await send_response(bot,message,msg)
+                    await send_response(bot,message,msg,delete=57)
                 else:
                     ErrorLog("Lock failed OM")
                 return
