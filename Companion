@@ -85,7 +85,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.590"
+Version="0.0.0.0.600"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1491,206 +1491,6 @@ async def on_message_delete(message):
     # Log everything
     DisectMessage("Deleted message",message)
 
-# Get the user message and add it to a processing list. This really is the driving point of the AI responses.
-# Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
-# message of a particular interest, like cooking, or programming.
-
-@client.event
-async def on_message(message):
-    global request_list
-
-    # Figure out which persona is calling the shots.
-    channel=str(message.channel)
-    uid=str(message.author.id)
-
-    # Handle auto publish
-    if message.channel.type==discord.ChannelType.news:
-        await message.publish()
-        ErrorLog(f"AutoPublish: {channel}/{message.id}")
-
-    bot=GetCompanionPersona(channel,message.channel.nsfw)
-
-    # Log everything
-    DisectMessage("Received message",message)
-
-    # Ignore messages from the bot itself
-    if message.author==client.user:
-        return
-
-    if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
-        author=str(message.author.mention)
-        # If its a bot, it doesn't deserve a response
-        if not message.author.bot:
-            await send_response(bot,message,PickRandomResponse(bot['AgeExploit']))
-        await message.delete()
-        return
-
-    # This is really the only absolute exception to BOT responsing...
-    # Check for scam links and delete them.
-
-    # BUILD FALSE POSITIVES LIST
-
-    if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
-        scamurls=ReadFile2List(CompanionScamURLS)
-        for url in scamurls:
-            if url in message.content:
-                print(f"ScamURL: {url} {message.content}")
-                author=str(message.author.mention)
-                # If its a bot, it doesn't deserve a response
-                if not message.author.bot:
-                    await send_response(bot,message,PickRandomResponse(bot['ScamURLS']))
-                await message.delete()
-                return
-
-    if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
-        autofilter=ReadFile2List(CompanionAutoFilter)
-        for text in autofilter:
-            if text in message.content:
-                author=str(message.author.mention)
-                # If its a bot, it doesn't deserve a response
-                if not message.author.bot:
-                    await send_response(bot,message,PickRandomResponse(bot['AutoFilter']))
-                await message.delete()
-                return
-
-    # Don't respond to other bots.
-    if message.author.bot and bot['AllowBot'].lower()!='yes':
-        return
-
-    # Allow the user to erase their own stored conversation
-
-    if str(message.content).strip().startswith('%Forget'):
-        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
-        if os.path.exists(fn):
-            os.remove(fn)
-            await send_response(bot,message,"Conversation forgotten")
-        return
-
-    if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
-        if str(message.content).strip().startswith('%CheckBot'):
-            member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
-            # Check if the bot is a member of the channel
-            if member in message.channel.members:
-                await send_response(bot,message,"Allowed")
-            else:
-                await send_response(bot,message,"Not Allowed")
-            if request_list!=[]:
-                msg=f"{len(request_list)} pending requests"
-                await send_response(bot,message,msg)
-            return
-
-        if str(message.content).strip().startswith('%PurgeRequests'):
-            # Give the AI the message
-            if ResponseLock.acquire(timeout=ResponseTimeout):
-                if request_list!=[]:
-                    l=len(request_list)
-                    request_list=[]
-                    msg=f"{l} requests purged"
-                else:
-                    msg=f"Request list already empty"
-                ResponseLock.release()
-                await send_response(bot,message,msg)
-            else:
-                ErrorLog("Lock failed OM")
-            return
-
-    # If we have a bot, then we can converse here.
-    if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
-        input_text = message.content.strip()
-
-        # If a trigger file exists, check to see if one on the trigger words are in the user message.
-        # Also if trigger file exists, and message is directed to bot.
-        trigger=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.trigger"
-        if os.path.exists(trigger):
-            # If message is directed to bot, override trigger
-            if client.user in message.mentions or (message.reference and message.reference.resolved.author.id==client.user.id):
-                pass
-            else:
-                wfound=False
-                twords=ReadFile2List(trigger,ForceLower=True)
-                inwords=StripPunctuation(input_text.replace('  ',' ')).split(' ')
-                while '' in inwords:
-                    inwords.remove('')
-                # Search the list word by word
-                for w in inwords:
-                    if w.lower() in twords:
-                        wfound=True
-                        break
-                # A trigger word was not found, don't continue.
-                if wfound==False:
-                    return
-
-        # Check to see if the message is directed to another user. If it is, don't respond.
-        if not message.reference:
-            pass
-
-        # Check if the message is a reply to the AI
-        elif message.reference and message.reference.resolved.author.id==client.user.id:
-            pass
-        else:
-            return
-
-        # Anagram solver... how the hell did I end up don the rabbit hole? Really?
-
-        try:
-            if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
-                letters=input_text[14:].strip().lower()
-                input_text=AnagramSolver(letters)
-                await send_response(bot,message,input_text)
-                return
-        except Exception as err:
-            ErrorLog(f"Broke AnagramSolver: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-
-        # Read tags from YouTune video
-        try:
-            if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
-            and input_text.lower().strip().startswith('%yttags'):
-                # Web/URL reference
-                url=input_text[7:].strip()
-                input_text=yttags2text(url)
-                if input_text==None:
-                    await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
-                elif input_text=='{[(*VNF*)]}':
-                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
-                else:
-                    await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
-                return
-        except Exception as err:
-            ErrorLog(f"Broke TAGS: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-
-        # if the input text starts with "%http", replace it with the actual URL text
-        try:
-            if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
-                # Web/URL reference
-                url=input_text.replace(' ','')[1:]
-                input_text=html2text(url)
-                if input_text==None:
-                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
-                    return
-        except Exception as err:
-            ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-
-        # If this is a direct reply or a mention, give a slightly more personal response
-        if (message.reference and message.reference.resolved.author.id==client.user.id) \
-        or (client.user in message.mentions):
-            input_text+=' [warm, friendly]'
-
-        # Give the AI the message
-        if ResponseLock.acquire(timeout=ResponseTimeout):
-            request_list.append({'arg': input_text, 'message': message} )
-            ResponseLock.release()
-        else:
-            ErrorLog("Lock failed OM")
-
-# Start the timer task for responses.
-
-@client.event
-async def on_ready():
-    print(f'Logged in as {client.user}')
-
-    # Start the task when the bot is ready
-    update_response_data.start()
-
 # Make a nice announcement welcoming the user to the server.
 
 # Currently, the last avtive personality will be the welcoming party. Really should force load a bot
@@ -1720,7 +1520,219 @@ async def on_member_join(member):
 async def on_member_remove(member):
     ErrorLog(f"OMR: {member}")
 
-# starts the bot with the corresponding token
+# Get the user message and add it to a processing list. This really is the driving point of the AI responses.
+# Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
+# message of a particular interest, like cooking, or programming.
+
+@client.event
+async def on_message(message):
+    global request_list
+
+    try:
+        # Figure out which persona is calling the shots.
+        channel=str(message.channel)
+        uid=str(message.author.id)
+
+        # Handle auto publish
+        if message.channel.type==discord.ChannelType.news:
+            await message.publish()
+            ErrorLog(f"AutoPublish: {channel}/{message.id}")
+
+        bot=GetCompanionPersona(channel,message.channel.nsfw)
+
+        # Log everything
+        DisectMessage("Received message",message)
+
+        # Ignore messages from the bot itself
+        if message.author==client.user:
+            return
+
+        if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
+            author=str(message.author.mention)
+            # If its a bot, it doesn't deserve a response
+            if not message.author.bot:
+                await send_response(bot,message,PickRandomResponse(bot['AgeExploit']))
+            await message.delete()
+            return
+
+        # This is really the only absolute exception to BOT responsing...
+        # Check for scam links and delete them.
+
+        # BUILD FALSE POSITIVES LIST
+
+        if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
+            scamurls=ReadFile2List(CompanionScamURLS)
+            for url in scamurls:
+                if url in message.content:
+                    print(f"ScamURL: {url} {message.content}")
+                    author=str(message.author.mention)
+                    # If its a bot, it doesn't deserve a response
+                    if not message.author.bot:
+                        await send_response(bot,message,PickRandomResponse(bot['ScamURLS']))
+                    await message.delete()
+                    return
+
+        if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
+            autofilter=ReadFile2List(CompanionAutoFilter)
+            for text in autofilter:
+                if text in message.content:
+                    author=str(message.author.mention)
+                    # If its a bot, it doesn't deserve a response
+                    if not message.author.bot:
+                        await send_response(bot,message,PickRandomResponse(bot['AutoFilter']))
+                    await message.delete()
+                    return
+
+        # Don't respond to other bots.
+        if message.author.bot and bot['AllowBot'].lower()!='yes':
+            return
+
+        # Allow the user to erase their own stored conversation
+
+        if str(message.content).strip().startswith('%Forget'):
+            fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
+            if os.path.exists(fn):
+                os.remove(fn)
+                await send_response(bot,message,"Conversation forgotten")
+            return
+
+        if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
+            if str(message.content).strip().startswith('%CheckBot'):
+                member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
+                # Check if the bot is a member of the channel
+                if member in message.channel.members:
+                    await send_response(bot,message,"Allowed")
+                else:
+                    await send_response(bot,message,"Not Allowed")
+                if request_list!=[]:
+                    msg=f"{len(request_list)} pending requests"
+                    await send_response(bot,message,msg)
+                return
+
+            if str(message.content).strip().startswith('%PurgeRequests'):
+                # Give the AI the message
+                if ResponseLock.acquire(timeout=ResponseTimeout):
+                    if request_list!=[]:
+                        l=len(request_list)
+                        request_list=[]
+                        msg=f"{l} requests purged"
+                    else:
+                        msg=f"Request list already empty"
+                    ResponseLock.release()
+                    await send_response(bot,message,msg)
+                else:
+                    ErrorLog("Lock failed OM")
+                return
+
+        # If we have a bot, then we can converse here.
+        if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
+            input_text = message.content.strip()
+
+            # If a trigger file exists, check to see if one on the trigger words are in the user message.
+            # Also if trigger file exists, and message is directed to bot.
+            trigger=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.trigger"
+            if os.path.exists(trigger):
+                # If message is directed to bot, override trigger
+                if client.user in message.mentions or (message.reference and message.reference.resolved.author.id==client.user.id):
+                    pass
+                else:
+                    wfound=False
+                    twords=ReadFile2List(trigger,ForceLower=True)
+                    inwords=StripPunctuation(input_text.replace('  ',' ')).split(' ')
+                    while '' in inwords:
+                        inwords.remove('')
+                    # Search the list word by word
+                    for w in inwords:
+                        if w.lower() in twords:
+                            wfound=True
+                            break
+                    # A trigger word was not found, don't continue.
+                    if wfound==False:
+                        return
+
+            # Check to see if the message is directed to another user. If it is, don't respond.
+            if not message.reference:
+                pass
+
+            # Check if the message is a reply to the AI
+            elif message.reference and message.reference.resolved.author.id==client.user.id:
+                pass
+            else:
+                return
+
+            # Anagram solver... how the hell did I end up don the rabbit hole? Really?
+
+            try:
+                if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
+                    letters=input_text[14:].strip().lower()
+                    input_text=AnagramSolver(letters)
+                    await send_response(bot,message,input_text)
+                    return
+            except Exception as err:
+                ErrorLog(f"Broke AnagramSolver: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+
+            # Read tags from YouTune video
+            try:
+                if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
+                and input_text.lower().strip().startswith('%yttags'):
+                    # Web/URL reference
+                    url=input_text[7:].strip()
+                    input_text=yttags2text(url)
+                    if input_text==None:
+                        await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
+                    elif input_text=='{[(*VNF*)]}':
+                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                    else:
+                        await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
+                    return
+            except Exception as err:
+                ErrorLog(f"Broke TAGS: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+
+            # if the input text starts with "%http", replace it with the actual URL text
+            try:
+                if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
+                    # Web/URL reference
+                    url=input_text.replace(' ','')[1:]
+                    input_text=html2text(url)
+                    if input_text==None:
+                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                        return
+            except Exception as err:
+                ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+
+            # If this is a direct reply or a mention, give a slightly more personal response
+            if (message.reference and message.reference.resolved.author.id==client.user.id) \
+            or (client.user in message.mentions):
+                input_text+=' [warm, friendly]'
+
+            # Give the AI the message
+            if ResponseLock.acquire(timeout=ResponseTimeout):
+                request_list.append({'arg': input_text, 'message': message} )
+                ResponseLock.release()
+            else:
+                ErrorLog("Lock failed OM")
+    except discord.HTTPException as err:
+        if err.code==429:  # Rate limit error
+            retry_after=int(e.response.headers.get('X-RateLimit-Reset', 1))+1
+            print(f"Rate limit hit. Retrying after {retry_after} seconds.")
+            await asyncio.sleep(retry_after)
+            await on_message(message)  # Retry the request
+
+# Start the timer task for responses.
+
+@client.event
+async def on_ready():
+    print(f'Logged in as {client.user}')
+
+    print("In guilds:")
+    for guild in client.guilds:
+        print(f" {guild.name} ({guild.id}), {guild.member_count} members")
+    # Start the task when the bot is ready
+    update_response_data.start()
+
+###
+### STARTUP: starts the bot with the corresponding token
+###
 
 if __name__=='__main__':
     print(f'Companion {Version}')
