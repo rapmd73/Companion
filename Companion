@@ -1624,6 +1624,7 @@ async def on_message(message):
         # Allow the user to erase their own stored conversation
 
         if str(message.content).strip().startswith('%Forget'):
+            await message.delete()
             fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
             if os.path.exists(fn):
                 os.remove(fn)
