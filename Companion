@@ -25,13 +25,12 @@
 
 # ***** IMPORTANT:
 
-#       For some weird reason, the only way I can get the changing of nickname/avatar to work proper it to
-#       give the bot administrator preiviledges. It works exceptionally well, but you MUST pay attention to
-#       the details.
+#   This program uses ADMINISTRATOR priviledges.
 
 # Special USER commands:
 
 #   %http       Read URLs, YouTube transcripts, and PDFs
+#   %yttags     Get YouTube video tage, if there are any.
 #   %Forget
 
 # Developer only:
@@ -41,6 +40,7 @@
 
 # Wanted features:
 
+#   Imposter detection
 #   Anti raid/nuke
 #   Ticket management
 #   Auto slow mode
@@ -85,7 +85,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.600"
+Version="0.0.0.0.610"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -110,6 +110,9 @@ CompanionAutoFilter='/home/Companion/Companion.autofilter'
 ResponseLock=threading.Lock()
 ResponseTimeout=60
 
+DeleteLock=threading.Lock()
+DeleteTimeout=60
+
 DisectLock=threading.Lock()
 DisectTimeout=60
 
@@ -130,7 +133,9 @@ intents.guilds=True
 client=discord.Client(intents=intents)
 
 # List to store pending requests
-request_list = []
+request_list=[]
+# List to stowre timed messages for deletion
+delete_list=[]
 
 ###
 ### General file tools
@@ -1288,6 +1293,9 @@ async def ChangeNickAvatar(bot,message):
 # WRITE a task list to delete messages after X seconds
 
 async def send_response(bot,message,response,embed=None,delete=None):
+    global delete_list
+    whmsg=[]
+
     try:
         # Purge all companion webhooks
         webhooks = await message.channel.webhooks()
@@ -1314,13 +1322,15 @@ async def send_response(bot,message,response,embed=None,delete=None):
                     x1=f"{author}"
                 else:
                     x1=''
-                await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                whmsg.append(wm)
             else:
                 if author!=None:
                     x1=f"{author} {response}"
                 else:
                     x1=f"{response}"
-                await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                whmsg.append(wm)
         else:
             # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
             # message parts.
@@ -1341,25 +1351,58 @@ async def send_response(bot,message,response,embed=None,delete=None):
                             # Brute split
                             pmax=1900
                 if len(x1[:p])>0:
-                    await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                    wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                    whmsg.append(wm)
                 if x1[p]=='.' or x1[p]==' ':
                     p+=1
                 x1=x1[p:].strip()
                 l=len(x1)
             if l>0:
-                await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                whmsg.append(wm)
 
-            # Delete the webhook
-
-            await webhook.delete()
+        # Queue autodelete messages. Responses can be multiple messages.
+        if delete!=None and DeleteLock.acquire(timeout=DeleteTimeout):
+            for whm in whmsg:
+                delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
+            DeleteLock.release()
+        else:
+            ErrorLog("Lock failed SR")
+        # Delete the webhook
+        await webhook.delete()
     except discord.errors.HTTPException as err:
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
-# The dirty part. I wanted to serialize requests for the bot, so i timer approach is used coupled with a locking
-# method. This keep a rate limit approach for the open AI api in accordance to its policies. Sleeping method can
-# also be added.
+# Handle autodelete messages. It is important to consider that when this is executed, the original
+# message may not exist. We have to fetch message from the guild, channel, and message IDs.
 
-@tasks.loop(seconds=5)  # Adjust the interval as needed
+@tasks.loop(seconds=3)
+async def autodelete_messages():
+    global delete_list
+
+    if DeleteLock.acquire(timeout=DeleteTimeout):
+        try:
+            now=time.time()
+            if delete_list:
+                for msg in list(delete_list):
+                    if now>msg['Expires']:
+                        guild=client.get_guild(msg['gid'])              # Guild
+                        channel=guild.get_channel(msg['cid'])           # Channel
+                        message=await channel.fetch_message(msg['mid']) # Message
+
+                        delete_list.remove(msg)
+                        await message.delete()
+        except Exception as err:
+            ErrorLog(f'Broke ADM: {sys.exc_info()[-1].tb_lineno}/{err}')
+        DeleteLock.release()
+    else:
+        ErrorLog("Lock failed ADM")
+
+# The dirty part. I wanted to serialize requests for the bot, so i timer approach is used coupled with
+# a locking method. This keep a rate limit approach for the open AI api in accordance to its policies.
+# Sleeping method can also be added.
+
+@tasks.loop(seconds=5)
 async def update_response_data():
     global request_list
 
@@ -1527,7 +1570,7 @@ async def on_message(message):
         # Handle auto publish
         if message.channel.type==discord.ChannelType.news:
             await message.publish()
-            ErrorLog(f"AutoPublish: {channel}/{message.id}")
+#            ErrorLog(f"AutoPublish: {channel}/{message.id}")
 
         bot=GetCompanionPersona(channel,message.channel.nsfw)
 
@@ -1598,6 +1641,7 @@ async def on_message(message):
                 if request_list!=[]:
                     msg=f"{len(request_list)} pending requests"
                     await send_response(bot,message,msg,delete=57)
+                await message.delete()
                 return
 
             if str(message.content).strip().startswith('%PurgeRequests'):
@@ -1611,6 +1655,7 @@ async def on_message(message):
                         msg=f"Request list already empty"
                     ResponseLock.release()
                     await send_response(bot,message,msg,delete=57)
+#                    await message.delete()
                 else:
                     ErrorLog("Lock failed OM")
                 return
@@ -1715,11 +1760,14 @@ async def on_message(message):
 async def on_ready():
     print(f'Logged in as {client.user}')
 
+    # Start the task when the bot is ready
+    update_response_data.start()
+    autodelete_messages.start()
+
+    # Print some fluff
     print("In guilds:")
     for guild in client.guilds:
         print(f" {guild.name} ({guild.id}), {guild.member_count} members")
-    # Start the task when the bot is ready
-    update_response_data.start()
 
 ###
 ### STARTUP: starts the bot with the corresponding token
