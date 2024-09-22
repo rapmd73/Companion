@@ -8,3 +8,8 @@ together
 transformers
 youtube-transcript-api
 pdfplumber
+google-api-python-client
+google-auth
+google-auth-oauthlib
+Pillow
+imagehash
