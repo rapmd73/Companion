@@ -840,26 +840,26 @@ def GetAIResponse(persona, bot):
     provider=bot.get('Engine').lower()
     try:
         # Default connection timeout
-        tout = bot.get('Timeout', 60)
-        mt = bot.get('MaxTokens', 16000 if provider == 'OpenAI' else 4096)
-        if provider == 'ollama' and mt == 0:
-            mt = 2048
+        tout=bot.get('Timeout', 60)
+        mt=bot.get('MaxTokens', 16000 if provider=='OpenAI' else 4096)
+        if provider=='ollama' and mt==0:
+            mt=2048
 
-        model = bot.get('Model')
-        encoding = bot.get('Encoding')
-        seed = bot.get('Seed', 0)
+        model=bot.get('Model')
+        encoding=bot.get('Encoding')
+        seed=bot.get('Seed', 0)
 
         # Adjust persona based on token limit
-        WorkingPersona = MaintainTokenLimit(persona, max_tokens=mt, model=model, encoding=encoding, HuggingFace=(provider != 'OpenAI'))
+        WorkingPersona=MaintainTokenLimit(persona, max_tokens=mt, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
         if WorkingPersona is None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
         # Provider-specific handling
-        Tokens = ReadTokens()
+        Tokens=ReadTokens()
 
-        if provider == 'openai':
-            clientAI = openai.OpenAI(api_key=Tokens['OpenAI'])
-            completion = clientAI.chat.completions.create(
+        if provider=='openai':
+            clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
+            completion=clientAI.chat.completions.create(
                 model=model,
                 frequency_penalty=bot['FreqPenality'],
                 temperature=bot['Temperature'],
@@ -868,9 +868,9 @@ def GetAIResponse(persona, bot):
             )
             clientAI.close()
 
-        elif provider == 'togetherai':
-            clientAI = together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
-            completion = clientAI.chat.completions.create(
+        elif provider=='togetherai':
+            clientAI=together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
+            completion=clientAI.chat.completions.create(
                 model=model,
                 frequency_penalty=bot['FreqPenality'],
                 temperature=bot['Temperature'],
@@ -878,14 +878,14 @@ def GetAIResponse(persona, bot):
                 stream=False
             )
 
-        elif provider == 'ollama':
-            options = {
+        elif provider=='ollama':
+            options={
                 "temperature": bot['Temperature'],
                 "frequency_penalty": bot['FreqPenality'],
                 "seed": seed,
                 "num_ctx": mt
             }
-            completion = ollama.chat(
+            completion=ollama.chat(
                 keep_alive=tout,
                 stream=False,
                 model=model,
@@ -895,12 +895,12 @@ def GetAIResponse(persona, bot):
 
         # Parse response
         try:
-            if provider == 'ollama':
-                response = completion['message']['content'].strip()
+            if provider=='ollama':
+                response=completion['message']['content'].strip()
             else:
-                response = completion.choices[0].message.content.strip()
+                response=completion.choices[0].message.content.strip()
         except:
-            response = None
+            response=None
 
         RawLog(f"{provider}/{model}: {str(completion)}")
         return response
@@ -1502,7 +1502,7 @@ async def on_message(message):
         member_nick=message.author.display_name.lower()
 
         # Check for exact matches (username or display name).
-        if message.author != owner and (member_name == owner_name or member_nick == owner_nick):
+        if message.author != owner and (member_name==owner_name or member_nick==owner_nick):
             # Send embed indicating imposter before deleting the message
             embed=discord.Embed(
                 title="🚨 IMPOSTER DETECTED 🚨",
@@ -1713,6 +1713,7 @@ async def on_ready():
         # Check if the bot's role has administrator permissions
         if not guild.me.guild_permissions.administrator:
             print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+    print("Ready to serve!")
 
 ###
 ### STARTUP: starts the bot with the corresponding token
