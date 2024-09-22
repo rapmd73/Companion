@@ -22,6 +22,7 @@
 #   Anyscale
 #   Replicate
 #   octo.ai
+#   openrouter.ai
 
 # ***** IMPORTANT:
 
@@ -85,7 +86,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.610"
+Version="0.0.0.0.630"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -188,7 +189,7 @@ def PickRandomResponse(fname):
 
 def NumberOnly(s):
     # Replace common look-alikes with their numeric equivalents
-    look_alike_replacements = {
+    look_alike_replacements={
         'I': '1',  # Uppercase 'i' as '1'
         'l': '1',  # Lowercase 'L' as '1'
         'O': '0',  # Uppercase 'O' as '0'
@@ -196,14 +197,14 @@ def NumberOnly(s):
 
     # Replace look-alikes in the input string
     for look_alike, digit in look_alike_replacements.items():
-        s = s.replace(look_alike, digit)
+        s=s.replace(look_alike, digit)
 
     s=s.strip().replace(' ','')
 
     # Define valid characters, including look-alikes and numeric equivalents
-    valid_chars = set("0123456789.,")  # Regular digits, comma, and period
-    look_alike_chars = set("٠١٢٣٤٥٦٧٨٩")  # Arabic-Indic digits
-    full_width_digits = set("０１２３４５６７８９")  # Full-width digits
+    valid_chars=set("0123456789.,")  # Regular digits, comma, and period
+    look_alike_chars=set("٠١٢٣٤٥٦٧٨٩")  # Arabic-Indic digits
+    full_width_digits=set("０１２３４５６７８９")  # Full-width digits
 
     # Combine all valid characters into one set
     valid_chars.update(look_alike_chars)
@@ -292,14 +293,14 @@ def BuildLeetList(side):
 
 def StripPunctuation(text):
     # Define punctuation and high ASCII characters
-    punctuation = string.punctuation
-    high_ascii_chars = ''.join(chr(i) for i in range(128, 256))
+    punctuation=string.punctuation
+    high_ascii_chars=''.join(chr(i) for i in range(128, 256))
 
     # Create a translation table to map all punctuation and high ASCII characters to spaces
-    translation_table = str.maketrans({**dict.fromkeys(punctuation, ' '), **dict.fromkeys(high_ascii_chars, ' ')})
+    translation_table=str.maketrans({**dict.fromkeys(punctuation, ' '), **dict.fromkeys(high_ascii_chars, ' ')})
 
     # Replace punctuation and high ASCII characters with spaces in the text
-    cleaned_text = text.translate(translation_table)
+    cleaned_text=text.translate(translation_table)
 
     return cleaned_text
 
@@ -405,7 +406,7 @@ def ErrorLog(text):
         LoggingLock.release()
 
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
-# request. HuggingFace = Ollama, Together.AI -> NOT OpenAI.
+# request. HuggingFace=Ollama, Together.AI -> NOT OpenAI.
 
 def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=None,HuggingFace=False):
     if not HuggingFace:
@@ -729,12 +730,7 @@ def GetBabble(text):
             else:
                 cbot['Model']=ml[ecounter]
 
-            if cbot['Engine'].lower()=='openai':
-                response=GetOpenAI(persona,cbot)
-            elif cbot['Engine'].lower()=='togetherai':
-                response=GetTogetherAI(persona,cbot)
-            elif cbot['Engine'].lower()=='ollama':
-                response=GetOllama(persona,cbot)
+            response=GetAIResponse(persona,cbot)
             if response==None:
                 ecounter+=1
             else:
@@ -814,9 +810,9 @@ async def HandleOneMessage(request):
                         pass
                     return
                 else:
-                    response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                    response=await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
             else:
-                response = await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                response=await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
 
             print('B',client.user.id,bot['BotName'],message.channel,response)
 
@@ -835,168 +831,83 @@ async def HandleOneMessage(request):
             ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
 
 ###
-### AI handlers
+### AI handlers (Optimized)
 ###
 
-# NOTES: This area needs to be optimized for better performance. There is too much repetition between
-# the AI functions that can and should be combined into one layer.
-
-# Use the OpenAI call.
-
-def GetOpenAI(persona,bot):
-    print("OpenAI",bot.get('Model'),bot.get('Encoding'))
+# General AI Call Handler
+def GetAIResponse(persona, bot):
+    print(bot.get('Model'), bot.get('Encoding'))
+    provider=bot.get('Engine').lower()
     try:
         # Default connection timeout
+        tout = bot.get('Timeout', 60)
+        mt = bot.get('MaxTokens', 16000 if provider == 'OpenAI' else 4096)
+        if provider == 'ollama' and mt == 0:
+            mt = 2048
 
-        tout=60
-        if 'Timeout' in bot:
-            tout=bot['Timeout']
+        model = bot.get('Model')
+        encoding = bot.get('Encoding')
+        seed = bot.get('Seed', 0)
 
-        Tokens=ReadTokens()
-
-        mt=16000                    # GPT3.5 default
-        if 'MaxTokens' in bot:
-            mt=bot['MaxTokens']
-        if mt>16000:
-            mt=16000
-
-        model=None
-        encoding=None
-        if 'Model' in bot:
-            model=bot['Model']
-        if 'Encoding' in bot:
-            encoding=bot['Encoding']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding)
-        # Over limit and not able to reduce
-        if WorkingPersona==None:
+        # Adjust persona based on token limit
+        WorkingPersona = MaintainTokenLimit(persona, max_tokens=mt, model=model, encoding=encoding, HuggingFace=(provider != 'OpenAI'))
+        if WorkingPersona is None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
-        clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
+        # Provider-specific handling
+        Tokens = ReadTokens()
 
-        # frequency_penalty=2 causes problems if you want your bot to write code.
-        # temperature=1 causes the not to not to be able to write code. If you want an "Einstein" bot, use 0.3
-        completion=clientAI.chat.completions.create( \
-                model=bot['Model'], \
-                frequency_penalty=bot['FreqPenality'], \
-                temperature=bot['Temperature'], \
-                messages=WorkingPersona, \
-                timeout=tout )
+        if provider == 'openai':
+            clientAI = openai.OpenAI(api_key=Tokens['OpenAI'])
+            completion = clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=bot['FreqPenality'],
+                temperature=bot['Temperature'],
+                messages=WorkingPersona,
+                timeout=tout
+            )
+            clientAI.close()
 
+        elif provider == 'togetherai':
+            clientAI = together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
+            completion = clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=bot['FreqPenality'],
+                temperature=bot['Temperature'],
+                messages=WorkingPersona,
+                stream=False
+            )
+
+        elif provider == 'ollama':
+            options = {
+                "temperature": bot['Temperature'],
+                "frequency_penalty": bot['FreqPenality'],
+                "seed": seed,
+                "num_ctx": mt
+            }
+            completion = ollama.chat(
+                keep_alive=tout,
+                stream=False,
+                model=model,
+                options=options,
+                messages=WorkingPersona
+            )
+
+        # Parse response
         try:
-            response=completion.choices[0].message.content.strip()
+            if provider == 'ollama':
+                response = completion['message']['content'].strip()
+            else:
+                response = completion.choices[0].message.content.strip()
         except:
-            response=None
-        clientAI.close()
-        RawLog(bot['Model']+': '+str(completion))
+            response = None
+
+        RawLog(f"{provider}/{model}: {str(completion)}")
         return response
+
     except Exception as err:
-        ErrorLog(f"OpenAI: {sys.exc_info()[-1].tb_lineno}/{err}")
+        ErrorLog(f"{provider} {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
-
-# Use TogetherAI call.
-
-def GetTogetherAI(persona,bot):
-    print("TogetherAI",bot.get('Model'),bot.get('Encoding'))
-    try:
-        # Default connection timeout
-
-        tout=60
-        if 'Timeout' in bot:
-            tout=bot['Timeout']
-
-        Tokens=ReadTokens()
-
-        mt=4096
-        if 'MaxTokens' in bot:
-            mt=bot['MaxTokens']
-
-        model=None
-        encoding=None
-        if 'Model' in bot:
-            model=bot['Model']
-        if 'Encoding' in bot:
-            encoding=bot['Encoding']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding,HuggingFace=True)
-        # Over limit and not able to reduce
-        if WorkingPersona==None:
-            return PickRandomResponse(bot['TooMuchInformation'])
-
-        clientAI=together.Together(api_key=Tokens['TogetherAI'],timeout=tout)
-
-        try:
-            completion=clientAI.chat.completions.create( \
-                model=bot['Model'], \
-                frequency_penalty=bot['FreqPenality'], \
-                temperature=bot['Temperature'], \
-                messages=persona, \
-                stream=False )
-        except Exception as err:
-            ErrorLog(f"TogetherAI {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
-            return None
-
-        try:
-            response=completion.choices[0].message.content.strip()
-        except:
-            response=None
-
-        RawLog(bot['Model']+': '+str(completion))
-        return response
-    except Exception as err:
-        ErrorLog(f"TogetherAI {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
-
-# Use the Ollama API
-
-def GetOllama(persona,bot):
-    print("Ollama",bot.get('Model'),bot.get('Encoding'))
-    try:
-        # Default connection timeout
-
-        tout=60
-        if 'Timeout' in bot:
-            tout=bot['Timeout']
-
-        mt=0
-        if 'MaxTokens' in bot:
-            mt=bot['MaxTokens']
-
-        model=None
-        encoding=None
-        if 'Model' in bot:
-            model=bot['Model']
-        if 'Encoding' in bot:
-            encoding=bot['Encoding']
-        WorkingPersona=MaintainTokenLimit(persona,max_tokens=mt,model=model,encoding=encoding,HuggingFace=True)
-        # Over limit and not able to reduce
-        if WorkingPersona==None:
-            return PickRandomResponse(bot['TooMuchInformation'])
-
-        # Ollama default
-        if mt==0:
-            mt=2048
-
-        if 'Seed' not in bot:
-            seed=0
-        else:
-            seed=bot['Seed']
-
-        options={ "temperature":bot['Temperature'],"frequency_penalty":bot['FreqPenality'],"seed":seed,"num_ctx":mt }
-
-        completion=ollama.chat( \
-                keep_alive=tout, \
-                stream=False, \
-                model=bot['Model'], \
-                options=options, \
-                messages=WorkingPersona )
-    except Exception as err:
-        ErrorLog(f"Ollama {bot['Model']}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
-    try:
-        response=completion['message']['content'].strip()
-    except:
-        response=None
-    RawLog(bot['Model']+': '+json.dumps(completion))
-    return response
 
 ###
 ### Special features
@@ -1006,25 +917,25 @@ def AnagramSolver(fromletters):
     def load_dictionary(file_path):
         # Load dictionary words from a file and return them as a set.
         with open(file_path, 'r') as f:
-            words = set(word.strip().lower() for word in f.readlines())
+            words=set(word.strip().lower() for word in f.readlines())
         return words
 
     def find_valid_words_by_length(letters, dictionary):
         # Find all valid words from combinations and permutations of the input letters grouped by length.
-        valid_words = {}
+        valid_words={}
         # Generate combinations of letters from 3 to the length of the input
         for length in range(3, len(letters) + 1):
             for combo in itertools.combinations(letters, length):
                 # For each combination, generate all permutations
                 for perm in itertools.permutations(combo):
-                    word = ''.join(perm)
+                    word=''.join(perm)
                     if word in dictionary:
                         if length not in valid_words:
-                            valid_words[length] = set()
+                            valid_words[length]=set()
                         valid_words[length].add(word)
         # Sort each length's word list alphabetically
         for length in valid_words:
-            valid_words[length] = sorted(valid_words[length])
+            valid_words[length]=sorted(valid_words[length])
         return valid_words
 
     # Load letters from the command line argument
@@ -1048,8 +959,8 @@ def AnagramSolver(fromletters):
 def yttags2text(url):
     def extract_video_id(url):
         # Match either a youtu.be or youtube.com URL to extract the video ID
-        youtube_regex = r"(?:youtu\.be\/|youtube\.com\/(?:.*v=|.*\/|.*v\/|.*embed\/|.*shorts\/))([a-zA-Z0-9_-]{11})"
-        match = re.search(youtube_regex, url)
+        youtube_regex=r"(?:youtu\.be\/|youtube\.com\/(?:.*v=|.*\/|.*v\/|.*embed\/|.*shorts\/))([a-zA-Z0-9_-]{11})"
+        match=re.search(youtube_regex, url)
 
         if match:
             return match.group(1)
@@ -1059,7 +970,7 @@ def yttags2text(url):
     def get_video_tags(video_id):
         # Fetch video details including tags
         try:
-            request = youtube.videos().list(
+            request=youtube.videos().list(
                 part="snippet",
                 id=video_id
             )
@@ -1067,12 +978,12 @@ def yttags2text(url):
             ErrorLog(f"Broke yttags: {sys.exc_info()[-1].tb_lineno}/{err}")
             return '{[(*VNF*)]}'
 
-        response = request.execute()
+        response=request.execute()
 
         if "items" in response and len(response["items"]) > 0:
-            video_snippet = response["items"][0]["snippet"]
+            video_snippet=response["items"][0]["snippet"]
             if "tags" in video_snippet:
-                tags = video_snippet["tags"]
+                tags=video_snippet["tags"]
                 return tags
             else:
                 return None
@@ -1081,10 +992,10 @@ def yttags2text(url):
 
     try:
         # Create YouTube Object
-        youtube = build('youtube', 'v3', developerKey=Tokens['YouTube'])
+        youtube=build('youtube', 'v3', developerKey=Tokens['YouTube'])
 
         # Retrieve and display tags
-        tags = get_video_tags(extract_video_id(url))
+        tags=get_video_tags(extract_video_id(url))
 
         if isinstance(tags, list):
             return '\n'.join(tags)
@@ -1098,7 +1009,7 @@ def yttags2text(url):
 def youtube2text(video_url):
     try:
         # Extract the video ID from the URL
-        #video_id = video_url.split('v=')[1]
+        #video_id=video_url.split('v=')[1]
         video_id=re.search(r'(v=|be/|embed/|v/|youtu\.be/|\/videos\/|\/shorts\/|\/watch\?v=|\/watch\?si=|\/watch\?.*?&v=)([a-zA-Z0-9_-]{11})',video_url).group(2)
 
         # Fetch the transcript using the YouTubeTranscriptApi
@@ -1126,8 +1037,8 @@ def PDF2Text(pdf_buffer):
 def html2text(url):
     try:
         # Set the user agent
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        request = urllib.request.Request(url, headers=headers)
+        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+        request=urllib.request.Request(url, headers=headers)
 
         print("Fetch:",url)
 
@@ -1140,7 +1051,7 @@ def html2text(url):
 
         try:
             with urllib.request.urlopen(request,timeout=60) as response:
-                html = response.read()
+                html=response.read()
         except Exception as err:
             print("URL Error:",url,str(err))
             return None
@@ -1159,19 +1070,19 @@ def html2text(url):
         html=html.decode('utf-8',errors='ignore')
 
         # Remove the entire head section
-        html = re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
+        html=re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
 
         # Remove script and style elements
-        html = re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.DOTALL)
+        html=re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.DOTALL)
 
         # Reduce <a> elements to their text content
-        html = re.sub(r'<a[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
+        html=re.sub(r'<a[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
 
         # Remove all other HTML tags
-        text = re.sub(r'<[^>]+>', '', html)
+        text=re.sub(r'<[^>]+>', '', html)
 
         # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
+        text=re.sub(r'\s+', ' ', text).strip()
 
         print("URL:",len(text),url)
 
@@ -1192,9 +1103,9 @@ def DisectMessage(event,message):
         # Set up convience variables
         channel=str(message.channel)
         uid=str(message.author.id)
-        author = message.author
-        member = message.guild.get_member(author.id) if message.guild else None
-        nickname = member.nick if member and member.nick else author.name
+        author=message.author
+        member=message.guild.get_member(author.id) if message.guild else None
+        nickname=member.nick if member and member.nick else author.name
 
         try:
             WriteLog(uid,channel,f"Event trigger: {event}")
@@ -1227,7 +1138,7 @@ def DisectMessage(event,message):
 
             # Log reference information (for replies)
             if message.reference:
-                ref = message.reference
+                ref=message.reference
                 WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
 
             # Log details about each embed
@@ -1298,7 +1209,7 @@ async def send_response(bot,message,response,embed=None,delete=None):
 
     try:
         # Purge all companion webhooks
-        webhooks = await message.channel.webhooks()
+        webhooks=await message.channel.webhooks()
 
         # Delete all webhooks with the name "Companion Temporary Webhook"
         for webhook in webhooks:
@@ -1411,7 +1322,7 @@ async def update_response_data():
     request=None
     if ResponseLock.acquire(timeout=ResponseTimeout):
         if request_list:
-            request = request_list.pop(0)
+            request=request_list.pop(0)
 
         ResponseLock.release()
 
@@ -1570,7 +1481,6 @@ async def on_message(message):
         # Handle auto publish
         if message.channel.type==discord.ChannelType.news:
             await message.publish()
-#            ErrorLog(f"AutoPublish: {channel}/{message.id}")
 
         bot=GetCompanionPersona(channel,message.channel.nsfw)
 
@@ -1579,6 +1489,36 @@ async def on_message(message):
 
         # Ignore messages from the bot itself
         if message.author==client.user:
+            return
+
+        # MUST BE FIRST!
+        # Imposter among us no more!
+        # Check to see if the user trying to impersonate the owner
+        guild=message.guild
+        owner=guild.owner
+        owner_name=owner.name.lower()
+        owner_nick=owner.display_name.lower()
+        member_name=message.author.name.lower()
+        member_nick=message.author.display_name.lower()
+
+        # Check for exact matches (username or display name).
+        if message.author != owner and (member_name == owner_name or member_nick == owner_nick):
+            # Send embed indicating imposter before deleting the message
+            embed=discord.Embed(
+                title="🚨 IMPOSTER DETECTED 🚨",
+                description=f"User {message.author.mention} (**ID: {message.author.id}**) is impersonating the server owner.\n\n"
+                            f"**THIS IS NOT THE OWNER**. DO NOT ACCEPT DIRECT MESSAGES FROM THIS USER!",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="Imposter Message", value=message.content, inline=False)
+            embed.set_footer(text="Action: Message will be deleted, and user will be kicked.")
+
+            # Send the embed to the channel where the message was sent
+            await send_response(bot,message,None,embed=embed,delete=300)
+            # Delete the imposter's message
+            await message.delete()
+            # Kick the imposter
+            await message.author.kick(reason="Impersonating the server owner")
             return
 
         if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
@@ -1633,7 +1573,7 @@ async def on_message(message):
 
         if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
             if str(message.content).strip().startswith('%CheckBot'):
-                member = message.guild.get_member(client.user.id) # Get the bot's member object in the guild
+                member=message.guild.get_member(client.user.id) # Get the bot's member object in the guild
                 # Check if the bot is a member of the channel
                 if member in message.channel.members:
                     await send_response(bot,message,"Allowed",delete=57)
@@ -1663,7 +1603,7 @@ async def on_message(message):
 
         # If we have a bot, then we can converse here.
         if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
-            input_text = message.content.strip()
+            input_text=message.content.strip()
 
             # If a trigger file exists, check to see if one on the trigger words are in the user message.
             # Also if trigger file exists, and message is directed to bot.
@@ -1769,6 +1709,10 @@ async def on_ready():
     print("In guilds:")
     for guild in client.guilds:
         print(f" {guild.name} ({guild.id}), {guild.member_count} members")
+
+        # Check if the bot's role has administrator permissions
+        if not guild.me.guild_permissions.administrator:
+            print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
 
 ###
 ### STARTUP: starts the bot with the corresponding token
