@@ -80,13 +80,16 @@ import tiktoken
 import openai
 import together
 import youtube_transcript_api
+import imagehash
 from discord.ext import commands, tasks
 from transformers import AutoTokenizer
 from googleapiclient.discovery import build
+from PIL import Image
+from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.630"
+Version="0.0.0.0.640"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -126,6 +129,7 @@ BabbleTimeout=300
 # This is required for the bot to work properly.
 
 intents=discord.Intents.all()
+intents.presences=True
 intents.messages=True
 intents.members=True
 intents.guilds=True
@@ -142,6 +146,15 @@ delete_list=[]
 ### General file tools
 ###
 
+# Helper function to download and load an image from a URL
+
+def load_image_from_url(url):
+    response=requests.get(url)
+    img=Image.open(BytesIO(response.content))
+    return img
+
+# Read file into buffer
+
 def ReadFile(fn,binary=False):
     if os.path.exists(fn):
         if binary:
@@ -155,6 +168,8 @@ def ReadFile(fn,binary=False):
     else:
         buffer=None
     return buffer
+
+# Write file to disk
 
 def WriteFile(fn,data):
     cf=open(fn,'w')
@@ -172,8 +187,10 @@ def ReadFile2List(fname,ForceLower=False):
         responses=[item.lower() for item in responses]
     return responses
 
+# Pick a random response from a filew
+# Something broke. Keep the responses in character
+
 def PickRandomResponse(fname):
-    # Something broke. Keep the responses in character
     responses=ReadFile2List(fname)
     selected_response=random.choice(responses)
     if selected_response.startswith('{[(*') and selected_response.endswith('*)]}'):
@@ -1502,25 +1519,41 @@ async def on_message(message):
         member_nick=message.author.display_name.lower()
 
         # Check for exact matches (username or display name).
-        if message.author != owner and (member_name==owner_name or member_nick==owner_nick):
-            # Send embed indicating imposter before deleting the message
-            embed=discord.Embed(
-                title="🚨 IMPOSTER DETECTED 🚨",
-                description=f"User {message.author.mention} (**ID: {message.author.id}**) is impersonating the server owner.\n\n"
-                            f"**THIS IS NOT THE OWNER**. DO NOT ACCEPT DIRECT MESSAGES FROM THIS USER!",
-                color=discord.Color.red()
-            )
-            embed.add_field(name="Imposter Message", value=message.content, inline=False)
-            embed.set_footer(text="Action: Message will be deleted, and user will be kicked.")
+        if message.author!=owner and (member_name==owner_name or member_nick==owner_nick):
+            # If the names are identical, check the avatar.
+            # Fetch URLs for avatars
+            member_avatar_url=message.author.display_avatar.url
+            owner_avatar_url=owner.display_avatar.url
 
-            # Send the embed to the channel where the message was sent
-            await send_response(bot,message,None,embed=embed,delete=300)
-            # Delete the imposter's message
-            await message.delete()
-            # Kick the imposter
-            await message.author.kick(reason="Impersonating the server owner")
-            return
+            # Load images for comparison
+            member_avatar_image=load_image_from_url(member_avatar_url)
+            owner_avatar_image=load_image_from_url(owner_avatar_url)
 
+            # Convert avatars to perceptual hashes
+            member_hash=imagehash.phash(member_avatar_image)
+            owner_hash=imagehash.phash(owner_avatar_image)
+
+            # Compare hash distance (simple comparison)
+            if member_hash==owner_hash:
+                # Send embed indicating imposter before deleting the message
+                embed=discord.Embed(
+                    title="🚨 IMPOSTER DETECTED 🚨",
+                    description=f"User {message.author.mention} (**ID: {message.author.id}**) is impersonating the server owner.\n\n"
+                                f"**THIS IS NOT THE OWNER**. DO NOT ACCEPT DIRECT MESSAGES FROM THIS USER!",
+                    color=discord.Color.red()
+                )
+                embed.add_field(name="Imposter Message", value=message.content, inline=False)
+                embed.set_footer(text="Action: Message will be deleted, and user will be kicked.")
+
+                # Send the embed to the channel where the message was sent
+                await send_response(bot,message,None,embed=embed,delete=300)
+                # Delete the imposter's message
+                await message.delete()
+                # Kick the imposter
+                await message.author.kick(reason="Impersonating the server owner")
+                return
+
+        # Check for input that is a number only
         if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
             author=str(message.author.mention)
             # If its a bot, it doesn't deserve a response
@@ -1596,7 +1629,6 @@ async def on_message(message):
                         msg=f"Request list already empty"
                     ResponseLock.release()
                     await send_response(bot,message,msg,delete=57)
-#                    await message.delete()
                 else:
                     ErrorLog("Lock failed OM")
                 return
