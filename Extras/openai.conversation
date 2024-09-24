@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import json
+import openai
+import tiktoken
+
+MemoryFile='openai.memory'
+
+# OpenAI API: do NOT share
+AIAPI="Your OpenAI API token"
+
+# General file tools
+
+def ReadFile(fn):
+    if os.path.exists(fn):
+        cf=open(fn,'r')
+        buffer=cf.read().strip()
+        cf.close()
+    else:
+        buffer=None
+    return buffer
+
+def WriteFile(fn,data):
+    cf=open(fn,'w')
+    cf.write(data)
+    cf.close()
+
+# Get response from OpenAI
+def GetOpenAI(persona):
+    try:
+        clientAI = openai.OpenAI(api_key=AIAPI)
+        completion=clientAI.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=persona )
+        response=completion.choices[0].message.content
+        clientAI.close()
+
+        return response
+    except Exception as err:
+        print(f"GetOpenAI: {err}")
+    return None
+
+# Count the tokens and make sure they are under the maximum allowed
+def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o"):
+    enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+
+    # Make a separate working copy of the original messages.
+    messages=orgmessages.copy()
+
+    try:
+        # Calculate current tokens in the message list
+        current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        old_tokens=current_tokens
+        if max_tokens==0:
+            return messages
+
+        # While tokens exceed the limit, remove elements
+        while current_tokens > max_tokens:
+            for i in range(len(messages) - 1):
+                if i < len(messages) - 1:
+                    if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
+                        # Remove the pair (two items)
+                        messages.pop(i)
+                        messages.pop(i)
+                        break
+                    elif messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="user":
+                        # Remove only one item if two adjacent items are user/user
+                        messages.pop(i)
+                        break
+
+            # Recalculate current tokens after removal
+            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+            # Check for the situation that we can't reduce the number of tokens.
+            if old_tokens==current_tokens and current_tokens>max_tokens:
+                print("Context too small, unable to reduce.")
+                sys.exit(1)
+            old_tokens=current_tokens
+    except Exception as err:
+        print(f"MaintainTokens: {sys.exc_info()[-1].tb_lineno}/{err}")
+        sys.exit(1)
+
+    return messages
+
+# Build the conversation and save it for furure reference
+def GetBabble(input_text):
+    persona=[]
+    pList=[]
+    mList=[]
+
+    if os.path.exists(MemoryFile):
+        mList=ReadFile(MemoryFile).strip().split('\n')
+        pList+=mList
+
+    for s in pList:
+        try:
+            persona.append(json.loads(s))
+        except:
+            print("Broke:",s)
+            sys.exit(1)
+
+    memU={ "role": "user", "content": input_text }
+    persona.append(memU)
+
+    # Save only allowed token limit. NOT usable in Companion
+    persona=MaintainTokenLimit(persona,max_tokens=128000)
+
+    response=GetOpenAI(persona)
+
+    memA={ "role": "assistant", "content": response }
+
+    persona.append(json.dumps(memA))
+
+    if response!=None:
+        fh=open(MemoryFile,'w')
+        for i in persona:
+            if type(i)!=str:
+                s=json.dumps(i)
+            else:
+                s=i;
+            fh.write(s+'\n')
+        fh.close()
+
+    return response
+
+###
+### MAIN driver
+###
+
+def main():
+    while True:
+        input_text=input("Question? ").strip()
+
+        if input_text=='':
+            continue
+
+        if input_text.lower()=='quit' or input_text.lower()=='exit' or input_text.lower()=='bye':
+            sys.exit(0)
+
+        print()
+        response=GetBabble(input_text)
+        print(response)
+        print()
+
+if __name__=='__main__':
+    main()

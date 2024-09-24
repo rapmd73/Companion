@@ -41,11 +41,13 @@
 
 # Wanted features:
 
-#   Imposter detection
+#   Imposter detection - completed
+#   Auto slow mode - completed
 #   Anti raid/nuke
 #   Ticket management
-#   Auto slow mode
 #   Anti nudity verification for images.
+
+# Add URL check (abuseIPDB) verifications.
 
 # Disable 3rd party logging.
 import warnings
@@ -89,7 +91,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.640"
+Version="0.0.0.0.650"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -125,6 +127,13 @@ LoggingTimeout=60
 
 BabbleLock=threading.Lock()
 BabbleTimeout=300
+
+# Constants For auto slowmode. Needs to be dymanic in the future
+SLOW_MODE_DURATION = 3  # Seconds for individual slow mode
+SLOW_MODE_COOLDOWN = 307  # 5 minutes/7 secords cooldown for slow mode adjustments
+
+# Dictionary to store the last slow mode change time for each channel
+last_slow_mode_change = {}
 
 # This is required for the bot to work properly.
 
@@ -807,17 +816,6 @@ async def HandleOneMessage(request):
             nsfw=str(message.channel.nsfw)[0]
             print('U',nsfw,uid,message.author,message.channel,message.content)
 
-###> Not needed with webhook and never worked right with multiple AI personas
-#            await ChangeNickAvatar(bot,message)
-
-            # Type out the response. using channel.typing() won't work with multiple AI personas as it
-            # relies on NICK and changing the nickname has a rate limit. The rate limit is 2 times per
-            # minute. The bot may end up sending more messages then that, especially across different
-            # channels. While the typing() functionality is nice, having the bot have its own name and
-            # avatar per persona is nicer.
-
-#            async with message.channel.typing():
-
             # Handle any vulgarity
             if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
                 if bool(pc.predict([ input_text ]))==True:
@@ -1221,13 +1219,16 @@ async def ChangeNickAvatar(bot,message):
 
 # WRITE a task list to delete messages after X seconds
 
-async def send_response(bot,message,response,embed=None,delete=None):
+async def send_response(bot,message,response,embed=None,delete=None,member=None):
     global delete_list
     whmsg=[]
 
     try:
         # Purge all companion webhooks
-        webhooks=await message.channel.webhooks()
+        if bot['Channel']==None:
+            webhooks=await member.guild.system_channel.webhooks()
+        else:
+            webhooks=await message.channel.webhooks()
 
         # Delete all webhooks with the name "Companion Temporary Webhook"
         for webhook in webhooks:
@@ -1291,12 +1292,13 @@ async def send_response(bot,message,response,embed=None,delete=None):
                 whmsg.append(wm)
 
         # Queue autodelete messages. Responses can be multiple messages.
-        if delete!=None and DeleteLock.acquire(timeout=DeleteTimeout):
-            for whm in whmsg:
-                delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
-            DeleteLock.release()
-        else:
-            ErrorLog("Lock failed SR")
+        if delete!=None:
+            if DeleteLock.acquire(timeout=DeleteTimeout):
+                for whm in whmsg:
+                    delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
+                DeleteLock.release()
+            else:
+                ErrorLog("Lock failed SR autodelete")
         # Delete the webhook
         await webhook.delete()
     except discord.errors.HTTPException as err:
@@ -1467,13 +1469,9 @@ async def on_member_join(member):
         bot=GetCompanionPersona(None,Welcome=True)
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
-            # ChangeNickAvatar(bot,member)
             response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
-            # Get the system welcome channel and send message there.
-#            syschannel=member.guild.system_channel
             # A message of None will automatically refer to the system channel
-            await send_response(bot,None,response)
-#            await syschannel.send(response)
+            await send_response(bot,None,response,member=member)
     except Exception as err:
         ErrorLog(f'OMJ: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1483,9 +1481,56 @@ async def on_member_join(member):
 async def on_member_remove(member):
     ErrorLog(f"OMR: {member}")
 
-# Get the user message and add it to a processing list. This really is the driving point of the AI responses.
-# Currently it responds to any message in the designated areas, but it could easily be adapted to respond to
-# message of a particular interest, like cooking, or programming.
+# Implement an auto slowmode based on actual usera typing per channel
+@client.event
+async def on_typing(channel, user, when):
+    current_time = time.time()
+
+    # Create a unique key for the channel using guild and channel IDs
+    key = f"{channel.guild.id}.{channel.id}"
+
+    # Check if the cooldown has expired
+    last_change = last_slow_mode_change.get(key, 0)
+    if current_time - last_change < SLOW_MODE_COOLDOWN:
+        return  # Skip the adjustment process if still in cooldown
+
+    # Calculate the number of typing users in the channel
+    typing_count = len([m for m in channel.members if m.typing and m in channel.members and not m.bot])
+
+    # Calculate expected users
+    server = channel.guild
+
+    # Theory: 1% of all active users throughout the server should be active normally. Assuming the
+    # distribution of users will be spread out over the number of channels, gives us an expected
+    # number of users per channel. This is a fallacy, but it is a reasonable starting point to
+    # build the theory on. Possible expansions could be actually messuring user activity per
+    # channel, but to get something very basic, I felt this was reasonable enough for most
+    # applications given that I am using only 3 secords per user as the slowdown rate, unless the
+    # number of user is above the expected amount. This is a primitive anti-raid method.
+
+    expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
+    if expected_users<1:
+        expected_users=1
+
+    # Determine slow mode duration
+    if typing_count > 2 * expected_users:  # Over threshold
+        slow_mode_duration = SLOW_MODE_DURATION * typing_count * 10
+    elif typing_count > expected_users:
+        slow_mode_duration = SLOW_MODE_DURATION * typing_count
+    else:
+        slow_mode_duration = 0
+
+    # Apply slow mode
+    try:
+        await channel.edit(slowmode=slow_mode_duration)
+        last_slow_mode_change[key] = current_time  # Update the last change time
+        print(f"Adjusted slow mode for {channel.name} to {slow_mode_duration} seconds.")
+    except Exception as err:
+        ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
+
+# Get the user message and add it to a processing list. This really is the driving point of the AI
+# responses. Currently it responds to any message in the designated areas, but it could easily be
+# adapted to respond to message of a particular interest, like cooking, or programming.
 
 @client.event
 async def on_message(message):
