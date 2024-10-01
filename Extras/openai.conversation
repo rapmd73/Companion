@@ -104,7 +104,7 @@ def GetBabble(input_text):
     persona.append(memU)
 
     # Save only allowed token limit. NOT usable in Companion
-    persona=MaintainTokenLimit(persona,max_tokens=128000)
+    persona=MaintainTokenLimit(persona,max_tokens=0)
 
     response=GetOpenAI(persona)
 
