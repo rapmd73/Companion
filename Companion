@@ -4,10 +4,10 @@
 # added openai
 # added ollama
 # added together.ai
+# added cohere
 
 # --> Not in a specific order, add support for the following engines:
 
-#   cohere
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
 #   huggingface
@@ -81,6 +81,7 @@ import ollama
 import tiktoken
 import openai
 import together
+import cohere
 import youtube_transcript_api
 import imagehash
 from discord.ext import commands, tasks
@@ -91,7 +92,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.650"
+Version="0.0.0.0.660"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -435,12 +436,27 @@ def ErrorLog(text):
 # Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
 # request. HuggingFace=Ollama, Together.AI -> NOT OpenAI.
 
-def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=None,HuggingFace=False):
-    if not HuggingFace:
+def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',model="gpt-4o",encoding=None,HuggingFace=False):
+    def count_tokens():
+        # Calculate current tokens in the message list
+        if engine=='openai':    #not HuggingFace:
+            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        elif engine=='cohere':
+            current_tokens=sum(len(co.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
+        else:
+            current_tokens=0
+            for message in messages:
+#                current_tokens=len(enc(message["content"], add_special_tokens=False)["input_ids"])
+                current_tokens=int(len(message["content"])/4)
+        return current_tokens
+
+    if engine=='openai': #not HuggingFace:
         if encoding!=None:
             enc=tiktoken.get_encoding(encoding)
         else:
             enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+    elif engine=='cohere':
+        co=cohere.ClientV2(api_key=Tokens['Cohere'])
 #    else:
         # Gated, needs env HF_HUB_READ_TOKEN
 #        enc=AutoTokenizer.from_pretrained(encoding)
@@ -449,14 +465,7 @@ def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=N
     messages=orgmessages.copy()
 
     try:
-        # Calculate current tokens in the message list
-        if not HuggingFace:
-            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
-        else:
-            current_tokens=0
-            for message in messages:
-#                current_tokens=len(enc(message["content"], add_special_tokens=False)["input_ids"])
-                current_tokens=int(len(message["content"])/4)
+        current_tokens=count_tokens()
 
         old_tokens=current_tokens
         if max_tokens==0:
@@ -477,7 +486,7 @@ def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o",encoding=N
                         break
 
             # Recalculate current tokens after removal
-            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+            current_tokens=count_tokens()
             # Check for the situation that we can't reduce the number of tokens.
             if old_tokens==current_tokens and current_tokens>max_tokens:
                 return None
@@ -865,13 +874,13 @@ def GetAIResponse(persona, bot):
         encoding=bot.get('Encoding')
         seed=bot.get('Seed', 0)
 
-        # Adjust persona based on token limit
-        WorkingPersona=MaintainTokenLimit(persona, max_tokens=mt, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
-        if WorkingPersona is None:
-            return PickRandomResponse(bot['TooMuchInformation'])
-
         # Provider-specific handling
         Tokens=ReadTokens()
+
+        # Adjust persona based on token limit
+        WorkingPersona=MaintainTokenLimit(Tokens, persona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
+        if WorkingPersona is None:
+            return PickRandomResponse(bot['TooMuchInformation'])
 
         if provider=='openai':
             clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
@@ -894,6 +903,16 @@ def GetAIResponse(persona, bot):
                 stream=False
             )
 
+        elif provider=='cohere':
+            co=cohere.ClientV2(api_key=Tokens['Cohere'], timeout=tout)
+            completion=co.chat(
+                model=model,
+                frequency_penalty=bot['FreqPenality'],
+                temperature=bot['Temperature'],
+                messages=WorkingPersona,
+                safety_mode="NONE"
+            )
+
         elif provider=='ollama':
             options={
                 "temperature": bot['Temperature'],
@@ -911,10 +930,14 @@ def GetAIResponse(persona, bot):
 
         # Parse response
         try:
-            if provider=='ollama':
+            if provider=='openai' or provider=='togwetherai':
+                response=completion.choices[0].message.content.strip()
+            elif provider=='cohere':
+                response=completion.message.content[0].text.strip()
+            elif provider=='ollama':
                 response=completion['message']['content'].strip()
             else:
-                response=completion.choices[0].message.content.strip()
+                response=None
         except:
             response=None
 
