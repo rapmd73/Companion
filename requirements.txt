@@ -1,10 +1,11 @@
 discord
 alt-profanity-check
-ollama
+tldextract
 tiktoken
 openai
-tldextract
 together
+cohere
+ollama
 transformers
 youtube-transcript-api
 pdfplumber
