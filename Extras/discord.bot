@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import discord
+
+# Create an instance of a Client
+intents = discord.Intents.all()
+intents.messages = True  # Enable message intent
+
+client = discord.Client(intents=intents)
+
+@client.event
+async def on_message(message):
+    # Prevent the bot from responding to its own messages
+    if message.author == client.user:
+        return
+
+    # Reverse the user's input and send it back
+    reversed_message = message.content[::-1]
+    await message.channel.send(reversed_message)
+
+# Replace 'YOUR_TOKEN_HERE' with your actual bot token
+client.run('Your Bot Token')
