@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+import os
+import json
+import discord
+import openai
+import tiktoken
+
+###
+### Globals
+###
+
+# Discord
+DiscordToken="Your Discord Token"
+# OpenAI API: do NOT share
+AIAPI="Your OpenAI key"
+
+# Memory file for conversations
+MemoryFile='discord.openai.memory'
+
+# Create an instance of a Client
+intents = discord.Intents.all()
+intents.messages = True  # Enable message intent
+
+client = discord.Client(intents=intents)
+
+###
+### General file tools
+###
+
+def ReadFile(fn):
+    if os.path.exists(fn):
+        cf=open(fn,'r')
+        buffer=cf.read().strip()
+        cf.close()
+    else:
+        buffer=None
+    return buffer
+
+def WriteFile(fn,data):
+    cf=open(fn,'w')
+    cf.write(data)
+    cf.close()
+
+###
+### OpenAI functions
+###
+
+# Count the tokens and make sure they are under the maximum allowed
+def MaintainTokenLimit(orgmessages, max_tokens=128000, model="gpt-4o"):
+    enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+
+    # Make a separate working copy of the original messages.
+    messages=orgmessages.copy()
+
+    try:
+        # Calculate current tokens in the message list
+        current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        old_tokens=current_tokens
+        if max_tokens==0:
+            return messages
+
+        # While tokens exceed the limit, remove elements
+        while current_tokens > max_tokens:
+            for i in range(len(messages) - 1):
+                if i < len(messages) - 1:
+                    if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
+                        # Remove the pair (two items)
+                        messages.pop(i)
+                        messages.pop(i)
+                        break
+                    elif messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="user":
+                        # Remove only one item if two adjacent items are user/user
+                        messages.pop(i)
+                        break
+
+            # Recalculate current tokens after removal
+            current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+            # Check for the situation that we can't reduce the number of tokens.
+            if old_tokens==current_tokens and current_tokens>max_tokens:
+                print("Context too small, unable to reduce.")
+                sys.exit(1)
+            old_tokens=current_tokens
+    except Exception as err:
+        print(f"MaintainTokens: {sys.exc_info()[-1].tb_lineno}/{err}")
+        sys.exit(1)
+
+    return messages
+
+# Get response from OpenAI
+def GetOpenAI(persona):
+    try:
+        clientAI = openai.OpenAI(api_key=AIAPI)
+        completion=clientAI.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=persona )
+        response=completion.choices[0].message.content
+        clientAI.close()
+
+        return response
+    except Exception as err:
+        print(f"GetOpenAI: {err}")
+    return None
+
+# Build the conversation and save it for furure reference
+def GetBabble(input_text):
+    persona=[]
+    pList=[]
+    mList=[]
+
+    if os.path.exists(MemoryFile):
+        mList=ReadFile(MemoryFile).strip().split('\n')
+        pList+=mList
+
+    for s in pList:
+        try:
+            persona.append(json.loads(s))
+        except:
+            print("Broke:",s)
+            sys.exit(1)
+
+    memU={ "role": "user", "content": input_text }
+    persona.append(memU)
+
+    # Save only allowed token limit. NOT usable in Companion
+    persona=MaintainTokenLimit(persona,max_tokens=128000)
+
+    response=GetOpenAI(persona)
+
+    memA={ "role": "assistant", "content": response }
+
+    persona.append(json.dumps(memA))
+
+    if response!=None:
+        fh=open(MemoryFile,'w')
+        for i in persona:
+            if type(i)!=str:
+                s=json.dumps(i)
+            else:
+                s=i;
+            fh.write(s+'\n')
+        fh.close()
+
+    return response
+
+###
+### Functions that service Discord indirectly
+###
+
+# Send a response to Discord, splitting it into multiple messages as needed
+async def send_response(message,response):
+    try:
+        # This is a welcome message
+        if message==None:
+            author=None
+            channel=member.guild.system_channel
+            webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
+            author=None
+        else:
+            author=str(message.author.mention)
+            channel=message.channel
+
+        # If the message is less then 1900 characters, just send it with a reply.
+        if len(response)<=1900:
+                if author!=None:
+                    x1=f"{author} {response}"
+                else:
+                    x1=f"{response}"
+                await channel.send(x1)
+        else:
+            # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
+            # message parts.
+            x1=f"{author} {response}"
+            l=len(x1)
+            while l>1900:
+                # We need to deal with the possibility that a \n doesn't exist in the input data.
+                pmax=1900
+                # Look for new line first
+                p=x1.rfind('\n',0,pmax)
+                if p==-1:
+                    # Look for a period  Separate at a sentence
+                    p=x1.rfind('.',0,pmax)
+                    if p==-1:
+                        # Look for a space  Separate at a word
+                        p=x1.rfind(' ',0,pmax)
+                        if p==-1:
+                            # Brute split
+                            pmax=1900
+                if len(x1[:p])>0:
+                    await channel.send(x1[:p].strip())
+                if x1[p]=='.' or x1[p]==' ':
+                    p+=1
+                x1=x1[p:].strip()
+                l=len(x1)
+            if l>0:
+                await channel.send(x1.strip())
+
+    except discord.errors.HTTPException as err:
+        ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+
+###
+### Discord event functions
+###
+
+@client.event
+async def on_message(message):
+    # Prevent the bot from responding to its own messages
+    if message.author == client.user:
+        return
+
+    response=GetBabble(message.content)
+    await send_response(message,response)
+
+###
+### MAIN driver
+###
+
+if __name__=='__main__':
+    client.run(DiscordToken)
+
