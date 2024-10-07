@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# ***** IMPORTANT:
+
+#   This program uses ADMINISTRATOR priviledges.
+
+# Listed in order of when the service was added.
+
 # added openai
 # added ollama
 # added together.ai
@@ -8,6 +14,7 @@
 
 # --> Not in a specific order, add support for the following engines:
 
+#   anthropic
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
 #   huggingface
@@ -15,7 +22,6 @@
 #   fireworks.ai
 #   OctoML AI
 #   Vertex AI
-#   anthropic
 #   AI21labs
 #   Deep Infra
 #   Azure
@@ -23,10 +29,6 @@
 #   Replicate
 #   octo.ai
 #   openrouter.ai
-
-# ***** IMPORTANT:
-
-#   This program uses ADMINISTRATOR priviledges.
 
 # Special USER commands:
 
@@ -92,7 +94,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.660"
+Version="0.0.0.0.670"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -135,6 +137,8 @@ SLOW_MODE_COOLDOWN = 307  # 5 minutes/7 secords cooldown for slow mode adjustmen
 
 # Dictionary to store the last slow mode change time for each channel
 last_slow_mode_change = {}
+# For counting active users per chanel
+active_users={}
 
 # This is required for the bot to work properly.
 
@@ -146,6 +150,8 @@ intents.guilds=True
 
 # Create a Discord client
 client=discord.Client(intents=intents)
+
+### Really need to make these files on disk and not global memory lists.
 
 # List to store pending requests
 request_list=[]
@@ -1132,7 +1138,7 @@ def html2text(url):
     return None
 
 ###
-### Direct Discord functions
+### Discord support functions
 ###
 
 # Disect discord messages. Forensic logging
@@ -1240,8 +1246,6 @@ async def ChangeNickAvatar(bot,message):
 
 # If message is None, use system channel
 
-# WRITE a task list to delete messages after X seconds
-
 async def send_response(bot,message,response,embed=None,delete=None,member=None):
     global delete_list
     whmsg=[]
@@ -1327,8 +1331,13 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
     except discord.errors.HTTPException as err:
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
-# Handle autodelete messages. It is important to consider that when this is executed, the original
-# message may not exist. We have to fetch message from the guild, channel, and message IDs.
+###
+### Background Tasks
+###
+
+# Handle autodelete messages. It is important to consider that when this is executed,
+# the original message may not exist. We have to fetch message from the guild,
+# channel, and message IDs.
 
 @tasks.loop(seconds=3)
 async def autodelete_messages():
@@ -1380,6 +1389,28 @@ async def update_response_data():
             BabbleLock.release()
         else:
             ErrorLog("Lock Failed URD")
+
+# This function cleans up the active user lists.
+
+@tasks.loop(seconds=60)
+async def track_active_users():
+    global active_users
+
+    try:
+        current_time=time.time()
+        # Sweep every channel
+        for ac in list(active_users):
+            # Sweep users in a channel
+            for au in list(active_users[ac]):
+                # Check time added againt expiration
+                if (current_time-au[1])>SLOW_MODE_COOLDOWN:
+                    ac.remove(au)
+    except Exception as err:
+        ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
+
+###
+### Discord event functions
+###
 
 # This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
 # many sides to an octogon?"
@@ -1457,7 +1488,6 @@ async def on_message_edit(before, after):
 #            except:
 #                pass
             await send_response(bot,after,None,embed=embed)
-#            await after.channel.send(embed=msg,reference=before)
             return
 
     except Exception as err:
@@ -1507,47 +1537,63 @@ async def on_member_remove(member):
 # Implement an auto slowmode based on actual usera typing per channel
 @client.event
 async def on_typing(channel, user, when):
-    current_time = time.time()
+    global active_users
 
-    # Create a unique key for the channel using guild and channel IDs
-    key = f"{channel.guild.id}.{channel.id}"
-
-    # Check if the cooldown has expired
-    last_change = last_slow_mode_change.get(key, 0)
-    if current_time - last_change < SLOW_MODE_COOLDOWN:
-        return  # Skip the adjustment process if still in cooldown
-
-    # Calculate the number of typing users in the channel
-    typing_count = len([m for m in channel.members if m.typing and m in channel.members and not m.bot])
-
-    # Calculate expected users
-    server = channel.guild
-
-    # Theory: 1% of all active users throughout the server should be active normally. Assuming the
-    # distribution of users will be spread out over the number of channels, gives us an expected
-    # number of users per channel. This is a fallacy, but it is a reasonable starting point to
-    # build the theory on. Possible expansions could be actually messuring user activity per
-    # channel, but to get something very basic, I felt this was reasonable enough for most
-    # applications given that I am using only 3 secords per user as the slowdown rate, unless the
-    # number of user is above the expected amount. This is a primitive anti-raid method.
-
-    expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
-    if expected_users<1:
-        expected_users=1
-
-    # Determine slow mode duration
-    if typing_count > 2 * expected_users:  # Over threshold
-        slow_mode_duration = SLOW_MODE_DURATION * typing_count * 10
-    elif typing_count > expected_users:
-        slow_mode_duration = SLOW_MODE_DURATION * typing_count
-    else:
-        slow_mode_duration = 0
-
-    # Apply slow mode
     try:
+        # Create a unique key for the channel using guild and channel IDs
+        key = f"{channel.guild.id}.{channel.id}"
+
+        # When this function gets called, someone was typing. Add them to the channel
+        # tracking list.
+
+        if key not in active_users:
+            active_users[key]=[]
+
+        if user.id not in active_users[key]:
+            # User ID, and the time they were typing
+            ut=[user.id,time.time()]
+            active_users[key].append(ut)
+
+        # Calculate the number of typing users in the channel
+        typing_count=len(active_users)
+
+        # Check if the cooldown has expired. Slowdown can only be adjust ONCE every 5
+        # minutes per channel.
+
+        current_time = time.time()
+        last_change = last_slow_mode_change.get(key, 0)
+        if current_time - last_change < SLOW_MODE_COOLDOWN:
+            return  # Skip the adjustment process if still in cooldown
+
+        # Calculate expected users
+        server = channel.guild
+
+        # Theory: 1% of all active users throughout the server should be active
+        # normally. Assuming the distribution of users will be spread out over the
+        # number of channels, gives us an expected number of users per channel. This
+        # is a fallacy, but it is a reasonable starting point to build the theory on.
+        # Possible expansions could be actually messuring user activity per channel,
+        # but to get something very basic, I felt this was reasonable enough for most
+        # applications given that I am using only 3 secords per user as the slowdown
+        # rate, unless the number of user is above the expected amount. This is a
+        # primitive anti-raid method.
+
+        expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
+        if expected_users<1:
+            expected_users=1
+
+        # Determine slow mode duration
+        if typing_count > 2 * expected_users:  # Over threshold
+            slow_mode_duration = SLOW_MODE_DURATION * typing_count * 10
+        elif typing_count > expected_users:
+            slow_mode_duration = SLOW_MODE_DURATION * typing_count
+        else:
+            slow_mode_duration = 0
+
+        # Apply slow mode
         await channel.edit(slowmode=slow_mode_duration)
         last_slow_mode_change[key] = current_time  # Update the last change time
-        print(f"Adjusted slow mode for {channel.name} to {slow_mode_duration} seconds.")
+        print(f"Adjusted slow mode for {channel.name} to {slow_mode_duration} seconds based on {typing_count} users typing simultaneously, using {expected_users} expected users as a threshold.")
     except Exception as err:
         ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1805,6 +1851,7 @@ async def on_ready():
     # Start the task when the bot is ready
     update_response_data.start()
     autodelete_messages.start()
+    track_active_users.start()
 
     # Print some fluff
     print("In guilds:")
