@@ -94,7 +94,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.670"
+Version="0.0.0.0.680"
 
 # The running name of the program. Must be global and NEVER changing.
 
