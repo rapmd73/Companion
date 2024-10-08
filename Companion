@@ -1553,7 +1553,14 @@ async def on_typing(channel, user, when):
         if key not in active_users:
             active_users[key]=[]
 
-        if user.id not in active_users[key]:
+        found=False
+        for u in active_users[key]:
+            if u[0]==user.id:
+                # Reset the timer
+                u[1]=time.time()
+                found=True
+
+        if not found:
             # User ID, and the time they were typing
             ut=[user.id,time.time()]
             active_users[key].append(ut)
