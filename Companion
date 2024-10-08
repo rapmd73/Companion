@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# Companion
+# 2024 Copyright © Robert APM Darin
+# All rights reserved unconditionally.
+
 # ***** IMPORTANT:
 
 #   This program uses ADMINISTRATOR priviledges.
@@ -94,7 +98,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.680"
+Version="0.0.0.0.690"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1555,7 +1559,7 @@ async def on_typing(channel, user, when):
             active_users[key].append(ut)
 
         # Calculate the number of typing users in the channel
-        typing_count=len(active_users)
+        typing_count=len(active_users[key])
 
         # Check if the cooldown has expired. Slowdown can only be adjust ONCE every 5
         # minutes per channel.
