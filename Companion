@@ -168,7 +168,7 @@ delete_list=[]
 
 # Helper function to download and load an image from a URL
 
-def load_image_from_url(url):
+def LoadImageURL(url):
     response=requests.get(url)
     img=Image.open(BytesIO(response.content))
     return img
@@ -1396,6 +1396,10 @@ async def update_response_data():
 
 # This function cleans up the active user lists.
 
+# The reduce factor weighs in on the user typing within the channel. It
+# acts as a cool down to prevent a channel raid. and keep the slowmode
+# appripriate to the channel "pressure".
+
 @tasks.loop(seconds=60)
 async def track_active_users():
     global active_users
@@ -1408,7 +1412,12 @@ async def track_active_users():
             for au in list(active_users[ac]):
                 # Check time added againt expiration
                 if (current_time-au[1])>SLOW_MODE_COOLDOWN:
-                    active_users[ac].remove(au)
+                    # reduce factor
+                    active_users[ac][2]-=1
+                    if active_users[ac][2]<1:
+                        active_users[ac].remove(au)
+                    else:
+                        active_users[ac][1]=time.time()
     except Exception as err:
         ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1558,11 +1567,13 @@ async def on_typing(channel, user, when):
             if u[0]==user.id:
                 # Reset the timer
                 u[1]=time.time()
+                u[2]+=1
                 found=True
 
         if not found:
-            # User ID, and the time they were typing
-            ut=[user.id,time.time()]
+            # User ID, and the time they were typing, factor
+            # The factor is used as a decrementer to prevent manipulation
+            ut=[user.id,time.time(),1]
             active_users[key].append(ut)
 
         # Calculate the number of typing users in the channel
@@ -1652,8 +1663,8 @@ async def on_message(message):
             owner_avatar_url=owner.display_avatar.url
 
             # Load images for comparison
-            member_avatar_image=load_image_from_url(member_avatar_url)
-            owner_avatar_image=load_image_from_url(owner_avatar_url)
+            member_avatar_image=LoadImageURL(member_avatar_url)
+            owner_avatar_image=LoadImageURL(owner_avatar_url)
 
             # Convert avatars to perceptual hashes
             member_hash=imagehash.phash(member_avatar_image)
