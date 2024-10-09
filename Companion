@@ -98,7 +98,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.701"
+Version="0.0.0.0.710"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1413,11 +1413,11 @@ async def track_active_users():
                 # Check time added againt expiration
                 if (current_time-au[1])>SLOW_MODE_COOLDOWN:
                     # reduce factor
-                    active_users[ac][2]-=1
-                    if active_users[ac][2]<1:
+                    au[2]-=1
+                    if au[2]<1:
                         active_users[ac].remove(au)
                     else:
-                        active_users[ac][1]=time.time()
+                        au[1]=time.time()
     except Exception as err:
         ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1808,43 +1808,34 @@ async def on_message(message):
 
             # Anagram solver... how the hell did I end up don the rabbit hole? Really?
 
-            try:
-                if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
-                    letters=input_text[14:].strip().lower()
-                    input_text=AnagramSolver(letters)
-                    await send_response(bot,message,input_text)
-                    return
-            except Exception as err:
-                ErrorLog(f"Broke AnagramSolver: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+            if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
+                letters=input_text[14:].strip().lower()
+                input_text=AnagramSolver(letters)
+                await send_response(bot,message,input_text)
+                return
 
             # Read tags from YouTune video
-            try:
-                if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
-                and input_text.lower().strip().startswith('%yttags'):
-                    # Web/URL reference
-                    url=input_text[7:].strip()
-                    input_text=yttags2text(url)
-                    if input_text==None:
-                        await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
-                    elif input_text=='{[(*VNF*)]}':
-                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
-                    else:
-                        await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
-                    return
-            except Exception as err:
-                ErrorLog(f"Broke TAGS: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+            if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
+            and input_text.lower().strip().startswith('%yttags'):
+                # Web/URL reference
+                url=input_text[7:].strip()
+                input_text=yttags2text(url)
+                if input_text==None:
+                    await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
+                elif input_text=='{[(*VNF*)]}':
+                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                else:
+                    await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
+                return
 
             # if the input text starts with "%http", replace it with the actual URL text
-            try:
-                if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
-                    # Web/URL reference
-                    url=input_text.replace(' ','')[1:]
-                    input_text=html2text(url)
-                    if input_text==None:
-                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
-                        return
-            except Exception as err:
-                ErrorLog(f"Broke URL: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+            if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
+                # Web/URL reference
+                url=input_text.replace(' ','')[1:]
+                input_text=html2text(url)
+                if input_text==None:
+                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                    return
 
             # If this is a direct reply or a mention, give a slightly more personal response
             if (message.reference and message.reference.resolved.author.id==client.user.id) \
@@ -1859,10 +1850,12 @@ async def on_message(message):
                 ErrorLog("Lock failed OM")
     except discord.HTTPException as err:
         if err.code==429:  # Rate limit error
-            retry_after=int(err.response.headers.get('X-RateLimit-Reset', 1))+1
+            retry_after=int(err.response.headers.get('X-RateLimit-Reset', 1))*2
             print(f"Rate limit hit. Retrying after {retry_after} seconds.")
             await asyncio.sleep(retry_after)
             await on_message(message)  # Retry the request
+    except Exception as err:
+        ErrorLog(f"OM: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
 # Start the timer task for responses.
 
