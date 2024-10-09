@@ -98,7 +98,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.690"
+Version="0.0.0.0.701"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1408,7 +1408,7 @@ async def track_active_users():
             for au in list(active_users[ac]):
                 # Check time added againt expiration
                 if (current_time-au[1])>SLOW_MODE_COOLDOWN:
-                    ac.remove(au)
+                    active_users[ac].remove(au)
     except Exception as err:
         ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1604,7 +1604,7 @@ async def on_typing(channel, user, when):
         # Apply slow mode
         await channel.edit(slowmode=slow_mode_duration)
         last_slow_mode_change[key] = current_time  # Update the last change time
-        print(f"Adjusted slow mode for {channel.name} to {slow_mode_duration} seconds based on {typing_count} users typing simultaneously, using {expected_users} expected users as a threshold.")
+        print(f"Slowmode {channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
     except Exception as err:
         ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1848,7 +1848,7 @@ async def on_message(message):
                 ErrorLog("Lock failed OM")
     except discord.HTTPException as err:
         if err.code==429:  # Rate limit error
-            retry_after=int(e.response.headers.get('X-RateLimit-Reset', 1))+1
+            retry_after=int(err.response.headers.get('X-RateLimit-Reset', 1))+1
             print(f"Rate limit hit. Retrying after {retry_after} seconds.")
             await asyncio.sleep(retry_after)
             await on_message(message)  # Retry the request
