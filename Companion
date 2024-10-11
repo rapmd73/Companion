@@ -9,6 +9,16 @@
 
 #   This program uses ADMINISTRATOR priviledges.
 
+# Forum and thread support is a strange approach. Threads are treated like channels,
+# with a few extra bits. Webhooks, slowdown mode, edits, even the way message are sent
+# into the thread is effected. Activitieshave to be tested and is it is a thread, most
+# of the time, you have to pull the parent channel. Webhooks and slowdown mode, in
+# particular, do NOT have separate functionalities of a channel, even though discord
+# treats them like a channel.
+
+### *** At some point, I'm going to really have to rewrite this. The thread detection
+###     code is a stinking hot mess and scattered everywhere.
+
 # Listed in order of when the service was added.
 
 # added openai
@@ -40,7 +50,7 @@
 #   %yttags     Get YouTube video tage, if there are any.
 #   %Forget
 
-# Developer only:
+# Developer/Admin only:
 
 #   %PurgeRequests
 #   %CheckBot
@@ -52,8 +62,7 @@
 #   Anti raid/nuke
 #   Ticket management
 #   Anti nudity verification for images.
-
-# Add URL check (abuseIPDB) verifications.
+#   URL check (abuseIPDB) verifications.
 
 # Disable 3rd party logging.
 import warnings
@@ -155,7 +164,8 @@ intents.guilds=True
 # Create a Discord client
 client=discord.Client(intents=intents)
 
-### Really need to make these files on disk and not global memory lists.
+### Really need to make these files on disk and not global memory lists, for
+### sharding/multi process management.
 
 # List to store pending requests
 request_list=[]
@@ -703,14 +713,13 @@ def GetBabble(message,text):
             ForgetThisMessage=True
             input_text=input_text[3:]
 
-# NEEDS MASSIVE FIX to trace thread id back to parent channel for permissions and bot access
-
         # Load the persona and memory files
-        # NSFW not allowed in threads, so find parent channel
+        # NSFW not allowed in threads directly, so find parent channel
+        # Question: Do we take info of NSFW state or force verify? Currebt is face value
         bot=None
         if isinstance(message.channel,discord.Thread):
             pchannel=str(message.channel.parent)
-            bot=GetCompanionPersona(pchannel,message.channel.parent.nsfw)
+            bot=GetCompanionPersona(pchannel,nsfw)   # message.channel.parent.nsfw
         else:
             bot=GetCompanionPersona(channel,nsfw)
 
@@ -1541,7 +1550,6 @@ async def on_message_edit(before, after):
             nsfw=after.channel.nsfw
 
         channel=str(pchannel)
-        print(channel,nsfw)
         uid=str(after.author.id)
         bot=GetCompanionPersona(channel,nsfw)
 
@@ -1600,7 +1608,7 @@ async def on_message_delete(message):
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
-    bot=GetCompanionPersona(channel)
+    bot=GetCompanionPersona(channel,message,channel.nsfw)
 
     # Log everything
     DisectMessage("Deleted message",message)
