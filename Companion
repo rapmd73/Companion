@@ -98,7 +98,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.710"
+Version="0.0.0.0.750"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -439,6 +439,9 @@ def ErrorLog(text):
             fh=open(fn,'a+')
             fh.write(s)
             fh.close()
+
+            # print to console
+            print(s)
         except:
             pass
         LoggingLock.release()
@@ -555,6 +558,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         Config['Channels']={}
 
     bot={}
+    # Welcome should really be Default
     if Welcome==True:
         bot['BotName']=Config['Welcome']
         bot['Channel']=None
@@ -643,20 +647,21 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         bot|=settings
 
     # Run through some sanity checks.
-    # Default: NO bot will be processed
+    if 'AutoModeration' not in bot:
+        bot['AutoModeration']='yes'
     if 'AllowBot' not in bot:
         bot['AllowBot']='no'
     if 'Engine' not in bot:
         bot['Engine']="openai"
     if 'Model' not in bot:
-        bot['Model']="gpt-3.5-turbo"
+        bot['Model']="gpt-4o-mint"
     if 'FreqPenality' not in bot:
-        bot['FreqPenality']=2
+        bot['FreqPenality']=0.67
     else:
         if type(bot['FreqPenality'])!=float:
             bot['FreqPenality']=float(bot['FreqPenality'])
     if 'Temperature' not in bot:
-        bot['Temperature']=1
+        bot['Temperature']=0.37
     else:
         if type(bot['Temperature'])!=float:
             bot['Temperature']=float(bot['Temperature'])
@@ -668,7 +673,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         if type(bot['DeveloperUID'])!=int:
             bot['DeveloperUID']=int(bot['DeveloperUID'])
     if 'MaxMemory' not in bot:
-        bot['MaxMemory']=5
+        bot['MaxMemory']=100
     else:
         if type(bot['MaxMemory'])!=int:
             bot['MaxMemory']=int(bot['MaxMemory'])
@@ -678,10 +683,12 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 
 # This function handle the actual responses.
 
-def GetBabble(text):
+def GetBabble(message,text):
     try:
         # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
         # we don't have any global variables.
+
+        # EXTEND to: GuildID/ChannelID:NSFW/MessageID/UID/input
 
         dataline=text.split('/')
         uid=dataline[0]
@@ -696,8 +703,16 @@ def GetBabble(text):
             ForgetThisMessage=True
             input_text=input_text[3:]
 
+# NEEDS MASSIVE FIX to trace thread id back to parent channel for permissions and bot access
+
         # Load the persona and memory files
-        bot=GetCompanionPersona(channel,nsfw)
+        # NSFW not allowed in threads, so find parent channel
+        bot=None
+        if isinstance(message.channel,discord.Thread):
+            pchannel=str(message.channel.parent)
+            bot=GetCompanionPersona(pchannel,message.channel.parent.nsfw)
+        else:
+            bot=GetCompanionPersona(channel,nsfw)
 
         persona=[]
         mList=[]
@@ -815,28 +830,44 @@ def GetBabble(text):
 # Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
 
 async def HandleOneMessage(request):
+#                msg['input']=input_text
+#                msg['gid']=guild.id
+#                msg['cid']=message.channel.id
+#                msg['mid']=message.id
     global request_list
 
     with concurrent.futures.ThreadPoolExecutor() as pool:
         try:
-            message=request['message']
+            input_text=request['input']
+            guild=client.get_guild(request['gid'])
+            channel=await guild.fetch_channel(request['cid'])
+            message=await channel.fetch_message(request['mid'])
 
             uid=str(message.author.id)
             author=str(message.author.mention)
             channel=str(message.channel)
 
-            # Figure out which persona is calling the shots.
-            bot=GetCompanionPersona(channel,message.channel.nsfw)
-
-            # User's responce/input
-            input_text=request['arg']
+            # NSFW not allowed in threads, so find parent channel
+            bot=None
+            if isinstance(message.channel,discord.Thread):
+                pchannel=message.channel.parent
+                bot=GetCompanionPersona(str(pchannel),pchannel.nsfw)
+                nsfw=str(pchannel.nsfw)[0]
+                # WTAF? Really? bots have to join a thread...
+                if not message.channel.me:
+                    await message.channel.join()
+            else:
+                bot=GetCompanionPersona(str(message.channel),message.channel.nsfw)
+                nsfw=str(message.channel.nsfw)[0]
 
             # Convert boolean to str as a passing argument.
-            nsfw=str(message.channel.nsfw)[0]
             print('U',nsfw,uid,message.author,message.channel,message.content)
 
             # Handle any vulgarity
-            if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()=='no' and not message.channel.nsfw:
+            if bot['AutoModeration'].lower()!='no' \
+            and os.path.exists(bot['Vulgarity']) \
+            and bot['AllowVulgarity'].lower()=='no' \
+            and not nsfw=='T':
                 if bool(pc.predict([ input_text ]))==True:
                     await send_response(bot,message,PickRandomResponse(bot['Vulgarity']),delete=57)
                     try: # delete the offending message
@@ -845,9 +876,10 @@ async def HandleOneMessage(request):
                         pass
                     return
                 else:
-                    response=await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                    istr=f"{uid}/{channel}:{nsfw}/{input_text}"
+                    response=await client.loop.run_in_executor(pool, GetBabble,message, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
             else:
-                response=await client.loop.run_in_executor(pool, GetBabble, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                response=await client.loop.run_in_executor(pool, GetBabble,message, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
 
             print('B',client.user.id,bot['BotName'],message.channel,response)
 
@@ -858,7 +890,12 @@ async def HandleOneMessage(request):
             else:
                 # Communication with AI failed. Put message back in queue
                 if ResponseLock.acquire(timeout=ResponseTimeout):
-                    request_list.append({'arg': input_text, 'message': message} )
+                    msg={}
+                    msg['input']=input_text
+                    msg['gid']=guild.id
+                    msg['cid']=message.channel.id
+                    msg['mid']=message.id
+                    request_list.append(msg)
                     ResponseLock.release()
                 else:
                     ErrorLog("Lock failed Reput Message")
@@ -1157,8 +1194,22 @@ def DisectMessage(event,message):
         nickname=member.nick if member and member.nick else author.name
 
         try:
+            # Checking different channel types with isinstance
+            if isinstance(channel, discord.TextChannel):
+                insttype="Text Channel"
+            elif isinstance(channel, discord.VoiceChannel):
+                insttype="Voice Channel"
+            elif isinstance(channel, discord.Thread):
+                insttype="Thread"
+            elif isinstance(channel, discord.DMChannel):
+                insttype="Direct Message"
+            elif isinstance(channel, discord.CategoryChannel):
+                insttype="Category Channel"
+            else:
+                insttype="Unknown Channel"
+
             WriteLog(uid,channel,f"Event trigger: {event}")
-            WriteLog(uid,channel,f"Message: {message.id}/{message.type}")
+            WriteLog(uid,channel,f"Message: {message.id}/{message.type}/{insttype}")
             WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
             WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
             WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{author.display_name}/{message.author.id} Bot: {message.author.bot}")
@@ -1255,43 +1306,59 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
     whmsg=[]
 
     try:
-        # Purge all companion webhooks
         if bot['Channel']==None:
             webhooks=await member.guild.system_channel.webhooks()
         else:
-            webhooks=await message.channel.webhooks()
+            # If its a thread, get the parent channel
+            pchannel=message.channel
+            if isinstance(message.channel,discord.Thread):
+                pchannel=message.channel.parent
+            webhooks=await pchannel.webhooks()
 
         # Delete all webhooks with the name "Companion Temporary Webhook"
         for webhook in webhooks:
             if webhook.name=='Companion Temporary Webhook':
                 await webhook.delete()
 
+        threadID=None
         # Create a new webhook
         if bot['Channel']==None:
             syschannel=member.guild.system_channel
             webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
             author=None
         else:
-            webhook=await message.channel.create_webhook(name='Companion Temporary Webhook')
+            # Handle thread issues, get parent channel
+            pchannel=message.channel
+            if isinstance(message.channel,discord.Thread):
+                pchannel=message.channel.parent
+            webhook=await pchannel.create_webhook(name='Companion Temporary Webhook')
             # Get the name of the person this message is going to
             author=str(message.author.mention)
+            if isinstance(message.channel,discord.Thread):
+                threadID=message.channel # Actual thread ID
 
         # If the message is less then 1900 characters, just send it with a reply.
-        if len(response)<=1900 or embed!=None:
-            if embed!=None:
-                if author!=None:
-                    x1=f"{author}"
-                else:
-                    x1=''
-                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-                whmsg.append(wm)
+        if embed!=None:
+            if author!=None:
+                x1=f"{author}"
             else:
-                if author!=None:
-                    x1=f"{author} {response}"
-                else:
-                    x1=f"{response}"
+                x1=''
+            if threadID:
+                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+            else:
+                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+            whmsg.append(wm)
+        elif len(response)<=1900:
+            if author!=None:
+                x1=f"{author} {response}"
+            else:
+                x1=f"{response}"
+            # sending with and without threads must be separate
+            if threadID:
+                wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+            else:
                 wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-                whmsg.append(wm)
+            whmsg.append(wm)
         else:
             # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
             # message parts.
@@ -1312,14 +1379,20 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
                             # Brute split
                             pmax=1900
                 if len(x1[:p])>0:
-                    wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                    if threadID:
+                        wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+                    else:
+                        wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
                     whmsg.append(wm)
                 if x1[p]=='.' or x1[p]==' ':
                     p+=1
                 x1=x1[p:].strip()
                 l=len(x1)
             if l>0:
-                wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                if threadID:
+                    wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+                else:
+                    wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
                 whmsg.append(wm)
 
         # Queue autodelete messages. Responses can be multiple messages.
@@ -1333,6 +1406,8 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
         # Delete the webhook
         await webhook.delete()
     except discord.errors.HTTPException as err:
+        ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+    except Exception as err:
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 ###
@@ -1452,15 +1527,24 @@ async def on_message_edit(before, after):
                 break
         return Found
 
-    # if before and after content are the same, nothing to do
-    if after.content==before.content:
-        return
-
-    channel=str(after.channel)
-    uid=str(after.author.id)
-    bot=GetCompanionPersona(channel)
-
     try:
+        if after.content==before.content:
+            return
+
+        # If this is a thread, get the parent channel
+        pchannel=after.channel
+        nsfw=None
+        if isinstance(after.channel,discord.Thread):
+            pchannel=after.channel.parent
+            nsfw=after.channel.parent.nsfw
+        else:
+            nsfw=after.channel.nsfw
+
+        channel=str(pchannel)
+        print(channel,nsfw)
+        uid=str(after.author.id)
+        bot=GetCompanionPersona(channel,nsfw)
+
         # Log everything
         DisectMessage("Message edited (before)",before)
         DisectMessage("Message edited (after)",after)
@@ -1481,7 +1565,10 @@ async def on_message_edit(before, after):
         # This could be a problem at the global level of a server, where partial moderation may be desired,
         # vs an absolute approach.
 
-        if os.path.exists(bot['Vulgarity']) and bot['AllowVulgarity'].lower()!='yes' and not after.channel.nsfw:
+        if bot['AutoModeration'].lower()!='no' \
+        and os.path.exists(bot['Vulgarity']) \
+        and bot['AllowVulgarity'].lower()!='yes' \
+        and not nsfw:
             if bool(pc.predict([ after.content ]))==True:
                 await send_response(bot,after,PickRandomResponse(bot['Vulgarity']),delete=57)
                 try: # delete the offending message
@@ -1492,7 +1579,7 @@ async def on_message_edit(before, after):
 
         if leftFound and rightFound:
             # This seems to be a better way to ruin the attacker's plan
-            msg=discord.Embed(
+            embed=discord.Embed(
                 title='Message edited',
                 description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
                 color=discord.Color.red() )
@@ -1504,11 +1591,7 @@ async def on_message_edit(before, after):
             return
 
     except Exception as err:
-        ErrorLog('Broken Edit:', str(err))
-        ErrorLog('  UID:',after.author.id)
-        ErrorLog('  User:',after.author)
-        ErrorLog('  Before:',before.content)
-        ErrorLog('  After:',after.content)
+        ErrorLog(f'Broken Edit: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # Log deleted messages. Nothing escapes the watchful eye of the moderation system
 
@@ -1530,9 +1613,18 @@ async def on_message_delete(message):
 @client.event
 async def on_member_join(member):
     ErrorLog(f"OMJ: {member}")
-    # Handle any vulgarity
     try:
+        # Welcome forces the default bot.
         bot=GetCompanionPersona(None,Welcome=True)
+
+        # If there is a moderator area, send a message to it.
+        if 'ModerationArea' in bot:
+            guild=member.guild
+            for channel in guild.channels:
+                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+                    await channel.send(f"{member.mention}/{member.id} joined.")
+                    break
+
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
             response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
@@ -1546,6 +1638,19 @@ async def on_member_join(member):
 @client.event
 async def on_member_remove(member):
     ErrorLog(f"OMR: {member}")
+    try:
+        # Welcome forces the default bot.
+        bot=GetCompanionPersona(None,Welcome=True)
+
+        # If there is a moderator area, send a message to it.
+        if 'ModerationArea' in bot:
+            guild=member.guild
+            for channel in guild.channels:
+                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+                    await channel.send(f"{member.mention}/{member.id} left.")
+                    break
+    except Exception as err:
+        ErrorLog(f'OMR: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # Implement an auto slowmode based on actual usera typing per channel
 @client.event
@@ -1553,8 +1658,13 @@ async def on_typing(channel, user, when):
     global active_users
 
     try:
+        # If this is a thread, get the parent channel
+        pchannel=channel
+        if isinstance(channel,discord.Thread):
+            pchannel=channel.parent
+
         # Create a unique key for the channel using guild and channel IDs
-        key = f"{channel.guild.id}.{channel.id}"
+        key = f"{pchannel.guild.id}.{pchannel.id}"
 
         # When this function gets called, someone was typing. Add them to the channel
         # tracking list.
@@ -1613,7 +1723,7 @@ async def on_typing(channel, user, when):
             slow_mode_duration = 0
 
         # Apply slow mode
-        await channel.edit(slowmode=slow_mode_duration)
+        await pchannel.edit(slowmode=slow_mode_duration)
         last_slow_mode_change[key] = current_time  # Update the last change time
         print(f"Slowmode {channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
     except Exception as err:
@@ -1628,6 +1738,9 @@ async def on_message(message):
     global request_list
 
     try:
+        # Log everything
+        DisectMessage("Received message",message)
+
         # Figure out which persona is calling the shots.
         channel=str(message.channel)
         uid=str(message.author.id)
@@ -1636,10 +1749,18 @@ async def on_message(message):
         if message.channel.type==discord.ChannelType.news:
             await message.publish()
 
-        bot=GetCompanionPersona(channel,message.channel.nsfw)
-
-        # Log everything
-        DisectMessage("Received message",message)
+        # NSFW not allowed in threads, so find parent channel
+        nsfw=False
+        if isinstance(message.channel,discord.Thread):
+            pchannel=str(message.channel.parent)
+            nsfw=message.channel.parent.nsfw
+            bot=GetCompanionPersona(pchannel,nsfw)
+            # WTAF? Really? bots have to join a thread...
+            if not message.channel.me:
+                await message.channel.join()
+        else:
+            nsfw=message.channel.nsfw
+            bot=GetCompanionPersona(channel,nsfw)
 
         # Ignore messages from the bot itself
         if message.author==client.user:
@@ -1838,13 +1959,18 @@ async def on_message(message):
                     return
 
             # If this is a direct reply or a mention, give a slightly more personal response
-            if (message.reference and message.reference.resolved.author.id==client.user.id) \
-            or (client.user in message.mentions):
-                input_text+=' [warm, friendly]'
+#            if (message.reference and message.reference.resolved.author.id==client.user.id) \
+#            or (client.user in message.mentions):
+#                input_text+=' [warm, friendly]'
 
             # Give the AI the message
             if ResponseLock.acquire(timeout=ResponseTimeout):
-                request_list.append({'arg': input_text, 'message': message} )
+                msg={}
+                msg['input']=input_text
+                msg['gid']=guild.id
+                msg['cid']=message.channel.id
+                msg['mid']=message.id
+                request_list.append(msg)
                 ResponseLock.release()
             else:
                 ErrorLog("Lock failed OM")
