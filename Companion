@@ -16,7 +16,7 @@
 # particular, do NOT have separate functionalities of a channel, even though discord
 # treats them like a channel.
 
-### *** At some point, I'm going to really have to rewrite this. The thread detection
+### *** At some point, I'm going to really have to rewrite this. The forum/thread detection
 ###     code is a stinking hot mess and scattered everywhere.
 
 # Listed in order of when the service was added.
@@ -107,7 +107,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.750"
+Version="0.0.0.0.770"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -388,16 +388,13 @@ def ReadTokens():
             tokens=json.loads(jsonFilter(ReadFile(tfile)))
         except Exception as err:
             ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
-            print("Error token file is not in JSON format. Please see README.md for new layout")
             sys.exit(1)
     else:
         ErrorLog(f"Missing token file: {tfile}")
-        print(f"Missing token file: {tfile}")
         sys.exit(1)
 
     if 'Discord' not in tokens:
         ErrorLog("The MUST be a Discord API reference in the tokens file")
-        print("The MUST be a Discord API reference in the tokens file")
         sys.exit(1)
 
     return tokens
@@ -574,12 +571,13 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         bot['Channel']=None
     else:
         Channels=Config['Channels']
+        bot['Channel']=channel
         if channel in Channels:
             bot['BotName']=Channels[channel]
-            bot['Channel']=channel
+            bot['ResponseAllowed']='Yes'
         else:
             bot['BotName']=Config['Default']
-            bot['Channel']=None
+            bot['ResponseAllowed']='No'
 
     # Sort out loading a persona by channel and NSFW possibilities.
 
@@ -592,7 +590,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     # System Role
     # Test channel NSFW
     BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.system.nsfw"
-    if os.path.exists(BotSystem):
+    if nsfw and os.path.exists(BotSystem):
         bot['System']=BotSystem
     else:
         # Test channel SFW
@@ -602,7 +600,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         else:
             # Test global NSFW
             BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.system.nsfw"
-            if os.path.exists(BotSystem):
+            if nsfw and os.path.exists(BotSystem):
                 bot['System']=BotSystem
             else:
                 # global SFW
@@ -611,7 +609,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     # Persona file
     # Test channel NSFW
     BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona.nsfw"
-    if os.path.exists(BotPersona):
+    if nsfw and os.path.exists(BotPersona):
         bot['Persona']=BotPersona
     else:
         # Test channel SFW
@@ -621,7 +619,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         else:
             # Test global NSFW
             BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona.nsfw"
-            if os.path.exists(BotPersona):
+            if nsfw and os.path.exists(BotPersona):
                 bot['Persona']=BotPersona
             else:
                 # global SFW
@@ -870,7 +868,7 @@ async def HandleOneMessage(request):
                 nsfw=str(message.channel.nsfw)[0]
 
             # Convert boolean to str as a passing argument.
-            print('U',nsfw,uid,message.author,message.channel,message.content)
+            print('U',nsfw,uid,message.author,message.channel,len(message.content))
 
             # Handle any vulgarity
             if bot['AutoModeration'].lower()!='no' \
@@ -890,7 +888,7 @@ async def HandleOneMessage(request):
             else:
                 response=await client.loop.run_in_executor(pool, GetBabble,message, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
 
-            print('B',client.user.id,bot['BotName'],message.channel,response)
+            print('B',client.user.id,bot['BotName'],message.channel,len(response))
 
             # Check to see if we actually got a response
             if response!=None and response.lower().strip()!="none":
@@ -1204,15 +1202,15 @@ def DisectMessage(event,message):
 
         try:
             # Checking different channel types with isinstance
-            if isinstance(channel, discord.TextChannel):
+            if isinstance(message.channel, discord.TextChannel):
                 insttype="Text Channel"
-            elif isinstance(channel, discord.VoiceChannel):
+            elif isinstance(message.channel, discord.VoiceChannel):
                 insttype="Voice Channel"
-            elif isinstance(channel, discord.Thread):
+            elif isinstance(message.channel, discord.Thread):
                 insttype="Thread"
-            elif isinstance(channel, discord.DMChannel):
+            elif isinstance(message.channel, discord.DMChannel):
                 insttype="Direct Message"
-            elif isinstance(channel, discord.CategoryChannel):
+            elif isinstance(message.channel, discord.CategoryChannel):
                 insttype="Category Channel"
             else:
                 insttype="Unknown Channel"
@@ -1654,7 +1652,8 @@ async def on_member_remove(member):
         if 'ModerationArea' in bot:
             guild=member.guild
             for channel in guild.channels:
-                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+#                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+                if channel.name==bot['ModerationArea']:
                     await channel.send(f"{member.mention}/{member.id} left.")
                     break
     except Exception as err:
@@ -1874,7 +1873,7 @@ async def on_message(message):
             if str(message.content).strip().startswith('%CheckBot'):
                 member=message.guild.get_member(client.user.id) # Get the bot's member object in the guild
                 # Check if the bot is a member of the channel
-                if member in message.channel.members:
+                if member in message.channel.members and bot['ResponseAllowed'].lower()=='yes':
                     await send_response(bot,message,"Allowed",delete=57)
                 else:
                     await send_response(bot,message,"Not Allowed",delete=57)
@@ -1900,7 +1899,7 @@ async def on_message(message):
                 return
 
         # If we have a bot, then we can converse here.
-        if bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
+        if bot['ResponseAllowed'].lower()=='yes' and bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
             input_text=message.content.strip()
 
             # If a trigger file exists, check to see if one on the trigger words are in the user message.

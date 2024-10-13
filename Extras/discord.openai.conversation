@@ -13,10 +13,12 @@ import tiktoken
 ###
 
 # Discord
-DiscordToken="Your Discord Token"
+DiscordToken='Your Token'
 # OpenAI API: do NOT share
-AIAPI="Your OpenAI key"
+AIAPI="Your API key"
 
+# System file for conversations
+SystemFile='discord.openai.system'
 # Memory file for conversations
 MemoryFile='discord.openai.memory'
 
@@ -38,11 +40,6 @@ def ReadFile(fn):
     else:
         buffer=None
     return buffer
-
-def WriteFile(fn,data):
-    cf=open(fn,'w')
-    cf.write(data)
-    cf.close()
 
 ###
 ### OpenAI functions
@@ -107,12 +104,20 @@ def GetOpenAI(persona):
 # Build the conversation and save it for furure reference
 def GetBabble(input_text):
     persona=[]
+    sysList=[]
     pList=[]
     mList=[]
 
+    # Read system role from system tag file
+    # { "role": "system", "content": ""}
+
+    if os.path.exists(SystemFile):
+        buff=ReadFile(SystemFile).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
+        sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
+
     if os.path.exists(MemoryFile):
         mList=ReadFile(MemoryFile).strip().split('\n')
-        pList+=mList
+    pList=sysList+mList
 
     for s in pList:
         try:
@@ -156,7 +161,6 @@ async def send_response(message,response):
         if message==None:
             author=None
             channel=member.guild.system_channel
-            webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
             author=None
         else:
             author=str(message.author.mention)
@@ -211,6 +215,7 @@ async def on_message(message):
         return
 
     response=GetBabble(message.content)
+#    await message.channel.send(response)
     await send_response(message,response)
 
 ###
