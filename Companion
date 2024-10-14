@@ -448,7 +448,7 @@ def ErrorLog(text):
             fh.close()
 
             # print to console
-            print(s)
+            print(txt)
         except:
             pass
         LoggingLock.release()
@@ -559,13 +559,16 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         Config=json.loads(jsonFilter(ReadFile(cfg)))
     except Exception as err:
         ErrorLog(f"{cfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return
+        return None
 
     if 'Channels' not in Config:
         Config['Channels']={}
 
     bot={}
-    # Welcome should really be Default
+
+    # Welcome should really be Default. If more then one bot it listed, comma separated, one one random,
+    # and vwerify that it has a welcome file.
+
     if Welcome==True:
         bot['BotName']=Config['Welcome']
         bot['Channel']=None
@@ -1653,6 +1656,8 @@ async def on_member_remove(member):
             guild=member.guild
             for channel in guild.channels:
 #                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+                ErrorLog(channel.name,bot['ModerationArea'],channel.name==bot['ModerationArea'])
+
                 if channel.name==bot['ModerationArea']:
                     await channel.send(f"{member.mention}/{member.id} left.")
                     break
