@@ -55,6 +55,10 @@
 #   %PurgeRequests
 #   %CheckBot
 
+# Needed functionality
+
+#   Purge memory that are older then X days automatically
+
 # Wanted features:
 
 #   Imposter detection - completed
@@ -107,7 +111,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.770"
+Version="0.0.0.0.780"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -115,8 +119,10 @@ RunningName=sys.argv[0]
 
 # Persona base folder. This is where all personas are stored.
 
-CompanionStorage='/home/Companion/Personas'
-LoggingDir='/home/Companion/Logs'
+CompanionBase='/home/Companion'
+CompanionStorage=f'{CompanionBase}/Personas'
+MemoryStorage=f'{CompanionBase}/History/Memory'
+LoggingStorage=f'{CompanionBase}/History/Logs'
 
 # For anagram solver
 AnagramWordList="/home/Companion/AnagramSolver.txt"
@@ -175,6 +181,12 @@ delete_list=[]
 ###
 ### General file tools
 ###
+
+# Cheap mkdir
+
+def mkdir(fn):
+    if not os.path.exists(fn):
+        os.makedirs(fn,exist_ok=True)
 
 # Helper function to download and load an image from a URL
 
@@ -404,7 +416,8 @@ def ReadTokens():
 def RawLog(text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
         try:
-            fn=LoggingDir+'/RAWDUMP.log'
+            mkdir(LoggingStorage)
+            fn=f'{LoggingStorage}/RAWDUMP.log'
             fh=open(fn,'w')
             fh.write(text)
             fh.close()
@@ -423,7 +436,9 @@ def WriteLog(uid,channel,text):
 
             s=f'{time} {uid} {channel} {txt}\n'
 
-            fn=LoggingDir+'/'+str(channel)+'.log'
+            dn=f'{LoggingStorage}/{channel.guild.id}'
+            mkdir(dn)
+            fn='{dn}/{channel.name}.log'
             fh=open(fn,'a+')
             fh.write(s)
             fh.close()
@@ -442,7 +457,8 @@ def ErrorLog(text):
 
             s=f'{time} {txt}\n'
 
-            fn=LoggingDir+'/Errors.log'
+            mkdir(LoggingStorage)
+            fn=LoggingStorage+'/Errors.log'
             fh=open(fn,'a+')
             fh.write(s)
             fh.close()
@@ -658,6 +674,8 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
         bot|=settings
 
     # Run through some sanity checks.
+    if 'AutoLogging' not in bot:
+        bot['AutoLogging']='yes'
     if 'AutoModeration' not in bot:
         bot['AutoModeration']='yes'
     if 'AllowBot' not in bot:
@@ -665,7 +683,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     if 'Engine' not in bot:
         bot['Engine']="openai"
     if 'Model' not in bot:
-        bot['Model']="gpt-4o-mint"
+        bot['Model']="gpt-4o-mini"
     if 'FreqPenality' not in bot:
         bot['FreqPenality']=0.67
     else:
@@ -696,12 +714,13 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
 
 def GetBabble(message,text):
     try:
-        # The "uid" and "channel" are used to load the persona and store the memory to disk. At this point,
-        # we don't have any global variables.
+        # The "uid" and "channel" are used to load the persona and store the memory to
+        # disk. At this point, we don't have any global variables.
 
         # EXTEND to: GuildID/ChannelID:NSFW/MessageID/UID/input
 
         dataline=text.split('/')
+        gid=message.guild.id
         uid=dataline[0]
         channel,cnsfw=dataline[1].split(':')
         nsfw=(cnsfw=='T')
@@ -744,7 +763,9 @@ def GetBabble(message,text):
         pList=sysList+pfList
 
         # Load memory files, if one exists.
-        fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
+        dn=f"{MemoryStorage}/{gid}/{bot['BotName']}"
+        mkdir(dn)
+        fn=f"{dn}/{bot['BotName']}.{uid}.{channel}.memory"
         if os.path.exists(fn):
             mList=ReadFile(fn).strip().split('\n')
             pList+=mList
@@ -887,9 +908,10 @@ async def HandleOneMessage(request):
                     return
                 else:
                     istr=f"{uid}/{channel}:{nsfw}/{input_text}"
-                    response=await client.loop.run_in_executor(pool, GetBabble,message, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                    response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
             else:
-                response=await client.loop.run_in_executor(pool, GetBabble,message, str(uid)+'/'+channel+':'+nsfw+'/'+input_text)
+                istr=f"{uid}/{channel}:{nsfw}/{input_text}"
+                response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
 
             print('B',client.user.id,bot['BotName'],message.channel,len(response))
 
@@ -1554,9 +1576,14 @@ async def on_message_edit(before, after):
         uid=str(after.author.id)
         bot=GetCompanionPersona(channel,nsfw)
 
+        # Manage automated moderation
+        if bot['AutoModeration'].lower()=='no':
+            return
+
         # Log everything
-        DisectMessage("Message edited (before)",before)
-        DisectMessage("Message edited (after)",after)
+        if bot['AutoLogging'].lower()!='no':
+            DisectMessage("Message edited (before)",before)
+            DisectMessage("Message edited (after)",after)
 
         # Build leet lists
 
@@ -1612,7 +1639,8 @@ async def on_message_delete(message):
     bot=GetCompanionPersona(channel,message,channel.nsfw)
 
     # Log everything
-    DisectMessage("Deleted message",message)
+    if bot['AutoLogging'].lower()!='no':
+        DisectMessage("Deleted message",message)
 
 # Make a nice announcement welcoming the user to the server.
 
@@ -1621,10 +1649,12 @@ async def on_message_delete(message):
 
 @client.event
 async def on_member_join(member):
-    ErrorLog(f"OMJ: {member}")
     try:
         # Welcome forces the default bot.
         bot=GetCompanionPersona(None,Welcome=True)
+
+        if bot['AutoLogging'].lower()!='no':
+            ErrorLog(f"OMJ: {member}")
 
         # If there is a moderator area, send a message to it.
         if 'ModerationArea' in bot:
@@ -1646,10 +1676,12 @@ async def on_member_join(member):
 
 @client.event
 async def on_member_remove(member):
-    ErrorLog(f"OMR: {member}")
     try:
         # Welcome forces the default bot.
         bot=GetCompanionPersona(None,Welcome=True)
+
+        if bot['AutoLogging'].lower()!='no':
+            ErrorLog(f"OMR: {member}")
 
         # If there is a moderator area, send a message to it.
         if 'ModerationArea' in bot:
@@ -1750,9 +1782,6 @@ async def on_message(message):
     global request_list
 
     try:
-        # Log everything
-        DisectMessage("Received message",message)
-
         # Figure out which persona is calling the shots.
         channel=str(message.channel)
         uid=str(message.author.id)
@@ -1773,6 +1802,10 @@ async def on_message(message):
         else:
             nsfw=message.channel.nsfw
             bot=GetCompanionPersona(channel,nsfw)
+
+        # Log everything
+        if bot['AutoLogging'].lower()!='no':
+            DisectMessage("Received message",message)
 
         # Ignore messages from the bot itself
         if message.author==client.user:
@@ -1868,7 +1901,9 @@ async def on_message(message):
 
         if str(message.content).strip().startswith('%Forget'):
             await message.delete()
-            fn=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{uid}.{channel}.memory"
+            dn=f"{MemoryStorage}/{channel.guild.id}/{bot['BotName']}"
+            mkdir(dn)
+            fn=f"{dn}/{bot['BotName']}.{uid}.{channel}.memory"
             if os.path.exists(fn):
                 os.remove(fn)
                 await send_response(bot,message,"Conversation forgotten",delete=57)
@@ -2001,19 +2036,23 @@ async def on_message(message):
 async def on_ready():
     print(f'Logged in as {client.user}')
 
-    # Start the task when the bot is ready
-    update_response_data.start()
-    autodelete_messages.start()
-    track_active_users.start()
-
     # Print some fluff
     print("In guilds:")
     for guild in client.guilds:
+        mkdir(f'{MemoryStorage}/{guild.id}')
+        mkdir(f'{LoggingStorage}/{guild.id}')
+
         print(f" {guild.name} ({guild.id}), {guild.member_count} members")
 
         # Check if the bot's role has administrator permissions
         if not guild.me.guild_permissions.administrator:
             print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+
+    # Start the task when the bot is ready
+    update_response_data.start()
+    autodelete_messages.start()
+    track_active_users.start()
+
     print("Ready to serve!")
 
 ###
