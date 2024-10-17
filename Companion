@@ -1901,7 +1901,7 @@ async def on_message(message):
 
         if str(message.content).strip().startswith('%Forget'):
             await message.delete()
-            dn=f"{MemoryStorage}/{channel.guild.id}/{bot['BotName']}"
+            dn=f"{MemoryStorage}/{guild.id}/{bot['BotName']}"
             mkdir(dn)
             fn=f"{dn}/{bot['BotName']}.{uid}.{channel}.memory"
             if os.path.exists(fn):
