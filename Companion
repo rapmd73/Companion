@@ -111,7 +111,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.780"
+Version="0.0.0.0.790"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -580,7 +580,7 @@ def GetCompanionPersona(channel,nsfw=False,Welcome=False):
     if 'Channels' not in Config:
         Config['Channels']={}
 
-    bot={}
+    bot=Config.copy()
 
     # Welcome should really be Default. If more then one bot it listed, comma separated, one one random,
     # and vwerify that it has a welcome file.
@@ -1136,7 +1136,7 @@ def youtube2text(video_url):
         # Use the TextFormatter to convert the transcript into plain text
         transcript_text='\n'.join(line['text'] for line in transcript_list)
 
-        return transcript_text
+        return 'Video Transcript: '+transcript_text
     except Exception as err:
         ErrorLog(f"Broke youtube2text: {sys.exc_info()[-1].tb_lineno}/{err}")
     return None
@@ -1148,7 +1148,7 @@ def PDF2Text(pdf_buffer):
         text=""
         for page in pdf.pages:
             text+=page.extract_text()
-        return text
+        return 'PDF Content: '+text
 
 # Get a URL and scrub it to pure text
 
@@ -1204,7 +1204,7 @@ def html2text(url):
 
         print("URL:",len(text),url)
 
-        return text
+        return 'Web Page Content: '+text
     except Exception as err:
         ErrorLog(f"Broke html2text: {sys.exc_info()[-1].tb_lineno}/{err}")
 
@@ -1791,6 +1791,7 @@ async def on_message(message):
             await message.publish()
 
         # NSFW not allowed in threads, so find parent channel
+        bot=None
         nsfw=False
         if isinstance(message.channel,discord.Thread):
             pchannel=str(message.channel.parent)
@@ -1868,13 +1869,13 @@ async def on_message(message):
         # This is really the only absolute exception to BOT responsing...
         # Check for scam links and delete them.
 
-        # BUILD FALSE POSITIVES LIST
+        # BUILD FALSE POSITIVES LIST, so far I haven't ran into any
 
         if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
             scamurls=ReadFile2List(CompanionScamURLS)
             for url in scamurls:
                 if url in message.content:
-                    print(f"ScamURL: {url} {message.content}")
+                    print(f"ScamURL: {url} {message.author.mention}")
                     author=str(message.author.mention)
                     # If its a bot, it doesn't deserve a response
                     if not message.author.bot:
@@ -1939,7 +1940,30 @@ async def on_message(message):
                 return
 
         # If we have a bot, then we can converse here.
-        if bot['ResponseAllowed'].lower()=='yes' and bot['Channel']!=None and (client.user in message.mentions or not message.mentions):
+
+        # Check to see if the message is a replay to the bot, or a mention or a
+        # public message, specifically that the user used the reply feature of the
+        # APP, or the @ and bot name, if talking to the bot. This convoluted
+        # approach is needed because all bot replies are via webhooks. Webhooks
+        # have different user IDs then the bot.
+
+        # All of this is NECCESSARY if we want the ability to server multiple
+        # personas, each with its own avatar. Discord does NOT allow multiple
+        # avatars per a single user (bot.user) without changing EVERY avatar in
+        # EVERY channel. Using webhooks is the only viable option to acheive
+        # multiple AI personas in an imersive methodology.
+
+        botReference=False
+        if message.reference is not None and message.reference.message_id is not None:
+            refmsg=await message.channel.fetch_message(message.reference.message_id)
+            # ID won't work here because everything is sent via webhook
+            if refmsg.author.name==client.user.name or refmsg.author.name==bot['BotName']:
+                botReference=True
+
+        publicMsg=message.reference==None and len(message.mentions)==0 and len(message.role_mentions)==0 and len(message.channel_mentions)==0
+        botAnswer=publicMsg or botReference or client.user in message.mentions
+
+        if bot['ResponseAllowed'].lower()=='yes' and bot['Channel']!=None and botAnswer:
             input_text=message.content.strip()
 
             # If a trigger file exists, check to see if one on the trigger words are in the user message.
@@ -1963,16 +1987,6 @@ async def on_message(message):
                     # A trigger word was not found, don't continue.
                     if wfound==False:
                         return
-
-            # Check to see if the message is directed to another user. If it is, don't respond.
-            if not message.reference:
-                pass
-
-            # Check if the message is a reply to the AI
-            elif message.reference and message.reference.resolved.author.id==client.user.id:
-                pass
-            else:
-                return
 
             # Anagram solver... how the hell did I end up don the rabbit hole? Really?
 
