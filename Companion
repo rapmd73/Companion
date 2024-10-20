@@ -111,7 +111,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.790"
+Version="0.0.0.0.800"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -427,7 +427,7 @@ def RawLog(text):
 
 # Logging
 
-def WriteLog(uid,channel,text):
+def WriteLog(gid,uid,channel,text):
     if LoggingLock.acquire(timeout=LoggingTimeout):
         try:
             txt=text.replace('\n','\\n').replace('\r','\\r')
@@ -436,13 +436,14 @@ def WriteLog(uid,channel,text):
 
             s=f'{time} {uid} {channel} {txt}\n'
 
-            dn=f'{LoggingStorage}/{channel.guild.id}'
+            dn=f'{LoggingStorage}/{gid}'
             mkdir(dn)
-            fn='{dn}/{channel.name}.log'
+            fn=f'{dn}/{channel}.log'
             fh=open(fn,'a+')
             fh.write(s)
             fh.close()
-        except:
+        except Exception as err:
+            print(f'LOG Broke: {err}')
             pass
         LoggingLock.release()
 
@@ -1219,6 +1220,7 @@ def html2text(url):
 def DisectMessage(event,message):
     if DisectLock.acquire(timeout=DisectTimeout):
         # Set up convience variables
+        gid=message.guild.id
         channel=str(message.channel)
         uid=str(message.author.id)
         author=message.author
@@ -1240,72 +1242,72 @@ def DisectMessage(event,message):
             else:
                 insttype="Unknown Channel"
 
-            WriteLog(uid,channel,f"Event trigger: {event}")
-            WriteLog(uid,channel,f"Message: {message.id}/{message.type}/{insttype}")
-            WriteLog(uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
-            WriteLog(uid,channel,f"Message Pinned: {message.pinned}")
-            WriteLog(uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{author.display_name}/{message.author.id} Bot: {message.author.bot}")
-            WriteLog(uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
-            WriteLog(uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
+            WriteLog(gid,uid,channel,f"Event trigger: {event}")
+            WriteLog(gid,uid,channel,f"Message: {message.id}/{message.type}/{insttype}")
+            WriteLog(gid,uid,channel,f"Message Timestamp: {message.created_at}/{message.edited_at if message.edited_at else 'Not Edited'}")
+            WriteLog(gid,uid,channel,f"Message Pinned: {message.pinned}")
+            WriteLog(gid,uid,channel,f"Message Author: {message.author.name}#{message.author.discriminator}/{nickname}/{author.display_name}/{message.author.id} Bot: {message.author.bot}")
+            WriteLog(gid,uid,channel,f"Message Channel: {message.channel.name}/{message.channel.id}")
+            WriteLog(gid,uid,channel,f"Message Guild: {message.guild.name if message.guild else 'DM'}/{message.guild.id if message.guild else 'DM'}")
             # Check if the message was sent via a webhook
             if message.webhook_id:
-                WriteLog(uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
+                WriteLog(gid,uid,channel,f"Message sent via Webhook ID: {message.webhook_id}")
             # List the users mentioned, if any
             if message.mentions:
-                WriteLog(uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
+                WriteLog(gid,uid,channel,f"Message Mentions: {[str(user) for user in message.mentions]}")
             if message.role_mentions:
-                WriteLog(uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
+                WriteLog(gid,uid,channel,f"Message Mentioned Roles: {[role.name for role in message.role_mentions]}")
             if message.channel_mentions:
-                WriteLog(uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
+                WriteLog(gid,uid,channel,f"Message Mentioned Channels: {[channel.name for channel in message.channel_mentions]}")
             if str(message.content).strip()!='':
-                WriteLog(uid,channel,f"Message Content: {message.content}")
+                WriteLog(gid,uid,channel,f"Message Content: {message.content}")
             else:
-                WriteLog(uid,channel,f"Message Content: Empty content field")
+                WriteLog(gid,uid,channel,f"Message Content: Empty content field")
             if message.reactions:
-                WriteLog(uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
+                WriteLog(gid,uid,channel,f"Message Reactions: {[(reaction.emoji, reaction.count) for reaction in message.reactions]}")
 
             # Log sticker information
             if message.stickers:
-                WriteLog(uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
+                WriteLog(gid,uid, channel, f"Message Stickers: {[{'name': sticker.name, 'id': sticker.id} for sticker in message.stickers]}")
 
             # Log reference information (for replies)
             if message.reference:
                 ref=message.reference
-                WriteLog(uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
+                WriteLog(gid,uid, channel, f"Message is a Reply to: {ref.message_id} in Channel: {ref.channel_id} of Guild: {ref.guild_id}")
 
             # Log details about each embed
             if message.embeds:
-                WriteLog(uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
+                WriteLog(gid,uid,channel,f"Message Embeds: {len(message.embeds)} embeds")
                 for index, embed in enumerate(message.embeds):
-                    WriteLog(uid, channel, f"Embed {index + 1} Title: {embed.title}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Type: {embed.type}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Description: {embed.description}")
-                    WriteLog(uid, channel, f"Embed {index + 1} URL: {embed.url}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Color: {embed.color}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
-                    WriteLog(uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Title: {embed.title}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Type: {embed.type}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Description: {embed.description}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} URL: {embed.url}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Timestamp: {embed.timestamp}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Color: {embed.color}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Footer: {embed.footer.text if embed.footer else 'None'}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Image: {embed.image.url if embed.image else 'None'}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Thumbnail: {embed.thumbnail.url if embed.thumbnail else 'None'}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Author: {embed.author.name if embed.author else 'None'}")
+                    WriteLog(gid,uid, channel, f"Embed {index + 1} Fields: {[{'name': field.name, 'value': field.value} for field in embed.fields]}")
 
             # Log detailed information about each attachment
             if message.attachments:
-                WriteLog(uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
+                WriteLog(gid,uid,channel,f"Message Attachments: {[attachment.url for attachment in message.attachments]}")
                 for index, attachment in enumerate(message.attachments):
-                    WriteLog(uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
-                    WriteLog(uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
-                    WriteLog(uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} Filename: {attachment.filename}")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} Size: {attachment.size} bytes")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} URL: {attachment.url}")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} Proxy URL: {attachment.proxy_url}")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} Height: {attachment.height if attachment.height else 'N/A'}")
+                    WriteLog(gid,uid, channel, f"Attachment {index + 1} Width: {attachment.width if attachment.width else 'N/A'}")
 
             # Log message components (if any)
             if message.components:
-                WriteLog(uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
-            WriteLog(uid,channel,f"{'-'*80}")
+                WriteLog(gid,uid, channel, f"Message Components: {[{'type': component.type, 'custom_id': component.custom_id} for component in message.components]}")
+            WriteLog(gid,uid,channel,f"{'-'*80}")
         except AttributeError as e:
-            WriteLog(uid,channel,f"Error accessing message attributes: {e}")
+            WriteLog(gid,uid,channel,f"Error accessing message attributes: {e}")
         DisectLock.release()
 
 # Change the nick name and avatar
@@ -1576,14 +1578,14 @@ async def on_message_edit(before, after):
         uid=str(after.author.id)
         bot=GetCompanionPersona(channel,nsfw)
 
-        # Manage automated moderation
-        if bot['AutoModeration'].lower()=='no':
-            return
-
         # Log everything
         if bot['AutoLogging'].lower()!='no':
             DisectMessage("Message edited (before)",before)
             DisectMessage("Message edited (after)",after)
+
+        # Manage automated moderation
+        if bot['AutoModeration'].lower()=='no':
+            return
 
         # Build leet lists
 
@@ -1687,10 +1689,7 @@ async def on_member_remove(member):
         if 'ModerationArea' in bot:
             guild=member.guild
             for channel in guild.channels:
-#                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
-                ErrorLog(channel.name,bot['ModerationArea'],channel.name==bot['ModerationArea'])
-
-                if channel.name==bot['ModerationArea']:
+                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
                     await channel.send(f"{member.mention}/{member.id} left.")
                     break
     except Exception as err:
