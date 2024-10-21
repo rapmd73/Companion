@@ -19,6 +19,9 @@
 ### *** At some point, I'm going to really have to rewrite this. The forum/thread detection
 ###     code is a stinking hot mess and scattered everywhere.
 
+# TODO list:
+#   Separate config files and token to a perserver basis.
+
 # Listed in order of when the service was added.
 
 # added openai
@@ -111,7 +114,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.800"
+Version="0.0.0.0.820"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -121,8 +124,9 @@ RunningName=sys.argv[0]
 
 CompanionBase='/home/Companion'
 CompanionStorage=f'{CompanionBase}/Personas'
-MemoryStorage=f'{CompanionBase}/History/Memory'
-LoggingStorage=f'{CompanionBase}/History/Logs'
+MemoryStorage=f'{CompanionBase}/Servers/Memory'
+LoggingStorage=f'{CompanionBase}/Servers/Logs'
+ConfigStorage=f'{CompanionBase}/Servers/Config'
 
 # For anagram solver
 AnagramWordList="/home/Companion/AnagramSolver.txt"
@@ -392,9 +396,12 @@ def GetWordList(text):
 
 # Read the token file into a token dictionary.
 
-def ReadTokens():
+def ReadTokens(gid=None):
     tokens={}
-    tfile=RunningName+'.tokens'
+    if gid==None:
+        tfile=RunningName+'.tokens'
+    else:
+        tfile=f"{ConfigStorage}/{gid}.tokens"
     if os.path.exists(tfile):
         try:
             tokens=json.loads(jsonFilter(ReadFile(tfile)))
@@ -405,7 +412,7 @@ def ReadTokens():
         ErrorLog(f"Missing token file: {tfile}")
         sys.exit(1)
 
-    if 'Discord' not in tokens:
+    if gid==None and 'Discord' not in tokens:
         ErrorLog("The MUST be a Discord API reference in the tokens file")
         sys.exit(1)
 
@@ -569,9 +576,13 @@ def GetSteering(bot,input_text):
 
 # Read channel list and set bot persona
 
-def GetCompanionPersona(channel,nsfw=False,Welcome=False):
+def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
-    cfg=RunningName+'.cfg'
+    cfg=f"{ConfigStorage}/{gid}.cfg"
+    if not os.path.exists(cfg):
+        print(f'NO configuration: {cfg}')
+        return None
+
     try:
         Config=json.loads(jsonFilter(ReadFile(cfg)))
     except Exception as err:
@@ -740,9 +751,9 @@ def GetBabble(message,text):
         bot=None
         if isinstance(message.channel,discord.Thread):
             pchannel=str(message.channel.parent)
-            bot=GetCompanionPersona(pchannel,nsfw)   # message.channel.parent.nsfw
+            bot=GetCompanionPersona(gid,pchannel,nsfw)   # message.channel.parent.nsfw
         else:
-            bot=GetCompanionPersona(channel,nsfw)
+            bot=GetCompanionPersona(gid,channel,nsfw)
 
         persona=[]
         mList=[]
@@ -823,7 +834,7 @@ def GetBabble(message,text):
             else:
                 cbot['Model']=ml[ecounter]
 
-            response=GetAIResponse(persona,cbot)
+            response=GetAIResponse(gid,persona,cbot)
             if response==None:
                 ecounter+=1
             else:
@@ -862,10 +873,6 @@ def GetBabble(message,text):
 # Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
 
 async def HandleOneMessage(request):
-#                msg['input']=input_text
-#                msg['gid']=guild.id
-#                msg['cid']=message.channel.id
-#                msg['mid']=message.id
     global request_list
 
     with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -883,14 +890,16 @@ async def HandleOneMessage(request):
             bot=None
             if isinstance(message.channel,discord.Thread):
                 pchannel=message.channel.parent
-                bot=GetCompanionPersona(str(pchannel),pchannel.nsfw)
+                bot=GetCompanionPersona(guild.id,str(pchannel),pchannel.nsfw)
                 nsfw=str(pchannel.nsfw)[0]
                 # WTAF? Really? bots have to join a thread...
                 if not message.channel.me:
                     await message.channel.join()
             else:
-                bot=GetCompanionPersona(str(message.channel),message.channel.nsfw)
+                bot=GetCompanionPersona(guild.id,str(message.channel),message.channel.nsfw)
                 nsfw=str(message.channel.nsfw)[0]
+            if bot==None:
+                return
 
             # Convert boolean to str as a passing argument.
             print('U',nsfw,uid,message.author,message.channel,len(message.content))
@@ -940,7 +949,7 @@ async def HandleOneMessage(request):
 ###
 
 # General AI Call Handler
-def GetAIResponse(persona, bot):
+def GetAIResponse(gid,persona,bot):
     print(bot.get('Model'), bot.get('Encoding'))
     provider=bot.get('Engine').lower()
     try:
@@ -955,7 +964,7 @@ def GetAIResponse(persona, bot):
         seed=bot.get('Seed', 0)
 
         # Provider-specific handling
-        Tokens=ReadTokens()
+        Tokens=ReadTokens(gid)
 
         # Adjust persona based on token limit
         WorkingPersona=MaintainTokenLimit(Tokens, persona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
@@ -1448,6 +1457,47 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
 ### Background Tasks
 ###
 
+# This task sweeps all memry fils in a given server and purges any memory file over
+# X days. Housekeeping is required otherwise users will burn storage and there MUST
+# be reasonable limits. Rune ONCE a day.
+
+@tasks.loop(hours=23)
+async def MemoryMaintenance():
+    # Get server CFg files
+    cfg_files=[os.path.join(ConfigStorage, file) for file in os.listdir(ConfigStorage) if file.endswith('.cfg')]
+
+    # Read server CFG file and get MaxMemory
+    for cfg in cfg_files:
+        try:
+            Config=json.loads(jsonFilter(ReadFile(cfg)))
+            await asyncio.sleep(0)
+        except Exception as err:
+            ErrorLog(f"{cfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
+            continue
+
+        # Get how long to keep old memory files in seconds
+        MaxMemory=float(Config['MaxMemory'])*86400
+        sid=cfg.split('/')[5].split('.')[0]
+        dn=f"{MemoryStorage}/{sid}"
+
+        # Get list of .memory files for this server
+
+        mfiles=[]
+        for dirpath, _, filenames in os.walk(dn):
+            for file in filenames:
+                if file.endswith('.memory'):
+                    mfiles.append(os.path.join(dirpath, file))
+
+        # Now check the memory files for age. If the file is OLDER then MaxMemory,
+        # delete it.
+
+        ct=time.time()
+        for mf in mfiles:
+            lmt=os.path.getmtime(mf)
+            if ct-lmt>MaxMemory:
+                os.remove(mf)
+            await asyncio.sleep(0)
+
 # Handle autodelete messages. It is important to consider that when this is executed,
 # the original message may not exist. We have to fetch message from the guild,
 # channel, and message IDs.
@@ -1576,7 +1626,9 @@ async def on_message_edit(before, after):
 
         channel=str(pchannel)
         uid=str(after.author.id)
-        bot=GetCompanionPersona(channel,nsfw)
+        bot=GetCompanionPersona(after.guild.id,channel,nsfw)
+        if bot==None:
+            return
 
         # Log everything
         if bot['AutoLogging'].lower()!='no':
@@ -1638,7 +1690,9 @@ async def on_message_delete(message):
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
-    bot=GetCompanionPersona(channel,message,channel.nsfw)
+    bot=GetCompanionPersona(message.guild.id,channel,message,channel.nsfw)
+    if bot==None:
+        return
 
     # Log everything
     if bot['AutoLogging'].lower()!='no':
@@ -1653,7 +1707,9 @@ async def on_message_delete(message):
 async def on_member_join(member):
     try:
         # Welcome forces the default bot.
-        bot=GetCompanionPersona(None,Welcome=True)
+        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
+        if bot==None:
+            return
 
         if bot['AutoLogging'].lower()!='no':
             ErrorLog(f"OMJ: {member}")
@@ -1680,7 +1736,9 @@ async def on_member_join(member):
 async def on_member_remove(member):
     try:
         # Welcome forces the default bot.
-        bot=GetCompanionPersona(None,Welcome=True)
+        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
+        if bot==None:
+            return
 
         if bot['AutoLogging'].lower()!='no':
             ErrorLog(f"OMR: {member}")
@@ -1696,6 +1754,8 @@ async def on_member_remove(member):
         ErrorLog(f'OMR: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # Implement an auto slowmode based on actual usera typing per channel
+# NOT bot dependant... RETHINK this for CFG settings and enable/disable.
+
 @client.event
 async def on_typing(channel, user, when):
     global active_users
@@ -1795,13 +1855,15 @@ async def on_message(message):
         if isinstance(message.channel,discord.Thread):
             pchannel=str(message.channel.parent)
             nsfw=message.channel.parent.nsfw
-            bot=GetCompanionPersona(pchannel,nsfw)
+            bot=GetCompanionPersona(message.guild.id,pchannel,nsfw)
             # WTAF? Really? bots have to join a thread...
             if not message.channel.me:
                 await message.channel.join()
         else:
             nsfw=message.channel.nsfw
-            bot=GetCompanionPersona(channel,nsfw)
+            bot=GetCompanionPersona(message.guild.id,channel,nsfw)
+        if bot==None:
+            return
 
         # Log everything
         if bot['AutoLogging'].lower()!='no':
@@ -2065,6 +2127,7 @@ async def on_ready():
     update_response_data.start()
     autodelete_messages.start()
     track_active_users.start()
+    MemoryMaintenance.start()
 
     print("Ready to serve!")
 
