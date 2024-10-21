@@ -20,7 +20,7 @@
 ###     code is a stinking hot mess and scattered everywhere.
 
 # TODO list:
-#   Separate config files and token to a perserver basis.
+#   Figure out how to handle channel config setting across diferent servers.
 
 # Listed in order of when the service was added.
 
@@ -114,7 +114,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.830"
+Version="0.0.0.0.840"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -401,7 +401,7 @@ def ReadTokens(gid=None):
     if gid==None:
         tfile=RunningName+'.tokens'
     else:
-        tfile=f"{ConfigStorage}/{gid}.tokens"
+        tfile=f"{ConfigStorage}/{gid}/{gid}.tokens"
     if os.path.exists(tfile):
         try:
             tokens=json.loads(jsonFilter(ReadFile(tfile)))
@@ -578,7 +578,7 @@ def GetSteering(bot,input_text):
 
 def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
-    cfg=f"{ConfigStorage}/{gid}.cfg"
+    cfg=f"{ConfigStorage}/{gid}/{gid}.cfg"
     if not os.path.exists(cfg):
         print(f'NO configuration: {cfg}')
         return None
@@ -656,7 +656,6 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
                 # global SFW
                 bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
 
-    bot['Avatar']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
     bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
     bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
     bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
@@ -671,11 +670,11 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Load bot config file. Channel CFg always has priority.
     settings={}
     try:
-        bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.cfg"
+        bcfg=f"{ConfigStorage}/{gid}/{bot['BotName']}.{channel}.cfg"
         if os.path.exists(bcfg):
             settings=json.loads(jsonFilter(ReadFile(bcfg)))
         else:
-            bcfg=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cfg"
+            bcfg=f"{ConfigStorage}/{gid}/{bot['BotName']}.cfg"
             if os.path.exists(bcfg):
                 settings=json.loads(jsonFilter(ReadFile(bcfg)))
     except Exception as err:
