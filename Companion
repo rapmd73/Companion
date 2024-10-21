@@ -114,7 +114,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.820"
+Version="0.0.0.0.830"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1919,7 +1919,7 @@ async def on_message(message):
                 return
 
         # Check for input that is a number only
-        if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
+        if bot['AutoModeration'].lower()!='no' and os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
             author=str(message.author.mention)
             # If its a bot, it doesn't deserve a response
             if not message.author.bot:
@@ -2137,6 +2137,7 @@ async def on_ready():
 
 if __name__=='__main__':
     print(f'Companion {Version}')
+    mkdir(ConfigStorage)
 
     Tokens=ReadTokens()
 
