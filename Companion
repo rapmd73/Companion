@@ -114,7 +114,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.840"
+Version="0.0.0.0.845"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -168,6 +168,7 @@ active_users={}
 intents=discord.Intents.all()
 intents.presences=True
 intents.messages=True
+intents.message_content=True
 intents.members=True
 intents.guilds=True
 
@@ -901,7 +902,7 @@ async def HandleOneMessage(request):
                 return
 
             # Convert boolean to str as a passing argument.
-            print('U',nsfw,uid,message.author,message.channel,len(message.content))
+            print('U',guild.id,nsfw,uid,message.author,message.channel,len(message.content))
 
             # Handle any vulgarity
             if bot['AutoModeration'].lower()!='no' \
@@ -922,7 +923,7 @@ async def HandleOneMessage(request):
                 istr=f"{uid}/{channel}:{nsfw}/{input_text}"
                 response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
 
-            print('B',client.user.id,bot['BotName'],message.channel,len(response))
+            print('B',guild.id,client.user.id,bot['BotName'],message.channel,len(response))
 
             # Check to see if we actually got a response
             if response!=None and response.lower().strip()!="none":
@@ -949,7 +950,7 @@ async def HandleOneMessage(request):
 
 # General AI Call Handler
 def GetAIResponse(gid,persona,bot):
-    print(bot.get('Model'), bot.get('Encoding'))
+    print(gid,bot.get('Model'), bot.get('Encoding'))
     provider=bot.get('Engine').lower()
     try:
         # Default connection timeout
@@ -1760,6 +1761,10 @@ async def on_typing(channel, user, when):
     global active_users
 
     try:
+        # if direct message, ignore
+        if isinstance(channel,discord.DMChannel):
+            return
+
         # If this is a thread, get the parent channel
         pchannel=channel
         if isinstance(channel,discord.Thread):
@@ -1827,7 +1832,7 @@ async def on_typing(channel, user, when):
         # Apply slow mode
         await pchannel.edit(slowmode=slow_mode_duration)
         last_slow_mode_change[key] = current_time  # Update the last change time
-        print(f"Slowmode {channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
+        print(f"Slowmode {server.id}/{channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
     except Exception as err:
         ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1840,6 +1845,15 @@ async def on_message(message):
     global request_list
 
     try:
+        # Ignore messages from the bot itself
+        if message.author==client.user:
+            return
+
+        # Handle direct messages
+        if isinstance(message.channel,discord.DMChannel):
+            await message.channel.send(f'You have messaged the Companion AI chatbot/moderation. This bot functions ONLY within the limits of a Discord server and does NOT support interactions via DMs. Thank you.')
+            return
+
         # Figure out which persona is calling the shots.
         channel=str(message.channel)
         uid=str(message.author.id)
@@ -1867,10 +1881,6 @@ async def on_message(message):
         # Log everything
         if bot['AutoLogging'].lower()!='no':
             DisectMessage("Received message",message)
-
-        # Ignore messages from the bot itself
-        if message.author==client.user:
-            return
 
         # MUST BE FIRST!
         # Imposter among us no more!
@@ -1907,14 +1917,14 @@ async def on_message(message):
                     color=discord.Color.red()
                 )
                 embed.add_field(name="Imposter Message", value=message.content, inline=False)
-                embed.set_footer(text="Action: Message will be deleted, and user will be kicked.")
+                embed.set_footer(text="Action: Message will be deleted, and user will be banned.")
 
                 # Send the embed to the channel where the message was sent
                 await send_response(bot,message,None,embed=embed,delete=300)
                 # Delete the imposter's message
                 await message.delete()
                 # Kick the imposter
-                await message.author.kick(reason="Impersonating the server owner")
+                await message.author.ban(reason="Impersonating the server owner")
                 return
 
         # Check for input that is a number only
@@ -2079,11 +2089,6 @@ async def on_message(message):
                     await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
                     return
 
-            # If this is a direct reply or a mention, give a slightly more personal response
-#            if (message.reference and message.reference.resolved.author.id==client.user.id) \
-#            or (client.user in message.mentions):
-#                input_text+=' [warm, friendly]'
-
             # Give the AI the message
             if ResponseLock.acquire(timeout=ResponseTimeout):
                 msg={}
@@ -2116,7 +2121,7 @@ async def on_ready():
         mkdir(f'{MemoryStorage}/{guild.id}')
         mkdir(f'{LoggingStorage}/{guild.id}')
 
-        print(f" {guild.name} ({guild.id}), {guild.member_count} members")
+        print(f" {guild.name} ({guild.id}), {guild.owner} ({guild.owner.id}), {guild.member_count} members")
 
         # Check if the bot's role has administrator permissions
         if not guild.me.guild_permissions.administrator:
