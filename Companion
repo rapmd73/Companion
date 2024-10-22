@@ -114,7 +114,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.845"
+Version="0.0.0.0.850"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -910,6 +910,7 @@ async def HandleOneMessage(request):
             and bot['AllowVulgarity'].lower()=='no' \
             and not nsfw=='T':
                 if bool(pc.predict([ input_text ]))==True:
+                    await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} chastized for vulgarity in {message.channel.name}")
                     await send_response(bot,message,PickRandomResponse(bot['Vulgarity']),delete=57)
                     try: # delete the offending message
                         await message.delete()
@@ -1331,7 +1332,8 @@ async def ChangeNickAvatar(bot,message):
         # Only seems to work with Administrator priviledges
         # Change the nickname if the bot.
         try:
-            # Add code to check avatar name and channel. Only change avatar when channel changes.
+            # Add code to check avatar name and channel. Only change avatar when
+            # channel changes.
             await message.guild.me.edit(nick=bot['BotName'])
             pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
             png=ReadFile(pname,binary=True)
@@ -1339,8 +1341,8 @@ async def ChangeNickAvatar(bot,message):
         except Exception as err:
             ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
 
-# Return the response to the user. messages over 1997 characters are returned as a message file attachment.
-# Adapt to webhooks...
+# Return the response to the user. messages over 1997 characters are returned as a
+# message file attachment. Adapt to webhooks...
 
 # If message is None, use system channel
 
@@ -1452,6 +1454,17 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
     except Exception as err:
         ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+
+# Post message is moderation area
+
+async def ModeratorNotify(bot,guild,text):
+    print(text)
+    # If there is a moderator area, send a message to it.
+    if 'ModerationArea' in bot:
+        for channel in guild.channels:
+            if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
+                await channel.send(text)
+                break
 
 ###
 ### Background Tasks
@@ -1660,6 +1673,7 @@ async def on_message_edit(before, after):
         and bot['AllowVulgarity'].lower()!='yes' \
         and not nsfw:
             if bool(pc.predict([ after.content ]))==True:
+                await ModeratorNotify(bot,after.guild,f"{after.author.name}/{after.author.id} chastized for vulgarity in {after.channel.name}")
                 await send_response(bot,after,PickRandomResponse(bot['Vulgarity']),delete=57)
                 try: # delete the offending message
                     await after.delete()
@@ -1668,6 +1682,7 @@ async def on_message_edit(before, after):
                 return
 
         if leftFound and rightFound:
+            await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name}")
             # This seems to be a better way to ruin the attacker's plan
             embed=discord.Embed(
                 title='Message edited',
@@ -1715,12 +1730,7 @@ async def on_member_join(member):
             ErrorLog(f"OMJ: {member}")
 
         # If there is a moderator area, send a message to it.
-        if 'ModerationArea' in bot:
-            guild=member.guild
-            for channel in guild.channels:
-                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
-                    await channel.send(f"{member.mention}/{member.id} joined.")
-                    break
+        await ModeratorNotify(bot,member.guild,f"{member.mention}/{member.id} joined.")
 
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
@@ -1744,12 +1754,7 @@ async def on_member_remove(member):
             ErrorLog(f"OMR: {member}")
 
         # If there is a moderator area, send a message to it.
-        if 'ModerationArea' in bot:
-            guild=member.guild
-            for channel in guild.channels:
-                if isinstance(channel,discord.TextChannel) and channel.name==bot['ModerationArea']:
-                    await channel.send(f"{member.mention}/{member.id} left.")
-                    break
+        await ModeratorNotify(bot,member.guild,f"{member.mention}/{member.id} left.")
     except Exception as err:
         ErrorLog(f'OMR: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -1929,6 +1934,7 @@ async def on_message(message):
 
         # Check for input that is a number only
         if bot['AutoModeration'].lower()!='no' and os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
+            await ModeratorNotify(bot,message.guild,f"AgeExploit detected: {message.author.name}/{message.author.id} in {message.channel.name}")
             author=str(message.author.mention)
             # If its a bot, it doesn't deserve a response
             if not message.author.bot:
