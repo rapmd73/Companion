@@ -27,11 +27,11 @@
 # added openai
 # added ollama
 # added together.ai
-# added cohere
+# added cohere          (trial key 1000 free requests per month)
+# added huggingface     (free keyy is 1000 requests per day, fragmented responses, 1 respons coud = 8 requests)
 
 # --> Not in a specific order, add support for the following engines:
 
-#   huggingface
 #   anthropic
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
@@ -993,6 +993,7 @@ def GetAIResponse(gid,persona,bot):
             clientAI.close()
 
         # HuggingFace uses fragmentation for completion methods...
+        # Access is free for 1000 requests per day. 1 response could take 8 requests to the API.
 
         elif provider=='huggingface':
             clientAI=InferenceClient(token=Tokens['HuggingFace'],timeout=tout)
@@ -1012,6 +1013,7 @@ def GetAIResponse(gid,persona,bot):
                 WorkingPersona.append({"role":"user", "content":"Continue"})
                 WorkingPersona=MaintainTokenLimit(Tokens, WorkingPersona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
 
+                # if finish reason is length, response is fragmented.
                 if completion.choices[0].finish_reason!='length':
                     break
 
