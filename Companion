@@ -115,7 +115,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.860"
+Version="0.0.0.0.870"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -487,6 +487,8 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
         # Calculate current tokens in the message list
         if engine=='openai':    #not HuggingFace:
             current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
+        elif engine=='huggingface':
+            current_tokens=sum(len(enc(message["content"])["input_ids"]) for message in messages)
         elif engine=='cohere':
             current_tokens=sum(len(co.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
         else:
@@ -501,6 +503,8 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
             enc=tiktoken.get_encoding(encoding)
         else:
             enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+    elif engine=='huggingface':
+        enc=AutoTokenizer.from_pretrained(model)
     elif engine=='cohere':
         co=cohere.ClientV2(api_key=Tokens['Cohere'])
 #    else:
@@ -954,6 +958,10 @@ async def HandleOneMessage(request):
 def GetAIResponse(gid,persona,bot):
     print(gid,bot.get('Model'), bot.get('Encoding'))
     provider=bot.get('Engine').lower()
+
+    # HuggingFace uses mutiple responses...
+    hfresponses=[]
+
     try:
         # Default connection timeout
         tout=bot.get('Timeout', 60)
@@ -984,14 +992,28 @@ def GetAIResponse(gid,persona,bot):
             )
             clientAI.close()
 
+        # HuggingFace uses fragmentation for completion methods...
+
         elif provider=='huggingface':
             clientAI=InferenceClient(token=Tokens['HuggingFace'],timeout=tout)
-            completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=bot['FreqPenality'],
-                temperature=bot['Temperature'],
-                messages=WorkingPersona
-            )
+            while True:
+                completion=clientAI.chat.completions.create(
+                    model=model,
+                    frequency_penalty=bot['FreqPenality'],
+                    temperature=bot['Temperature'],
+                    messages=WorkingPersona,
+                    stream=False
+                )
+                resp=completion.choices[0].message.content.strip()
+                hfresponses.append(resp)
+
+                # Emulate user typing continue. Count tokens as well...
+                WorkingPersona.append({"role":"assistant", "content":resp})
+                WorkingPersona.append({"role":"user", "content":"Continue"})
+                WorkingPersona=MaintainTokenLimit(Tokens, WorkingPersona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
+
+                if completion.choices[0].finish_reason!='length':
+                    break
 
         elif provider=='togetherai':
             clientAI=together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
@@ -1030,8 +1052,10 @@ def GetAIResponse(gid,persona,bot):
 
         # Parse response
         try:
-            if provider=='openai' or  provider=='huggingface' or provider=='togwetherai':
+            if provider=='openai' or provider=='togwetherai':
                 response=completion.choices[0].message.content.strip()
+            elif provider=='huggingface':
+                response=' '.join(hfresponses).strip()
             elif provider=='cohere':
                 response=completion.message.content[0].text.strip()
             elif provider=='ollama':
