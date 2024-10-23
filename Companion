@@ -31,10 +31,10 @@
 
 # --> Not in a specific order, add support for the following engines:
 
+#   huggingface
 #   anthropic
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
-#   huggingface
 #   perplexity.ai
 #   fireworks.ai
 #   OctoML AI
@@ -99,11 +99,12 @@ import asyncio
 import discord
 import profanity_check as pc
 import pdfplumber
-import ollama
 import tiktoken
 import openai
+from huggingface_hub import InferenceClient
 import together
 import cohere
+import ollama
 import youtube_transcript_api
 import imagehash
 from discord.ext import commands, tasks
@@ -114,7 +115,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.850"
+Version="0.0.0.0.860"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -934,10 +935,10 @@ async def HandleOneMessage(request):
                 # Communication with AI failed. Put message back in queue
                 if ResponseLock.acquire(timeout=ResponseTimeout):
                     msg={}
-                    msg['input']=input_text
                     msg['gid']=guild.id
                     msg['cid']=message.channel.id
                     msg['mid']=message.id
+                    msg['input']=input_text
                     request_list.append(msg)
                     ResponseLock.release()
                 else:
@@ -983,6 +984,15 @@ def GetAIResponse(gid,persona,bot):
             )
             clientAI.close()
 
+        elif provider=='huggingface':
+            clientAI=InferenceClient(token=Tokens['HuggingFace'],timeout=tout)
+            completion=clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=bot['FreqPenality'],
+                temperature=bot['Temperature'],
+                messages=WorkingPersona
+            )
+
         elif provider=='togetherai':
             clientAI=together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
             completion=clientAI.chat.completions.create(
@@ -1020,7 +1030,7 @@ def GetAIResponse(gid,persona,bot):
 
         # Parse response
         try:
-            if provider=='openai' or provider=='togwetherai':
+            if provider=='openai' or  provider=='huggingface' or provider=='togwetherai':
                 response=completion.choices[0].message.content.strip()
             elif provider=='cohere':
                 response=completion.message.content[0].text.strip()
@@ -2127,7 +2137,7 @@ async def on_ready():
         mkdir(f'{MemoryStorage}/{guild.id}')
         mkdir(f'{LoggingStorage}/{guild.id}')
 
-        print(f" {guild.name} ({guild.id}), {guild.owner} ({guild.owner.id}), {guild.member_count} members")
+        print(f" {guild.name} ({guild.id}), {guild.owner} ({guild.owner.id}), {guild.verification_level.name}, {guild.explicit_content_filter}, {guild.mfa_level}, {guild.member_count} members")
 
         # Check if the bot's role has administrator permissions
         if not guild.me.guild_permissions.administrator:
