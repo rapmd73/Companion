@@ -1,8 +1,9 @@
-discord
+discord.py
 alt-profanity-check
 tldextract
 tiktoken
 openai
+huggingface_hub
 together
 cohere
 ollama
