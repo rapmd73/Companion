@@ -116,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.890"
+Version="0.0.0.0.900"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1505,40 +1505,52 @@ async def ModeratorNotify(bot,guild,text):
 # Verify the CompanionAdministration channel exists and is set to the owner role.
 
 async def VerifyCompanionAdministration(guild):
-    # Check for the 'CompanionAdministration' channel
-    channel=discord.utils.get(guild.text_channels, name='companion-administration')
+    try:
+        # Create the owner role if not present
+        orole=discord.utils.get(guild.roles,name='owner')
+        if not orole:
+            # create the owner role
+            orole=await guild.create_role(name='owner', \
+                permissions=discord.Permissions(read_messages=True,send_messages=True), \
+                mentionable=False,color=discord.Color(0xFF0000))
 
-    # If the channel does not exist, create it
-    if not channel:
-        # Get the 'owner' role
-        owner_role = discord.utils.get(guild.roles, name='owner')
+            # assign it to thew owner
+            if orole not in guild.owner.roles:
+                await guild.owner.add_roles(orole)
 
-        if owner_role:
-            # Create the channel and set permissions
-            channel = await guild.create_text_channel(
-                'companion-administration',
-                overwrites={
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False),  # Deny everyone else
-                    owner_role: discord.PermissionOverwrite(read_messages=True,send_messages=True)
-                },
-                position=len(guild.channels),
-                topic='This channel is for Companion administration.'
-            )
+        # Check for the 'companion-administration' channel
+        channel=discord.utils.get(guild.text_channels, name='companion-administration')
+
+        # Set up default security
+        overwrites={ guild.default_role: discord.PermissionOverwrite( view_channel=False,
+                        send_messages=False,read_messages=False,read_message_history=False,
+                        mention_everyone=False,add_reactions=False,attach_files=False,
+                        send_tts_messages=False),
+                     orole: discord.PermissionOverwrite(read_messages=True,read_message_history=True,
+                        send_messages=True) }
+
+        # If the channel does not exist, create it
+        if not channel:
+            if orole:
+                # Create the channel and set permissions
+                channel = await guild.create_text_channel('companion-administration', \
+                    overwrites=overwrites, position=len(guild.channels), \
+                    topic='This channel is for Companion administration.')
+            else:
+                # Owner role does not exist, should never happen.
+                return None
         else:
-            # Owner role does not exist
-            return None
-    return channel
+            # Force channel to proper security settings
+            channel.edit(overwrites=overwrites)
+        return channel
+    except Exception as err:
+        ErrorLog(f'VCA: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # Perform security audit on a given guild
 
-async def SecurityAudit(guild=None,message=None,auto=False):
+async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     # failsafe catch
     if guild==None and message==None:
-        return
-
-    # Do nothing if there is no owner role
-    orole=discord.utils.get(guild.roles,name='owner')
-    if not orole:
         return
 
     # Make sure we have a guild structure
@@ -1549,7 +1561,6 @@ async def SecurityAudit(guild=None,message=None,auto=False):
     admin=await VerifyCompanionAdministration(guild)
 
     # Start with the automatic setting. Results will be forced if audit fails
-    ShowResults=auto
     FailedAudit=False
     AuditOwnerRole=False
     IsHighestPos=False
@@ -1558,6 +1569,7 @@ async def SecurityAudit(guild=None,message=None,auto=False):
     ExplicitContent=False
     MFAlevel=False
 
+    orole=discord.utils.get(guild.roles,name='owner')
     if orole:
         AuditOwnerRole=True
         hrp=max(role.position for role in guild.roles)  # Get the highest role position
@@ -1608,7 +1620,10 @@ async def SecurityAudit(guild=None,message=None,auto=False):
         if ShowResults:
             await admin.send(f"Current Members: {guild.member_count}")
         if FailedAudit:
-            await admin.send(f"**This server has FAILED the security audit.** Please correct the above issues as quickly as possible. Thank you.")
+            await admin.send(f"**This server has FAILED the security audit.** Please correct the above issues as quickly as possible.")
+            if auto:
+                await admin.send(f"This audit was performed as a part of Companion's automated maintenance. You will continue to receive these messages as long as the above issues remain uncorrected.")
+            await admin.send(f"Thank you.")
         else:
             if ShowResults:
                 await admin.send(f"**This server has PASSED the security audit.**")
@@ -1616,6 +1631,14 @@ async def SecurityAudit(guild=None,message=None,auto=False):
 ###
 ### Background Tasks
 ###
+
+# Run automated security audit
+
+@tasks.loop(hours=23)
+async def AutomatedSecurityAudit():
+    for guild in client.guilds:
+        await SecurityAudit(guild,None,False,True)
+        await asyncio.sleep(0)
 
 # This task sweeps all memry fils in a given server and purges any memory file over
 # X days. Housekeeping is required otherwise users will burn storage and there MUST
@@ -2297,6 +2320,7 @@ async def on_ready():
         print(f"ERR: {err}")
 
     # Start the task when the bot is ready
+    AutomatedSecurityAudit.start()
     update_response_data.start()
     autodelete_messages.start()
     track_active_users.start()
