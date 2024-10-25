@@ -28,7 +28,8 @@
 # added ollama
 # added together.ai
 # added cohere          (trial key 1000 free requests per month)
-# added huggingface     (free keyy is 1000 requests per day, fragmented responses, 1 respons coud = 8 requests)
+# added huggingface     (free key is 1000 requests per day, fragmented responses, 1
+#                       respons coud = 8 requests or more)
 
 # --> Not in a specific order, add support for the following engines:
 
@@ -115,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.870"
+Version="0.0.0.0.880"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -713,11 +714,6 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
             bot['Temperature']=float(bot['Temperature'])
     if 'AllowVulgarity' not in bot:
         bot['AllowVulgarity']='No'
-    if 'DeveloperUID' not in bot:
-        bot['DeveloperUID']=0
-    else:
-        if type(bot['DeveloperUID'])!=int:
-            bot['DeveloperUID']=int(bot['DeveloperUID'])
     if 'MaxMemory' not in bot:
         bot['MaxMemory']=100
     else:
@@ -1005,6 +1001,7 @@ def GetAIResponse(gid,persona,bot):
                     messages=WorkingPersona,
                     stream=False
                 )
+                RawLog(f"{provider}/{model}: {str(completion)}")
                 resp=completion.choices[0].message.content.strip()
                 hfresponses.append(resp)
 
@@ -1012,8 +1009,11 @@ def GetAIResponse(gid,persona,bot):
                 WorkingPersona.append({"role":"assistant", "content":resp})
                 WorkingPersona.append({"role":"user", "content":"Continue"})
                 WorkingPersona=MaintainTokenLimit(Tokens, WorkingPersona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
+                if WorkingPersona is None:
+                    return PickRandomResponse(bot['TooMuchInformation'])
 
                 # if finish reason is length, response is fragmented.
+                print("HuggingFace fragment:",completion.choices[0].finish_reason,len(resp))
                 if completion.choices[0].finish_reason!='length':
                     break
 
@@ -1502,6 +1502,11 @@ async def ModeratorNotify(bot,guild,text):
                 await channel.send(text)
                 break
 
+# Perform security audit on a given guild
+
+async def SecurityAudit(guild=None,message=None):
+    pass
+
 ###
 ### Background Tasks
 ###
@@ -1895,6 +1900,10 @@ async def on_message(message):
             await message.channel.send(f'You have messaged the Companion AI chatbot/moderation. This bot functions ONLY within the limits of a Discord server and does NOT support interactions via DMs. Thank you.')
             return
 
+        # Owner role information. This will be used to verify bot commands.
+        orole=discord.utils.get(guild.roles,name='owner')
+        mrole=orole and orole in message.author.roles
+
         # Figure out which persona is calling the shots.
         channel=str(message.channel)
         uid=str(message.author.id)
@@ -2022,7 +2031,12 @@ async def on_message(message):
                 await send_response(bot,message,"Conversation forgotten",delete=57)
             return
 
-        if 'DeveloperUID' in bot and int(uid)==bot['DeveloperUID']:
+        # Only guild owner/Owner role allowed to use advanced commands
+        if mrole:
+            if str(message.content).strip().startswith('%SecurityAudit'):
+                await SecurityAudit(guild,message)
+                return
+
             if str(message.content).strip().startswith('%CheckBot'):
                 member=message.guild.get_member(client.user.id) # Get the bot's member object in the guild
                 # Check if the bot is a member of the channel
@@ -2157,17 +2171,38 @@ async def on_message(message):
 async def on_ready():
     print(f'Logged in as {client.user}')
 
-    # Print some fluff
-    print("In guilds:")
-    for guild in client.guilds:
-        mkdir(f'{MemoryStorage}/{guild.id}')
-        mkdir(f'{LoggingStorage}/{guild.id}')
+    try:
+        # Print some fluff
+        print("In guilds:")
+        for guild in client.guilds:
+            # Make sure the neccessary directories exist
+            mkdir(f'{MemoryStorage}/{guild.id}')
+            mkdir(f'{LoggingStorage}/{guild.id}')
 
-        print(f" {guild.name} ({guild.id}), {guild.owner} ({guild.owner.id}), {guild.verification_level.name}, {guild.explicit_content_filter}, {guild.mfa_level}, {guild.member_count} members")
+            print(f"  {guild.name} ({guild.id}), {guild.owner} ({guild.owner.id})")
+            ofound=False
+            orole=discord.utils.get(guild.roles,name='owner')
+            if orole:
+                print(f"    Owner role exists")
+                hrp=max(role.position for role in guild.roles)  # Get the highest role position
+                if orole.position!=hrp:
+                    print(f"    Owner role does NOT have the highest position")
 
-        # Check if the bot's role has administrator permissions
-        if not guild.me.guild_permissions.administrator:
-            print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+                urole=discord.utils.get(guild.owner.roles,name='owner')
+                if urole:
+                    print(f"    {guild.owner} is in the owner role")
+                else:
+                    print(f"    {guild.owner} is NOT in the owner role")
+            else:
+                print(f"    NO owner role found!")
+
+            print(f"    {guild.verification_level.name}, {guild.explicit_content_filter}, {guild.mfa_level}, {guild.member_count} members")
+
+            # Check if the bot's role has administrator permissions
+            if not guild.me.guild_permissions.administrator:
+                print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+    except Exception as err:
+        print(f"ERR: {err}")
 
     # Start the task when the bot is ready
     update_response_data.start()
