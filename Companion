@@ -116,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.900"
+Version="0.0.0.0.905"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -169,10 +169,10 @@ active_users={}
 
 intents=discord.Intents.all()
 intents.presences=True
+intents.guilds=True
 intents.messages=True
 intents.message_content=True
 intents.members=True
-intents.guilds=True
 
 # Create a Discord client
 client=discord.Client(intents=intents)
@@ -587,6 +587,7 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
     cfg=f"{ConfigStorage}/{gid}/{gid}.cfg"
     if not os.path.exists(cfg):
+        mkdir(f"{ConfigStorage}/{gid}")
         print(f'NO configuration: {cfg}')
         return None
 
@@ -1014,7 +1015,7 @@ def GetAIResponse(gid,persona,bot):
 
                 # if finish reason is length, response is fragmented.
                 print("HuggingFace fragment:",completion.choices[0].finish_reason,len(resp))
-                if completion.choices[0].finish_reason!='length':
+                if completion.choices[0].finish_reason!='length' or len(resp)==0:
                     break
 
         elif provider=='togetherai':
@@ -2300,6 +2301,17 @@ async def on_message(message):
     except Exception as err:
         ErrorLog(f"OM: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
+# When Companion joins a new guild
+
+@client.event
+async def on_guild_join(guild):
+    try:
+        mkdir(f'{MemoryStorage}/{guild.id}')
+        mkdir(f'{LoggingStorage}/{guild.id}')
+        await SecurityAudit(guild,None,False,True)
+    except Exception as err:
+        ErrorLog(f"OGJ: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+
 # Start the timer task for responses.
 
 @client.event
@@ -2316,33 +2328,32 @@ async def on_ready():
             # Check if the bot's role has administrator permissions
             if not guild.me.guild_permissions.administrator:
                 print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+
+        # Start the task when the bot is ready
+        update_response_data.start()
+        autodelete_messages.start()
+        track_active_users.start()
+        MemoryMaintenance.start()
+        AutomatedSecurityAudit.start()
+
+        print("Ready to serve!")
     except Exception as err:
         print(f"ERR: {err}")
-
-    # Start the task when the bot is ready
-    AutomatedSecurityAudit.start()
-    update_response_data.start()
-    autodelete_messages.start()
-    track_active_users.start()
-    MemoryMaintenance.start()
-
-    print("Ready to serve!")
 
 ###
 ### STARTUP: starts the bot with the corresponding token
 ###
 
 if __name__=='__main__':
-    print(f'Companion {Version}')
-    mkdir(ConfigStorage)
-
-    Tokens=ReadTokens()
-
     try:
+        print(f'Companion {Version}')
+        mkdir(ConfigStorage)
+
+        Tokens=ReadTokens()
+
         client.run(Tokens['Discord'],log_handler=None)
     except Exception as err:
         ErrorLog(f"Broken MAIN: {err}")
-        print(f"Broken MAIN: {err}")
 
 ### END OF PROGRAM
 
