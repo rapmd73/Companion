@@ -116,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.905"
+Version="0.0.0.0.915"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -180,8 +180,6 @@ client=discord.Client(intents=intents)
 ### Really need to make these files on disk and not global memory lists, for
 ### sharding/multi process management.
 
-# List to store pending requests
-request_list=[]
 # List to stowre timed messages for deletion
 delete_list=[]
 
@@ -875,8 +873,6 @@ def GetBabble(message,text):
 # Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
 
 async def HandleOneMessage(request):
-    global request_list
-
     with concurrent.futures.ThreadPoolExecutor() as pool:
         try:
             input_text=request['input']
@@ -940,12 +936,55 @@ async def HandleOneMessage(request):
                     msg['cid']=message.channel.id
                     msg['mid']=message.id
                     msg['input']=input_text
-                    request_list.append(msg)
+                    PutNextRequest(guild.id,msg)
                     ResponseLock.release()
                 else:
                     ErrorLog("Lock failed Reput Message")
         except Exception as err:
             ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
+
+# Get next request from file. This should be a database eventually.
+
+def GetNextRequest(gid):
+    try:
+        rname=f"{MemoryStorage}/{gid}/requests.txt"
+
+        if not os.path.exists(rname):
+            return None
+
+        # Read request list for a specific server
+        request_list=ReadFile(rname).strip().split('\n')
+        # Get first request
+        try:
+            request=json.loads(request_list[0])
+        except Exception as err:
+            ErrorLog(f"Broken request: {sys.exc_info()[-1].tb_lineno}/{err}")
+            return None
+
+        # Write the rest of the list back to disc. This is the file version of
+        # popping the first item.
+
+        if (len(request_list)-1)>0:
+            fh=open(rname,'w')
+            for i in range(1,len(request_list)):
+                fh.write(request_list[i]+'\n')
+            fh.close()
+        else:
+            os.remove(rname)
+
+        return request
+    except Exception as err:
+        ErrorLog(f"GNR: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+# Put the next request
+
+def PutNextRequest(gid,msg):
+    rname=f"{MemoryStorage}/{gid}/requests.txt"
+    s=json.dumps(msg)+'\n'
+    fh=open(rname,'a+')
+    fh.write(s)
+    fh.close()
 
 ###
 ### AI handlers (Optimized)
@@ -1378,8 +1417,8 @@ async def ChangeNickAvatar(bot,message):
         except Exception as err:
             ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
 
-# Return the response to the user. messages over 1997 characters are returned as a
-# message file attachment. Adapt to webhooks...
+# Return the response to the user. messages over 1997 characters are
+# returned as a message file attachment. Adapt to webhooks...
 
 # If message is None, use system channel
 
@@ -1442,8 +1481,10 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
                 wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
             whmsg.append(wm)
         else:
-            # Break this up into multiple messages. Discord does NOT allow direct reply with multiple
-            # message parts.
+
+            # Break this up into multiple messages. Discord does NOT allow
+            # direct reply with multiple message parts.
+
             x1=f"{author} {response}"
             l=len(x1)
             while l>1900:
@@ -1495,7 +1536,6 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
 # Post message is moderation area
 
 async def ModeratorNotify(bot,guild,text):
-    print(text)
     # If there is a moderator area, send a message to it.
     if 'ModerationArea' in bot:
         for channel in guild.channels:
@@ -1503,7 +1543,8 @@ async def ModeratorNotify(bot,guild,text):
                 await channel.send(text)
                 break
 
-# Verify the CompanionAdministration channel exists and is set to the owner role.
+# Verify the CompanionAdministration channel exists and is set to the
+# owner role.
 
 async def VerifyCompanionAdministration(guild):
     try:
@@ -1641,9 +1682,9 @@ async def AutomatedSecurityAudit():
         await SecurityAudit(guild,None,False,True)
         await asyncio.sleep(0)
 
-# This task sweeps all memry fils in a given server and purges any memory file over
-# X days. Housekeeping is required otherwise users will burn storage and there MUST
-# be reasonable limits. Rune ONCE a day.
+# This task sweeps all memry fils in a given server and purges any memory
+# file over X days. Housekeeping is required otherwise users will burn
+# storage and there MUST be reasonable limits. Rune ONCE a day.
 
 @tasks.loop(hours=23)
 async def MemoryMaintenance():
@@ -1672,8 +1713,8 @@ async def MemoryMaintenance():
                 if file.endswith('.memory'):
                     mfiles.append(os.path.join(dirpath, file))
 
-        # Now check the memory files for age. If the file is OLDER then MaxMemory,
-        # delete it.
+        # Now check the memory files for age. If the file is OLDER then
+        # MaxMemory, delete it.
 
         ct=time.time()
         for mf in mfiles:
@@ -1682,9 +1723,9 @@ async def MemoryMaintenance():
                 os.remove(mf)
             await asyncio.sleep(0)
 
-# Handle autodelete messages. It is important to consider that when this is executed,
-# the original message may not exist. We have to fetch message from the guild,
-# channel, and message IDs.
+# Handle autodelete messages. It is important to consider that when this
+# is executed, the original message may not exist. We have to fetch
+# message from the guild, channel, and message IDs.
 
 @tasks.loop(seconds=3)
 async def autodelete_messages():
@@ -1708,34 +1749,37 @@ async def autodelete_messages():
     else:
         ErrorLog("Lock failed ADM")
 
-# The dirty part. I wanted to serialize requests for the bot, so i timer approach is used coupled with
-# a locking method. This keep a rate limit approach for the open AI api in accordance to its policies.
-# Sleeping method can also be added.
+# The dirty part. I wanted to serialize requests for the bot, so i timer
+# approach is used coupled with a locking method. This keep a rate limit
+# approach for the open AI api in accordance to its policies. Sleeping
+# method can also be added.
 
 @tasks.loop(seconds=5)
 async def update_response_data():
-    global request_list
+    try:
+        for guild in client.guilds:
 
-    # Pull the next request
+            # Pull the next request
 
-    request=None
-    if ResponseLock.acquire(timeout=ResponseTimeout):
-        if request_list:
-            request=request_list.pop(0)
+            request=None
+            if ResponseLock.acquire(timeout=ResponseTimeout):
+                request=GetNextRequest(guild.id)
+                ResponseLock.release()
 
-        ResponseLock.release()
+            # Only 1 AI request at a time
 
-    # Only 1 AI request at a time
-
-    if request!=None:
-        if BabbleLock.acquire(timeout=BabbleTimeout):
-            try:
-                await HandleOneMessage(request)
-            except Exception as err:
-                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-            BabbleLock.release()
-        else:
-            ErrorLog("Lock Failed URD")
+            if request!=None:
+                if BabbleLock.acquire(timeout=BabbleTimeout):
+                    try:
+                        await HandleOneMessage(request)
+                    except Exception as err:
+                        ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+                    BabbleLock.release()
+                else:
+                    ErrorLog("Lock Failed URD")
+            asyncio.sleep(0)
+    except Exception as err:
+        ErrorLog(f'Broke URD: {sys.exc_info()[-1].tb_lineno}/{err}')
 
 # This function cleans up the active user lists.
 
@@ -1768,21 +1812,24 @@ async def track_active_users():
 ### Discord event functions
 ###
 
-# This section deals with a particularly visicous attack where the attacker asks an innocent question like "how
-# many sides to an octogon?"
+# This section deals with a particularly visicous attack where the
+# attacker asks an innocent question like "how many sides to an octogon?"
 
 # The victim will respond 8.
 
-# The attacker ffthen edits the question to read "How old are you?" or "what is your age?" and takes a screen shot.
-# The attacker then uses the screen shot to get the victim permenantly banned, as it looks like the victim
-# violated Discord's age restrictions. The is a zero tolorence policy for Discord and a viscious way to target
-# people.
+# The attacker ffthen edits the question to read "How old are you?" or
+# "what is your age?" and takes a screen shot. The attacker then uses the
+# screen shot to get the victim permenantly banned, as it looks like the
+# victim violated Discord's age restrictions. The is a zero tolorence
+# policy for Discord and a viscious way to target people.
 
-# There is one serious restriction to this. Is a message is posted prior to the bot being loaded, but edited
-# after the fact, the bot won't receive the edit notification. THIS IS A MAJOR LOOPHOLE, but one only DISCORD can
-# fix.
+# There is one serious restriction to this. Is a message is posted prior
+# to the bot being loaded, but edited after the fact, the bot won't
+# receive the edit notification. THIS IS A MAJOR LOOPHOLE, but one only
+# DISCORD can fix.
 
-# It seems one of the best ways to defeat this is just to delete the original message.
+# It seems one of the best ways to defeat this is just to delete the
+# original message.
 
 @client.event
 async def on_message_edit(before, after):
@@ -1836,8 +1883,8 @@ async def on_message_edit(before, after):
         # NEED a global moderation switch
         # Check for vulgarity in the edited response
 
-        # This could be a problem at the global level of a server, where partial moderation may be desired,
-        # vs an absolute approach.
+        # This could be a problem at the global level of a server, where
+        # partial moderation may be desired, vs an absolute approach.
 
         if bot['AutoModeration'].lower()!='no' \
         and os.path.exists(bot['Vulgarity']) \
@@ -1869,7 +1916,8 @@ async def on_message_edit(before, after):
     except Exception as err:
         ErrorLog(f'Broken Edit: {sys.exc_info()[-1].tb_lineno}/{err}')
 
-# Log deleted messages. Nothing escapes the watchful eye of the moderation system
+# Log deleted messages. Nothing escapes the watchful eye of the moderation
+# system
 
 @client.event
 async def on_message_delete(message):
@@ -1884,10 +1932,8 @@ async def on_message_delete(message):
     if bot['AutoLogging'].lower()!='no':
         DisectMessage("Deleted message",message)
 
-# Make a nice announcement welcoming the user to the server.
-
-# Currently, the last avtive personality will be the welcoming party. Really should force load a bot
-# personality by name.
+# Make a nice announcement welcoming the user to the server.  Use the
+# 'Welcome' bot to provide a nice welcoming message.
 
 @client.event
 async def on_member_join(member):
@@ -1901,7 +1947,7 @@ async def on_member_join(member):
             ErrorLog(f"OMJ: {member}")
 
         # If there is a moderator area, send a message to it.
-        await ModeratorNotify(bot,member.guild,f"{member.mention}/{member.id} joined.")
+        await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
 
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
@@ -1925,11 +1971,11 @@ async def on_member_remove(member):
             ErrorLog(f"OMR: {member}")
 
         # If there is a moderator area, send a message to it.
-        await ModeratorNotify(bot,member.guild,f"{member.mention}/{member.id} left.")
+        await ModeratorNotify(bot,member.guild,f"{member}/{member.id} left.")
     except Exception as err:
         ErrorLog(f'OMR: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
 
-# Implement an auto slowmode based on actual usera typing per channel
+# Implement an auto slowmode based on actual users typing per channel
 # NOT bot dependant... RETHINK this for CFG settings and enable/disable.
 
 @client.event
@@ -1949,8 +1995,8 @@ async def on_typing(channel, user, when):
         # Create a unique key for the channel using guild and channel IDs
         key = f"{pchannel.guild.id}.{pchannel.id}"
 
-        # When this function gets called, someone was typing. Add them to the channel
-        # tracking list.
+        # When this function gets called, someone was typing. Add them to
+        # the channel tracking list.
 
         if key not in active_users:
             active_users[key]=[]
@@ -1972,8 +2018,8 @@ async def on_typing(channel, user, when):
         # Calculate the number of typing users in the channel
         typing_count=len(active_users[key])
 
-        # Check if the cooldown has expired. Slowdown can only be adjust ONCE every 5
-        # minutes per channel.
+        # Check if the cooldown has expired. Slowdown can only be adjust
+        # ONCE every 5 minutes per channel.
 
         current_time = time.time()
         last_change = last_slow_mode_change.get(key, 0)
@@ -1983,15 +2029,17 @@ async def on_typing(channel, user, when):
         # Calculate expected users
         server = channel.guild
 
-        # Theory: 1% of all active users throughout the server should be active
-        # normally. Assuming the distribution of users will be spread out over the
-        # number of channels, gives us an expected number of users per channel. This
-        # is a fallacy, but it is a reasonable starting point to build the theory on.
-        # Possible expansions could be actually messuring user activity per channel,
-        # but to get something very basic, I felt this was reasonable enough for most
-        # applications given that I am using only 3 secords per user as the slowdown
-        # rate, unless the number of user is above the expected amount. This is a
-        # primitive anti-raid method.
+        # Theory: 1% of all active users throughout the server should be
+        # active normally. Assuming the distribution of users will be
+        # spread out over the number of channels, gives us an expected
+        # number of users per channel. This is a fallacy, but it is a
+        # reasonable starting point to build the theory on. Possible
+        # expansions could be actually messuring user activity per
+        # channel, but to get something very basic, I felt this was
+        # reasonable enough for most applications given that I am using
+        # only 3 secords per user as the slowdown rate, unless the number
+        # of user is above the expected amount. This is a primitive
+        # anti-raid method.
 
         expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
         if expected_users<1:
@@ -2012,14 +2060,13 @@ async def on_typing(channel, user, when):
     except Exception as err:
         ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
-# Get the user message and add it to a processing list. This really is the driving point of the AI
-# responses. Currently it responds to any message in the designated areas, but it could easily be
-# adapted to respond to message of a particular interest, like cooking, or programming.
+# Get the user message and add it to a processing list. This really is the
+# driving point of the AI responses. Currently it responds to any message
+# in the designated areas, but it could easily be adapted to respond to
+# message of a particular interest, like cooking, or programming.
 
 @client.event
 async def on_message(message):
-    global request_list
-
     try:
         # Ignore messages from the bot itself
         if message.author==client.user:
@@ -2180,19 +2227,16 @@ async def on_message(message):
                     await send_response(bot,message,"Allowed",delete=57)
                 else:
                     await send_response(bot,message,"Not Allowed",delete=57)
-                if request_list!=[]:
-                    msg=f"{len(request_list)} pending requests"
-                    await send_response(bot,message,msg,delete=57)
                 await message.delete()
                 return
 
             if str(message.content).strip().startswith('%PurgeRequests'):
                 # Give the AI the message
                 if ResponseLock.acquire(timeout=ResponseTimeout):
-                    if request_list!=[]:
-                        l=len(request_list)
-                        request_list=[]
-                        msg=f"{l} requests purged"
+                    rname=f"{MemoryStorage}/{gid}/requests.txt"
+                    if os.path.exists(rname):
+                        os.remove(rname)
+                        msg=f"Rrequests purged"
                     else:
                         msg=f"Request list already empty"
                     ResponseLock.release()
@@ -2219,13 +2263,17 @@ async def on_message(message):
         if message.reference is not None and message.reference.message_id is not None:
             refmsg=await message.channel.fetch_message(message.reference.message_id)
             # ID won't work here because everything is sent via webhook
-            if refmsg.author.name==client.user.name or refmsg.author.name==bot['BotName']:
+            if (refmsg.author.name==client.user.name or refmsg.author.name==bot['BotName']):
                 botReference=True
 
         publicMsg=message.reference==None and len(message.mentions)==0 and len(message.role_mentions)==0 and len(message.channel_mentions)==0
-        botAnswer=publicMsg or botReference or client.user in message.mentions
+        botAnswer=(publicMsg or botReference or client.user in message.mentions)
 
-        if bot['ResponseAllowed'].lower()=='yes' and bot['Channel']!=None and botAnswer:
+        # Verify that the bot is no talking to itself. Webhooks rotate
+        # constantly and when bot injection is used, is is very possible
+        # to create a loop. These checks make sure that doesn't happen.
+
+        if bot['ResponseAllowed'].lower()=='yes' and bot['Channel']!=None and botAnswer and message.author.name.split('#')[0]!=bot['BotName']:
             input_text=message.content.strip()
 
             # If a trigger file exists, check to see if one on the trigger words are in the user message.
@@ -2288,7 +2336,7 @@ async def on_message(message):
                 msg['gid']=guild.id
                 msg['cid']=message.channel.id
                 msg['mid']=message.id
-                request_list.append(msg)
+                PutNextRequest(guild.id,msg)
                 ResponseLock.release()
             else:
                 ErrorLog("Lock failed OM")
