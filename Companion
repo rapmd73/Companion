@@ -116,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.915"
+Version="0.0.0.0.930"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -141,6 +141,10 @@ CompanionAutoFilter='/home/Companion/Companion.autofilter'
 
 # Global lock for managing sequential access to the AI api and file safety.
 
+GuildQueue=[]
+GuildQueueLock=threading.Lock()
+GuildQueueTimeout=60
+
 ResponseLock=threading.Lock()
 ResponseTimeout=60
 
@@ -153,8 +157,13 @@ DisectTimeout=60
 LoggingLock=threading.Lock()
 LoggingTimeout=60
 
-BabbleLock=threading.Lock()
-BabbleTimeout=300
+# Each server must have it own lock to insure concurrency under heavy
+# load. Requests per server are still sequential. This should prevent
+# active servers from hogging resources from smaller or less active
+# servers.
+
+BabbleLock={}
+BabbleTimeout=60
 
 # Constants For auto slowmode. Needs to be dymanic in the future
 SLOW_MODE_DURATION = 3  # Seconds for individual slow mode
@@ -215,6 +224,13 @@ def ReadFile(fn,binary=False):
     else:
         buffer=None
     return buffer
+
+# Append a single line to an existing file
+
+def AppendFile(fname,text):
+    fh=open(fname,'a+')
+    fh.write(text)
+    fh.close()
 
 # Write file to disk
 
@@ -447,9 +463,7 @@ def WriteLog(gid,uid,channel,text):
             dn=f'{LoggingStorage}/{gid}'
             mkdir(dn)
             fn=f'{dn}/{channel}.log'
-            fh=open(fn,'a+')
-            fh.write(s)
-            fh.close()
+            AppendFile(fn,s)
         except Exception as err:
             print(f'LOG Broke: {err}')
             pass
@@ -468,9 +482,7 @@ def ErrorLog(text):
 
             mkdir(LoggingStorage)
             fn=LoggingStorage+'/Errors.log'
-            fh=open(fn,'a+')
-            fh.write(s)
-            fh.close()
+            AppendFile(fn,s)
 
             # print to console
             print(txt)
@@ -834,13 +846,17 @@ def GetBabble(message,text):
             else:
                 cbot['Model']=ml[ecounter]
 
+            startTime=time.time()
             response=GetAIResponse(gid,persona,cbot)
+            endTime=time.time()
+            AppendFile(f'{LoggingStorage}/{gid}.timing',f"{datetime.datetime.fromtimestamp(startTime).strftime('%Y-%m-%d %H:%M:%S')} {cbot['Engine']} {cbot['Model']} {endTime-startTime:.6f}\n")
             if response==None:
                 ecounter+=1
             else:
                 break
 
-        # check to see if we got a response
+        # check to see if we got a response. If not, don't save the
+        # memory, just return.
 
         if response==None or response=='':
             return PickRandomResponse(bot['Broken'])
@@ -982,9 +998,7 @@ def GetNextRequest(gid):
 def PutNextRequest(gid,msg):
     rname=f"{MemoryStorage}/{gid}/requests.txt"
     s=json.dumps(msg)+'\n'
-    fh=open(rname,'a+')
-    fh.write(s)
-    fh.close()
+    AppendFile(rname,s)
 
 ###
 ### AI handlers (Optimized)
@@ -1749,35 +1763,73 @@ async def autodelete_messages():
     else:
         ErrorLog("Lock failed ADM")
 
-# The dirty part. I wanted to serialize requests for the bot, so i timer
+# Handle the circular queue for the guilds.
+
+def RotateGuildQueue():
+    global GuildQueueLock
+    global GuildQueue
+
+    # Add the guild to the circular guild queue
+    if GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+        top=GuildQueue.pop(0)
+        GuildQueue.append(top)
+        GuildQueueLock.release()
+
+    return top
+
+# The dirty part. I wanted to serialize requests for the bot, so a timer
 # approach is used coupled with a locking method. This keep a rate limit
 # approach for the open AI api in accordance to its policies. Sleeping
 # method can also be added.
 
-@tasks.loop(seconds=5)
+# The downside to a completely serializd approach is that handling large
+# multiple guilds can monopolize resources. To address this issue, I am
+# using a circular queue where requests in a single server are
+# serialized, but multiple servers can run concurrently.
+
+@tasks.loop(seconds=3)
 async def update_response_data():
+    global BabbleLock
+    global ResponseLock
+    global GuildQueueLock
+    global GuildQueue
+
     try:
-        for guild in client.guilds:
+        guild=RotateGuildQueue()
 
-            # Pull the next request
+        # Check to see is the guild is available to babble
+        if guild.id in BabbleLock and BabbleLock[guild.id].locked():
+            return
 
-            request=None
-            if ResponseLock.acquire(timeout=ResponseTimeout):
-                request=GetNextRequest(guild.id)
-                ResponseLock.release()
+        # Pull the next request
 
-            # Only 1 AI request at a time
+        request=None
+        if ResponseLock.acquire(timeout=ResponseTimeout):
+            request=GetNextRequest(guild.id)
+            ResponseLock.release()
 
-            if request!=None:
-                if BabbleLock.acquire(timeout=BabbleTimeout):
-                    try:
-                        await HandleOneMessage(request)
-                    except Exception as err:
-                        ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-                    BabbleLock.release()
-                else:
-                    ErrorLog("Lock Failed URD")
-            asyncio.sleep(0)
+        # Only 1 AI request at a time
+
+        if request!=None:
+            # Create guild lock for babbling
+            if guild.id not in BabbleLock:
+                BabbleLock[guild.id]=threading.Lock()
+
+            if BabbleLock[guild.id].acquire(timeout=BabbleTimeout):
+                try:
+                    await HandleOneMessage(request)
+                except Exception as err:
+                    # It broke, try to put the request back in the queue
+                    if ResponseLock.acquire(timeout=ResponseTimeout):
+                        PutNextRequest(guild.id,request)
+                        ResponseLock.release()
+                    ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+                BabbleLock[guild.id].release()
+            else:
+                # Couldn't get the lock, try to put the request back in the queue
+                if ResponseLock.acquire(timeout=ResponseTimeout):
+                    PutNextRequest(guild.id,request)
+                    ResponseLock.release()
     except Exception as err:
         ErrorLog(f'Broke URD: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -2067,6 +2119,10 @@ async def on_typing(channel, user, when):
 
 @client.event
 async def on_message(message):
+    global ResponseLock
+    global GuildQueueLock
+    global GuildQueue
+
     try:
         # Ignore messages from the bot itself
         if message.author==client.user:
@@ -2079,6 +2135,11 @@ async def on_message(message):
 
         # Figure out which persona is calling the shots.
         guild=message.guild
+        # Add the guild to the circular guild queue, if not already in it.
+        if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+            GuildQueue.append(guild)
+            GuildQueueLock.release()
+
         channel=str(message.channel)
         uid=str(message.author.id)
 
@@ -2242,7 +2303,7 @@ async def on_message(message):
                     ResponseLock.release()
                     await send_response(bot,message,msg,delete=57)
                 else:
-                    ErrorLog("Lock failed OM")
+                    ErrorLog("PurgeRequest Lock failed")
                 return
 
         # If we have a bot, then we can converse here.
@@ -2339,7 +2400,7 @@ async def on_message(message):
                 PutNextRequest(guild.id,msg)
                 ResponseLock.release()
             else:
-                ErrorLog("Lock failed OM")
+                ErrorLog("Message Lost: Lock failed OM")
     except discord.HTTPException as err:
         if err.code==429:  # Rate limit error
             retry_after=int(err.response.headers.get('X-RateLimit-Reset', 1))*2
@@ -2353,12 +2414,38 @@ async def on_message(message):
 
 @client.event
 async def on_guild_join(guild):
+    global GuildQueueLock
+    global GuildQueue
+
     try:
+        ErrorLog(f"Companion invited to new guild: {guild}/{guild.id}")
+        # Add the guild to the circular guild queue
+        if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+            GuildQueue.append(guild)
+            GuildQueueLock.release()
+
         mkdir(f'{MemoryStorage}/{guild.id}')
         mkdir(f'{LoggingStorage}/{guild.id}')
         await SecurityAudit(guild,None,False,True)
     except Exception as err:
         ErrorLog(f"OGJ: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+
+# When Companion is removed from a guild.
+# TODO: purge all guild files.
+
+@client.event
+async def on_guild_remove(guild):
+    global GuildQueueLock
+    global GuildQueue
+
+    try:
+        ErrorLog(f"Companion kicked out of guild: {guild}/{guild.id}")
+        # Add the guild to the circular guild queue
+        if guild.id in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+            GuildQueue.remove(guild)
+            GuildQueueLock.release()
+    except Exception as err:
+        ErrorLog(f"OGR: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
 # Start the timer task for responses.
 
@@ -2369,6 +2456,11 @@ async def on_ready():
     try:
         # Print some fluff
         for guild in client.guilds:
+            # Add the guild to the circular guild queue, if not already in it.
+            if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+                GuildQueue.append(guild)
+                GuildQueueLock.release()
+
             # Make sure the neccessary directories exist
             mkdir(f'{MemoryStorage}/{guild.id}')
             mkdir(f'{LoggingStorage}/{guild.id}')
