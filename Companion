@@ -131,28 +131,40 @@ LoggingStorage=f'{CompanionBase}/Servers/Logs'
 ConfigStorage=f'{CompanionBase}/Servers/Config'
 
 # For anagram solver
-AnagramWordList="/home/Companion/AnagramSolver.txt"
+AnagramWordList=f'{CompanionBase}/AnagramSolver.txt'
 
 # This is a list of domains that are scams, frauds, or malitiouc. It is exists, it is read and message that
 # have links listed are removed. Requires the persona text file as well for responses.
 
-CompanionScamURLS='/home/Companion/Companion.scam-urls'
-CompanionAutoFilter='/home/Companion/Companion.autofilter'
+CompanionScamURLS=f'{CompanionBase}/Companion.scam-urls'
+CompanionAutoFilter=f'{CompanionBase}/Companion.autofilter'
 
-# Global lock for managing sequential access to the AI api and file safety.
+# `GuildQueueLock`: Ensures safe modification of the guild queue structure during
+# request management across different servers.
 
 GuildQueue=[]
 GuildQueueLock=threading.Lock()
 GuildQueueTimeout=60
 
+# `ResponseLock`: Prevents simultaneous modifications when queuing responses for
+# processing.
+
 ResponseLock=threading.Lock()
 ResponseTimeout=60
+
+# `DeleteLock`: Manages safe scheduling of message deletions without conflicts.
 
 DeleteLock=threading.Lock()
 DeleteTimeout=60
 
+# `DisectLock`: Ensures accurate logging by preventing overlapping writes during message
+# dissection.
+
 DisectLock=threading.Lock()
 DisectTimeout=60
+
+# `BabbleLock`: Provides concurrency control per server while allowing parallelism
+# across different servers.
 
 LoggingLock=threading.Lock()
 LoggingTimeout=60
