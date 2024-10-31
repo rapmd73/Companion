@@ -506,8 +506,15 @@ def ErrorLog(text):
             pass
         LoggingLock.release()
 
-# Needed for OpenAI as there are limits with the number of "tokens" that can be processed in a single
-# request. HuggingFace=Ollama, Together.AI -> NOT OpenAI.
+# The `MaintainTokenLimit` function is responsible for ensuring that the messages sent
+# to the AI do not exceed a specific limit on the number of tokens used. Tokens are
+# units of text that the AI processes, and each message can contain a varying number of
+# tokens based on its length and complexity.  When users interact with the bot, this
+# function checks how many tokens are currently being used in the conversation. If it
+# finds that the total exceeds a predefined limit, it carefully removes older messages
+# from the conversation history to make room for new ones. This way, it ensures that
+# only relevant and recent information is kept while still allowing for meaningful
+# interactions with users.
 
 def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',model="gpt-4o",encoding=None,HuggingFace=False):
     def count_tokens():
@@ -576,16 +583,17 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
 
 # Get "steering" prompts, if there are any
 
-# Steering files are a way of providing reinforcement to a pattern or paticular question/response designed
-# to maintain the persona. Often times this may be used to enforce platform TOS/AUP.
+# Steering files are a way of providing reinforcement to a pattern or paticular
+# question/response designed to maintain the persona. Often times this may be used to
+# enforce platform TOS/AUP.
 
-# While we can dive into the nuances on unbiased AI material, we'll just skip to the finality: NOTHING IS
-# UNBIASED. This will NEVER change simply because of how we learn, develop, and grow both as a family and
-# societal structure. Bias is AUTOMATIC.
+# While we can dive into the nuances on unbiased AI material, we'll just skip to the
+# finality: NOTHING IS UNBIASED. This will NEVER change simply because of how we learn,
+# develop, and grow both as a family and societal structure. Bias is AUTOMATIC.
 
-# The steering principles demonstrated here are much like we go through as children. The txt file will have
-# the question repeated multiple times, with multiple acceptable responses. This practice is virtually
-# identical to how we learn as children.
+# The steering principles demonstrated here are much like we go through as children. The
+# txt file will have the question repeated multiple times, with multiple acceptable
+# responses. This practice is virtually identical to how we learn as children.
 
 def GetSteering(bot,input_text):
     wordlist=GetWordList(StripPunctuation(input_text))
@@ -607,7 +615,15 @@ def GetSteering(bot,input_text):
     # No txt file found. No prompts available
     return None
 
-# Read channel list and set bot persona
+# The `GetCompanionPersona` function is responsible for determining and retrieving the
+# specific personality or character traits that the bot will use when interacting with
+# users in a particular Discord server.  When users send messages, it's important for
+# the bot to respond in a way that fits its designated role or persona. This function
+# checks the server's configuration settings to find out which persona should be used
+# based on factors like the channel type and whether it’s a safe-for-work (SFW) or
+# not-safe-for-work (NSFW) environment. It gathers all relevant information about how
+# the bot should behave, including its name, response style, and any special rules it
+# needs to follow.
 
 def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
@@ -628,8 +644,8 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 
     bot=Config.copy()
 
-    # Welcome should really be Default. If more then one bot it listed, comma separated, one one random,
-    # and vwerify that it has a welcome file.
+    # Welcome should really be Default. If more then one bot it listed, comma separated,
+    # one one random, and vwerify that it has a welcome file.
 
     if Welcome==True:
         bot['BotName']=Config['Welcome']
@@ -750,7 +766,13 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # return the current bot
     return bot
 
-# This function handle the actual responses.
+# The `GetBabble` function is designed to manage the interaction between users and the
+# AI within a Discord server. When a user sends a message to the bot, this function
+# takes that message and prepares it for processing by the AI.  Here's how it works:
+# when a message is received, `GetBabble` gathers all relevant information, including
+# who sent the message and which channel it was sent in. It then compiles this
+# information along with any previous context or conversation history. This complete
+# package is then sent to the AI for generating an appropriate response.
 
 def GetBabble(message,text):
     try:
@@ -884,7 +906,8 @@ def GetBabble(message,text):
         mList.append(json.dumps(memU))
         mList.append(json.dumps(memA))
 
-        # Keep memory at a limited amount. The *2 is because we are saving user and AI responses.
+        # Keep memory at a limited amount. The *2 is because we are saving user and AI
+        # responses.
 
         if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
             if len(mList)>(bot['MaxMemory']*2):
@@ -902,7 +925,14 @@ def GetBabble(message,text):
         ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
         return PickRandomResponse(bot['Broken'])
 
-# Handles the persona as a synchronous call. I chose this approach for symplicity and adaptability.
+# The `HandleOneMessage` function is designed to take care of individual messages sent
+# to the bot in a Discord server. When a user sends a message, this function steps in to
+# manage the entire process of understanding and responding to that message.  Here's how
+# it works: when a message is received, the function first gathers all necessary
+# details, such as who sent the message and which channel it was sent in. It then checks
+# if there are any specific rules or settings that need to be applied based on the
+# context (like whether it's a safe-for-work environment). After that, it prepares
+# everything needed for the AI to generate an appropriate response.
 
 async def HandleOneMessage(request):
     with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -975,7 +1005,13 @@ async def HandleOneMessage(request):
         except Exception as err:
             ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
 
-# Get next request from file. This should be a database eventually.
+# The `GetNextRequest` function is designed to retrieve the next request from a specific
+# Discord server's list of messages that need to be processed by the AI.  When users
+# interact with the bot and send messages, those messages are collected in a queue so
+# that they can be handled one at a time. This function looks at this queue and pulls
+# out the first request that is waiting to be addressed. By doing this, it ensures that
+# each message is processed in order, allowing the AI to respond appropriately and
+# maintain smooth communication.
 
 def GetNextRequest(gid):
     try:
@@ -1009,7 +1045,12 @@ def GetNextRequest(gid):
         ErrorLog(f"GNR: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
 
-# Put the next request
+# The `PutNextRequest` function is responsible for adding a new request to a specific
+# Discord server's list of messages that need to be processed by the AI.  When users
+# send messages to the bot, those messages may require thoughtful responses from the AI.
+# This function takes each new message and places it at the end of the queue, ensuring
+# that it will be addressed in turn after any previous requests. By doing this, it helps
+# manage how and when each message is handled, allowing for organized communication.
 
 def PutNextRequest(gid,msg):
     rname=f"{MemoryStorage}/{gid}/requests.txt"
@@ -1020,7 +1061,15 @@ def PutNextRequest(gid,msg):
 ### AI handlers (Optimized)
 ###
 
-# General AI Call Handler
+# The `GetAIResponse` function is responsible for communicating with the AI to generate
+# thoughtful replies based on user messages. When a user sends a message to the bot,
+# this function takes all relevant information—like the context of the conversation and
+# any specific instructions—and sends it to the AI service.  Here's how it works: once
+# the necessary details are gathered, this function makes a request to the appropriate
+# AI provider (such as OpenAI or Hugging Face) using their API. It specifies parameters
+# like which model to use and how creative or focused the response should be. After
+# sending this request, it waits for a reply from the AI.
+
 def GetAIResponse(gid,persona,bot):
     print(gid,bot.get('Model'), bot.get('Encoding'))
     provider=bot.get('Engine').lower()
@@ -1148,6 +1197,15 @@ def GetAIResponse(gid,persona,bot):
 ### Special features
 ###
 
+# The `AnagramSolver` function is designed to help users find all possible words that
+# can be created by rearranging a set of letters. When a user provides a string of
+# letters, this function analyzes those letters and searches through a dictionary of
+# valid words to identify which ones can be formed.  Here's how it works: the function
+# takes the input letters and generates various combinations and permutations. It then
+# checks each combination against a list of known words to see if they match any valid
+# entries. The results are organized by word length, allowing users to see which words
+# can be created from their given letters.
+
 def AnagramSolver(fromletters):
     def load_dictionary(file_path):
         # Load dictionary words from a file and return them as a set.
@@ -1156,8 +1214,11 @@ def AnagramSolver(fromletters):
         return words
 
     def find_valid_words_by_length(letters, dictionary):
-        # Find all valid words from combinations and permutations of the input letters grouped by length.
+        # Find all valid words from combinations and permutations of the input letters
+        # grouped by length.
+
         valid_words={}
+
         # Generate combinations of letters from 3 to the length of the input
         for length in range(3, len(letters) + 1):
             for combo in itertools.combinations(letters, length):
@@ -1447,10 +1508,14 @@ async def ChangeNickAvatar(bot,message):
         except Exception as err:
             ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
 
-# Return the response to the user. messages over 1997 characters are
-# returned as a message file attachment. Adapt to webhooks...
-
-# If message is None, use system channel
+# The `send_response` function is responsible for sending messages from the bot back to
+# users in a Discord channel. When the bot generates a reply—whether it’s an answer to a
+# question, information, or an alert—this function takes care of delivering that message
+# appropriately.  Here's how it works: the function checks where the response should be
+# sent, whether it's in a regular chat channel or a thread. It formats the message and
+# can even include special features like embeds (which are visually appealing message
+# components) to enhance how information is presented. If needed, it can also schedule
+# messages for automatic deletion after a certain period.
 
 async def send_response(bot,message,response,embed=None,delete=None,member=None):
     global delete_list
