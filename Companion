@@ -306,8 +306,16 @@ def NumberOnly(s):
 lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
 rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
 
-# Building the leet derivitives. This was a royal pain in the ass, but by doing so, if any user trying to
-# bypass the edit detection can be persumed to have malicious intent.
+# Building the leet derivitives. This was a royal pain in the ass, but
+# by doing so, if any user trying to bypass the edit detection can be
+# persumed to have malicious intent.
+
+# The BuildDerivatives function generates variations of a given word
+# using common leetspeak substitutions. This is designed to catch
+# altered forms of keywords that could be used to evade detection,
+# ensuring that questions about sensitive topics (like age) are
+# identified, even if disguised by replacing characters with
+# similar-looking ones (e.g., "age" -> "4g3").
 
 def BuildDerivitives(word):
     substitutions={
@@ -358,6 +366,14 @@ def BuildDerivitives(word):
 
     # return the list of words back to user
     return dList
+
+# The BuildLeetList function creates a comprehensive list of leetspeak
+# variations for a set of keywords. By applying the BuildDerivatives
+# function to each word in the provided list, it generates leet-based
+# variations that help detect keywords even when altered by character
+# substitutions. This enables more reliable identification of disguised
+# or intentionally modified words related to sensitive topics,
+# supporting moderation efforts.
 
 def BuildLeetList(side):
     leetlist=[]
@@ -1869,7 +1885,7 @@ async def track_active_users():
 
 # The victim will respond 8.
 
-# The attacker ffthen edits the question to read "How old are you?" or
+# The attacker then edits the question to read "How old are you?" or
 # "what is your age?" and takes a screen shot. The attacker then uses the
 # screen shot to get the victim permenantly banned, as it looks like the
 # victim violated Discord's age restrictions. The is a zero tolorence
