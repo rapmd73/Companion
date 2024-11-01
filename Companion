@@ -16,8 +16,8 @@
 # particular, do NOT have separate functionalities of a channel, even though discord
 # treats them like a channel.
 
-### *** At some point, I'm going to really have to rewrite this. The forum/thread detection
-###     code is a stinking hot mess and scattered everywhere.
+### *** At some point, I'm going to really have to rewrite this. The forum/thread
+###     detection code is a stinking hot mess and scattered everywhere.
 
 # TODO list:
 #   Figure out how to handle channel config setting across diferent servers.
@@ -48,25 +48,25 @@
 #   octo.ai
 #   openrouter.ai
 
-# Special USER commands:
+# Special USER commands: (Completed)
 
-#   %http       Read URLs, YouTube transcripts, and PDFs
-#   %yttags     Get YouTube video tage, if there are any.
-#   %Forget
+#   %http           Read URLs, YouTube transcripts, and PDFs
+#   %yttags         Get YouTube video tage, if there are any.
+#   %Forget         Tell the AI to forget the conversation in the current channel
+#   %AnagramSolver  Solve Anagrams
 
-# Developer/Admin only:
+# Developer/Admin only: (Completed)
 
-#   %PurgeRequests
-#   %CheckBot
+#   %PurgeRequests  Empty the server request queue
+#   %CheckBot       Check if the AI is allowed in a channel
 
 # Needed functionality
 
-#   Purge memory that are older then X days automatically
-
-# Wanted features:
-
+#   Purge memory that are older then X days automatically - completed
 #   Imposter detection - completed
 #   Auto slow mode - completed
+
+#   Find a way to identify personal information: email, addresses, phone numbers...
 #   Anti raid/nuke
 #   Ticket management
 #   Anti nudity verification for images.
