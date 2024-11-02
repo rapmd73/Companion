@@ -6,7 +6,6 @@
 # All rights reserved unconditionally.
 
 # ***** IMPORTANT:
-
 #   This program uses ADMINISTRATOR priviledges.
 
 # Forum and thread support is a strange approach. Threads are treated like channels,
@@ -116,7 +115,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.930"
+Version="0.0.0.0.940"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -183,8 +182,13 @@ SLOW_MODE_COOLDOWN = 307  # 5 minutes/7 secords cooldown for slow mode adjustmen
 
 # Dictionary to store the last slow mode change time for each channel
 last_slow_mode_change = {}
+
 # For counting active users per chanel
 active_users={}
+
+# For active member joins. anti raid messures. Will be a multiplier for slowdown
+# mode if above 1% of total users.
+active_joins={}
 
 # This is required for the bot to work properly.
 
@@ -1717,6 +1721,7 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     GuildVerification=False
     ExplicitContent=False
     MFAlevel=False
+    IsEveryoneMention=False
 
     orole=discord.utils.get(guild.roles,name='owner')
     if orole:
@@ -1750,22 +1755,31 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     else:
         FailedAudit=True
 
+    # Check permissions for @everyone role
+    if not guild.default_role.permissions.mention_everyone:
+        IsEveryoneMention=True
+    else:
+        FailedAudit=True
+
     # Report the results
     if ShowResults or FailedAudit:
         await admin.send(f"Guild: {guild.name} ({guild.id})")
         await admin.send(f"Owner: {guild.owner} ({guild.owner.id})")
         if not AuditOwnerRole:
-            await admin.send(f"The `owner` role does not exist.")
+            await admin.send(f"The `owner` role does not exist. A dedicated guild owner role is vital for securing control, ensuring only trusted hands hold top permissions. This role acts as the ultimate safeguard against unauthorized changes, breaches, and ensures accountability in managing server integrity.")
         if not IsHighestPos:
-            await admin.send(f"The `owner` role does NOT have the highet position in the role list.")
+            await admin.send(f"The `owner` role does NOT have the highet position in the role list. Please visit the [Discord Role Management](https://support.discord.com/hc/en-us/articles/214836687-Role-Management-101) for more details.")
         if not IsOwnerInRole:
             await admin.send(f"{guild.owner} is NOT in the `owner` role.")
         if not GuildVerification:
-            await admin.send(f"this guild is NOT protected with the highest verification level.")
+            await admin.send(f"this guild is NOT protected with the highest verification level.  Please visit the [Discord Verification Levels](https://support.discord.com/hc/en-us/articles/216679607-Verification-Levels) for more details.")
         if not ExplicitContent:
-            await admin.send(f"Member content is NOT protected.")
+            await admin.send(f"Sensitive content filter is NOT set to the hight level. Please visit the [Sensitive Content Filter](https://support.discord.com/hc/en-us/articles/18210995019671-Discord-Sensitive-Content-Filters) for more details.")
         if not MFAlevel:
-            await admin.send(f"This guild is NOT protected by two factor authentication")
+            await admin.send(f"This guild is NOT protected by two factor authentication. Please visit the [Discord Multifactor Authentication](https://support.discord.com/hc/en-us/articles/219576828-Setting-up-Multi-Factor-Authentication) for more details.")
+        if not IsEveryoneMention:
+            await admin.send(f"Allowing the `@everyone` role to ping everyone opens the door to spam and raid abuse, as any member could trigger mass notifications, disrupting user experience and overwhelming the server. This permission should always be restricted to prevent chaos and maintain a controlled, respectful communication environment. Please visit [Discord Role Management](https://support.discord.com/hc/en-us/articles/214836687-Role-Management-101) for more details.")
+
         if ShowResults:
             await admin.send(f"Current Members: {guild.member_count}")
         if FailedAudit:
@@ -1935,6 +1949,7 @@ async def update_response_data():
 @tasks.loop(seconds=60)
 async def track_active_users():
     global active_users
+    global active_joins
 
     try:
         current_time=time.time()
@@ -1950,6 +1965,14 @@ async def track_active_users():
                         active_users[ac].remove(au)
                     else:
                         au[1]=time.time()
+
+        # Sweep all guilds
+        for ag in list(active_joins):
+            # Sweep all users in join list
+            for au in ag:
+                if (current_time-au[1])>SLOW_MODE_COOLDOWN:
+                    active_joins[ag].remove(au)
+
     except Exception as err:
         ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
 
@@ -2082,7 +2105,16 @@ async def on_message_delete(message):
 
 @client.event
 async def on_member_join(member):
+    global active_joins
+
     try:
+        # Track new member joins
+        key=member.guild.id
+        if key not in active_joins:
+            active_joins[key]=[]
+        ut=[member.id,time.time()]
+        active_joins[key].append(ut)
+
         # Welcome forces the default bot.
         bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
         if bot==None:
@@ -2126,6 +2158,7 @@ async def on_member_remove(member):
 @client.event
 async def on_typing(channel, user, when):
     global active_users
+    global active_joins
 
     try:
         # if direct message, ignore
@@ -2136,6 +2169,17 @@ async def on_typing(channel, user, when):
         pchannel=channel
         if isinstance(channel,discord.Thread):
             pchannel=channel.parent
+
+        # Track active member joins
+        joins=1
+        if pchannel.guild.id in active_joins:
+            joins=len(active_joins[channel.guild.id])
+
+        # joins will be used a a multiplier so is the threshold is not met, then
+        # a multiplier of 1 is used is keep the method simple.
+
+        if joins<=int(len(pchannel.guild.members)*0.01):
+            joins=1
 
         # Create a unique key for the channel using guild and channel IDs
         key = f"{pchannel.guild.id}.{pchannel.id}"
@@ -2151,13 +2195,13 @@ async def on_typing(channel, user, when):
             if u[0]==user.id:
                 # Reset the timer
                 u[1]=time.time()
-                u[2]+=1
+                u[2]+=1*joins
                 found=True
 
         if not found:
             # User ID, and the time they were typing, factor
             # The factor is used as a decrementer to prevent manipulation
-            ut=[user.id,time.time(),1]
+            ut=[user.id,time.time(),joins]
             active_users[key].append(ut)
 
         # Calculate the number of typing users in the channel
@@ -2192,9 +2236,9 @@ async def on_typing(channel, user, when):
 
         # Determine slow mode duration
         if typing_count > 2 * expected_users:  # Over threshold
-            slow_mode_duration = SLOW_MODE_DURATION * typing_count * 10
+            slow_mode_duration = SLOW_MODE_DURATION * typing_count*10*joins
         elif typing_count > expected_users:
-            slow_mode_duration = SLOW_MODE_DURATION * typing_count
+            slow_mode_duration = SLOW_MODE_DURATION * typing_count*joins
         else:
             slow_mode_duration = 0
 
@@ -2589,4 +2633,5 @@ if __name__=='__main__':
         ErrorLog(f"Broken MAIN: {err}")
 
 ### END OF PROGRAM
+
 
