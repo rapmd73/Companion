@@ -2236,6 +2236,8 @@ async def on_typing(channel, user, when):
 
         # Determine slow mode duration
         if typing_count > 2 * expected_users:  # Over threshold
+            bot=GetCompanionPersona(server.id,None,Welcome=True)
+            await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users > {expected_users} users")
             slow_mode_duration = SLOW_MODE_DURATION * typing_count*10*joins
         elif typing_count > expected_users:
             slow_mode_duration = SLOW_MODE_DURATION * typing_count*joins
