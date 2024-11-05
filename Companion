@@ -97,17 +97,18 @@ import requests
 import re
 import asyncio
 import discord
+from discord.ext import commands, tasks
 import profanity_check as pc
 import pdfplumber
 import tiktoken
 import openai
-from huggingface_hub import InferenceClient
+import ollama
 import together
 import cohere
-import ollama
+from huggingface_hub import InferenceClient
+import anthropic
 import youtube_transcript_api
 import imagehash
-from discord.ext import commands, tasks
 from transformers import AutoTokenizer
 from googleapiclient.discovery import build
 from PIL import Image
@@ -115,7 +116,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.945"
+Version="0.0.0.0.950"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -541,10 +542,22 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
             current_tokens=sum(len(enc(message["content"])["input_ids"]) for message in messages)
         elif engine=='cohere':
             current_tokens=sum(len(co.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
+        elif engine=='anthropic':
+            # Anthropic does NOT hav a clean way of doing this... I've tried
+            # several. the 20 at the end is what Anthropic calls overhead. They
+            # say 12, but as wrong as the rest of this has been, the extra can
+            # not hurt.
+
+            current_tokens=0
+            textList=[]
+            for message in messages:
+                if message['role']!='system':
+                    current_tokens+=len(message['content'])+20
+            current_tokens=int(current_tokens/4)
         else:
+            # Lase ditch effort
             current_tokens=0
             for message in messages:
-#                current_tokens=len(enc(message["content"], add_special_tokens=False)["input_ids"])
                 current_tokens=int(len(message["content"])/4)
         return current_tokens
 
@@ -557,6 +570,8 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
         enc=AutoTokenizer.from_pretrained(model)
     elif engine=='cohere':
         co=cohere.ClientV2(api_key=Tokens['Cohere'])
+#    elif engine=='anthropic':
+#        enc=anthropic.Anthropic(api_key=Tokens['Anthropic'])
 #    else:
         # Gated, needs env HF_HUB_READ_TOKEN
 #        enc=AutoTokenizer.from_pretrained(encoding)
@@ -1123,6 +1138,20 @@ def GetAIResponse(gid,persona,bot):
             )
             clientAI.close()
 
+        # Anthropic has a separate system methodology then other AI services
+
+        elif provider=='anthropic':
+            clientAI=anthropic.Anthropic(api_key=Tokens['Anthropic'],timeout=tout)
+            completion=clientAI.messages.create(
+                system=WorkingPersona[0]['content'],
+                model=model,
+                max_tokens=4096,
+                temperature=bot['Temperature'],
+                messages=WorkingPersona[1:],
+                stream=False
+            )
+            clientAI.close()
+
         # HuggingFace uses fragmentation for completion methods...
         # Access is free for 1000 requests per day. 1 response could take 8 requests to the API.
 
@@ -1195,6 +1224,8 @@ def GetAIResponse(gid,persona,bot):
                 response=' '.join(hfresponses).strip()
             elif provider=='cohere':
                 response=completion.message.content[0].text.strip()
+            elif provider=='anthropic':
+                response=completion.content[0].text.strip()
             elif provider=='ollama':
                 response=completion['message']['content'].strip()
             else:
