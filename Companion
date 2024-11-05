@@ -115,7 +115,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.940"
+Version="0.0.0.0.945"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1969,7 +1969,7 @@ async def track_active_users():
         # Sweep all guilds
         for ag in list(active_joins):
             # Sweep all users in join list
-            for au in ag:
+            for au in list(active_joins[ag]):
                 if (current_time-au[1])>SLOW_MODE_COOLDOWN:
                     active_joins[ag].remove(au)
 
@@ -2112,8 +2112,9 @@ async def on_member_join(member):
         key=member.guild.id
         if key not in active_joins:
             active_joins[key]=[]
-        ut=[member.id,time.time()]
-        active_joins[key].append(ut)
+        if member.id not in active_joins[key]:
+            ut=[member.id,time.time()]
+            active_joins[key].append(ut)
 
         # Welcome forces the default bot.
         bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
@@ -2261,8 +2262,16 @@ async def on_message(message):
     global ResponseLock
     global GuildQueueLock
     global GuildQueue
+    global active_joins
 
     try:
+        key=message.guild.id
+        if key not in active_joins:
+            active_joins[key]=[]
+        if message.author.id not in active_joins[key]:
+            ut=[message.author.id,time.time()]
+            active_joins[key].append(ut)
+
         # Ignore messages from the bot itself
         if message.author==client.user:
             return
