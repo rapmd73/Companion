@@ -542,23 +542,20 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
             current_tokens=sum(len(enc(message["content"])["input_ids"]) for message in messages)
         elif engine=='cohere':
             current_tokens=sum(len(co.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
-        elif engine=='anthropic':
-            # Anthropic does NOT hav a clean way of doing this... I've tried
-            # several. the 20 at the end is what Anthropic calls overhead. They
-            # say 12, but as wrong as the rest of this has been, the extra can
-            # not hurt.
+        else:
+            # Generic fall through. Anthropic does NOT hav a clean way of doing this...
+            # I've tried several. the 20 at the end is what Anthropic calls overhead.
+            # They say 12, but as wrong as the rest of this has been, the extra can not
+            # hurt.
 
             current_tokens=0
-            textList=[]
             for message in messages:
                 if message['role']!='system':
-                    current_tokens+=len(message['content'])+20
+                    current_tokens+=len(message['content'])+24
+                elif engine!='anthropic':
+                    current_tokens+=len(message['content'])+24
             current_tokens=int(current_tokens/4)
-        else:
-            # Lase ditch effort
-            current_tokens=0
-            for message in messages:
-                current_tokens=int(len(message["content"])/4)
+
         return current_tokens
 
     if engine=='openai': #not HuggingFace:
