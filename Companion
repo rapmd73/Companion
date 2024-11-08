@@ -41,7 +41,6 @@
 #   OctoML AI
 #   Vertex AI
 #   AI21labs
-#   Deep Infra
 #   Azure
 #   Anyscale
 #   Replicate
@@ -440,7 +439,7 @@ def jsonFilter(s,FilterSpace=True):
 
 def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
-    return [word for word in words if word]     # Filter out empty strings (including spaces)
+    return [word for word in words if word.strip()]     # Filter out empty strings (including spaces)
 
 # This function scans a piece of text to identify sensitive personal information, such
 # as Social Security numbers, phone numbers, email addresses, credit card numbers, IP
@@ -452,29 +451,74 @@ def GetWordList(text):
 # process helps ensure privacy by flagging potentially sensitive data in a
 # straightforward way.
 
-def DetectPII(text):
+async def DetectPII(text):
+    # Embedded function to validate credit card numbers using Luhn's algorithm
+    def ValidCC(card_number):
+        # Remove any non-digit characters for validation purposes
+        card_number = ''.join(filter(str.isdigit, card_number))
+
+        # Check for valid credit card lengths
+        if len(card_number) not in [15, 16]:
+            return False
+
+        # Basic BIN check for common credit cards
+        valid_bins = ('4', '5', '34', '37', '6')  # Visa, MasterCard, AmEx, Discover
+        if not card_number.startswith(valid_bins):
+            return False
+
+        # Luhn algorithm to verify credit card number
+        checksum = 0
+        reverse_digits = card_number[::-1]
+        for idx, digit in enumerate(reverse_digits):
+            num = int(digit)
+            # Double every second digit from the right
+            if idx % 2 == 1:
+                num *= 2
+                if num > 9:  # If doubling results in two digits, sum them
+                    num -= 9
+            checksum += num
+        return checksum % 10 == 0
+
     # Regex patterns for various types of PII
     patterns = {
         "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
-        "Phone Number": r"(?!https?://)\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",  # Avoid matching numbers in URLs
         "Email": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
         "Credit Card": r"\b(?:\d[ -]*?){13,16}\b",
         "IPv4 Address": r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
         "IPv6 Address": r"\b([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b",
-        "EIN": r"\b\d{2}-\d{7}\b"
+        "EIN": r"\b\d{2}-\d{7}\b",
+        "Phone Number US": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+1\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
+        "Phone Number India": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+91\s?)?(\(?\d{2,3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
+        "Phone Number UK": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+44\s?)?(\(?\d{4,5}\)?\s?-?\s?\d{6,7})$",
+        "Phone Number Germany": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+49\s?)?(\(?\d{2,5}\)?\s?-?\s?\d{5,8})$",
+        "Phone Number Brazil": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+55\s?)?(\(?\d{2}\)?\s?-?\s?\d{4,5}\s?-?\s?\d{4})$",
+        "Phone Number Russia": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+7\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
+        "Phone Number Canada": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+1\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
+        "Phone Number Mexico": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+52\s?)?(\(?\d{2}\)?\s?-?\s?\d{2,3}\s?-?\s?\d{4})$",
+        "Phone Number Japan": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+81\s?)?(\(?\d{2,4}\)?\s?-?\s?\d{2,4}\s?-?\s?\d{4})$",
+        "Phone Number Australia": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+61\s?)?(\(?\d{1,4}\)?\s?-?\s?\d{4,5}\s?-?\s?\d{4})$"
     }
 
     # Pattern to identify Discord mentions (e.g. <@396394433328971776>)
     discord_mention_pattern = r"<@\d{17,18}>"
 
-    # Remove Discord mentions from the text
+    # Remove Discord mentions from sssthe text
     text_without_mentions = re.sub(discord_mention_pattern, "", text)
 
     # Check each PII pattern in the cleaned text
     for pii_type, pattern in patterns.items():
         match = re.search(pattern, text_without_mentions)
         if match:
-            return f"{pii_type}: {match.group()}"
+            detected_value = match.group()
+
+            # Special handling for Credit Card numbers. Ignore if not a valid
+            # credit card based on the Luhn check and BIN
+
+            if pii_type == "Credit Card" and not ValidCC(detected_value):
+                continue
+
+            return f"{pii_type}: {detected_value}"
+        await asyncio.sleep(0)
 
     # If no PII pattern was found
     return None
@@ -2448,11 +2492,14 @@ async def on_message(message):
             await message.delete()
             return
 
-        # Check for input for personal identifying information (PII)
+        # Check for input for personal identifying information (PII). Even
+        # Companion will get caught in these validations.
+
         if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
-            HasPII=DetectPII(message.content)
+            HasPII=await DetectPII(message.content)
             if HasPII:
                 await ModeratorNotify(bot,message.guild,f"PII detected: {message.author.name}/{message.author.id} in {message.channel.name}, {HasPII}")
+                await ModeratorNotify(bot,message.guild,f"{message.content}")
                 author=str(message.author.mention)
                 # If its a bot, it doesn't deserve a response
                 if not message.author.bot:
