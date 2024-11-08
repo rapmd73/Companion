@@ -117,7 +117,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.970"
+Version="0.0.0.0.975"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -487,16 +487,7 @@ async def DetectPII(text):
         "IPv4 Address": r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
         "IPv6 Address": r"\b([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b",
         "EIN": r"\b\d{2}-\d{7}\b",
-        "Phone Number US": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+1\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
-        "Phone Number India": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+91\s?)?(\(?\d{2,3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
-        "Phone Number UK": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+44\s?)?(\(?\d{4,5}\)?\s?-?\s?\d{6,7})$",
-        "Phone Number Germany": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+49\s?)?(\(?\d{2,5}\)?\s?-?\s?\d{5,8})$",
-        "Phone Number Brazil": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+55\s?)?(\(?\d{2}\)?\s?-?\s?\d{4,5}\s?-?\s?\d{4})$",
-        "Phone Number Russia": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+7\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
-        "Phone Number Canada": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+1\s?)?(\(?\d{3}\)?\s?-?\s?\d{3}\s?-?\s?\d{4})$",
-        "Phone Number Mexico": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+52\s?)?(\(?\d{2}\)?\s?-?\s?\d{2,3}\s?-?\s?\d{4})$",
-        "Phone Number Japan": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+81\s?)?(\(?\d{2,4}\)?\s?-?\s?\d{2,4}\s?-?\s?\d{4})$",
-        "Phone Number Australia": r"^(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+61\s?)?(\(?\d{1,4}\)?\s?-?\s?\d{4,5}\s?-?\s?\d{4})$"
+        "Phone Number": r"\b(?!.*https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+|www\.[\w-]+(?:\.[\w]{2,})+)(\+?\d{1,4}[\s\-]?)?(\(?\d{1,4}\)?[\s\-]?)?\(?\d{1,4}\)?[\s\-]?\d{1,4}[\s\-]?\d{1,4}\b"
     }
 
     # Pattern to identify Discord mentions (e.g. <@396394433328971776>)
