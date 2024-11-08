@@ -118,7 +118,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.960"
+Version="0.0.0.0.965"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -453,6 +453,7 @@ def GetWordList(text):
 # straightforward way.
 
 def DetectPII(text):
+    # Regex patterns for various types of PII
     patterns = {
         "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
         "Phone Number": r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}",
@@ -463,9 +464,15 @@ def DetectPII(text):
         "EIN": r"\b\d{2}-\d{7}\b"
     }
 
-    # Check each pattern in the input text
+    # Pattern to identify Discord mentions (e.g. <@396394433328971776>)
+    discord_mention_pattern = r"<@\d{17,18}>"
+
+    # Remove Discord mentions from the text
+    text_without_mentions = re.sub(discord_mention_pattern, "", text)
+
+    # Check each PII pattern in the cleaned text
     for pii_type, pattern in patterns.items():
-        match = re.search(pattern, text)
+        match = re.search(pattern, text_without_mentions)
         if match:
             return f"{pii_type}: {match.group()}"
 
