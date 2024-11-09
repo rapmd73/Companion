@@ -117,7 +117,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.980"
+Version="0.0.0.0.985"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -455,41 +455,41 @@ async def DetectPII(text):
     def detect_phone_number(text):
         # Define phone number patterns for different countries
         phone_patterns = [
-            (r'(?<!\d)(\+?86)?1[3-9]\d{9}(?!\d)', 'China'),  # China (11 digits, starts with 13-19)
-            (r'(?<!\d)(\+91)?[6789]\d{9}(?!\d)', 'India'),    # India (10 digits, starts with 6-9)
+            (r'(?<!\d)(\+?86)?1[3-9]\d{9}(?!\d)', 'China'),        # China (11 digits, starts with 13-19)
+            (r'(?<!\d)(\+91)?[6789]\d{9}(?!\d)', 'India'),         # India (10 digits, starts with 6-9)
             (r'(?<!\d)(\+1)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)', 'USA/Canada'),  # USA/Canada (10 digits, area code optional)
-            (r'(?<!\d)(\+1)?\d{10}(?!\d)', 'USA/Canada'),  # USA/Canada (10 digits, no spaces or symbols)
+            (r'(?<!\d)(\+1)?\d{10}(?!\d)', 'USA/Canada'),          # USA/Canada (10 digits, no spaces or symbols)
             (r'(?<!\d)(\+55)?\(?[1-9]\d\)?[\s.-]?\d{4,5}[\s.-]?\d{4}(?!\d)', 'Brazil'),  # Brazil (10-11 digits, area code 2-9)
-            (r'(?<!\d)(\+62)?8\d{8,10}(?!\d)', 'Indonesia'),     # Indonesia (9-11 digits, starts with 8)
-            (r'(?<!\d)(\+7)?9\d{9}(?!\d)', 'Russia'),         # Russia (10 digits, starts with 9 after +7)
+            (r'(?<!\d)(\+62)?8\d{8,10}(?!\d)', 'Indonesia'),       # Indonesia (9-11 digits, starts with 8)
+            (r'(?<!\d)(\+7)?9\d{9}(?!\d)', 'Russia'),              # Russia (10 digits, starts with 9 after +7)
             (r'(?<!\d)(\+81)?0\d{1,4}[\s.-]?\d{1,4}[\s.-]?\d{4}(?!\d)', 'Japan'),  # Japan (varied lengths, typically 10 digits)
             (r'(?<!\d)(\+52)?\(?\d{2,3}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}(?!\d)', 'Mexico'),  # Mexico (10-11 digits, area code 2-3 digits)
             (r'(?<!\d)(\+49)?\(?\d{3,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{4}(?!\d)', 'Germany'),  # Germany (10-12 digits, various area codes)
-            (r'(?<!\d)(\+44)?7\d{9}(?!\d)', 'UK'),         # UK (10 digits, starts with 7 after +44)
-            (r'(?<!\d)(\+1)?\d{10}(?!\d)', 'USA')           # USA (No symbols or spaces)
+            (r'(?<!\d)(\+44)?7\d{9}(?!\d)', 'UK')                 # UK (10 digits, starts with 7 after +44)
         ]
 
-        # Compile phone patterns into one regex for faster matching
-        phone_regex = re.compile('|'.join([pattern for pattern, _ in phone_patterns]))
+        # Step 1: Remove URLs from the text. This approach is needed because
+        # URLs can be wrapped in markdown. Not perfect be far, but it does seem
+        # to remove most false positives without the need of an AI classifier.
 
-        # Match URLs in the text (ignoring any URLs containing phone numbers)
-        url_pattern = r'https?://[^\s]+|www\.[^\s]+|[^\s]+\.[a-zA-Z]{2,}'
-        urls = [match.group() for match in re.finditer(url_pattern, text)]
+        inwords=text.lower().split()
+        outwords=[]
+        for word in inwords:
+            if 'http://' not in word and 'https://' not in word:
+                outwords.append(word)
+        text=' '.join(outwords)
 
-        # Check for phone number matches in the text
+        # Step 2: Detect any phone numbers in the text
         for pattern, country in phone_patterns:
-            for match in re.finditer(pattern, text):
+            match = re.search(pattern, text)
+            if match:
                 phone_number = match.group()
 
-                # Skip numbers that are 4 digits or less (not valid phone numbers)
-                if len(phone_number) <= 4:
-                    continue
+                # Skip numbers that are too short to be valid phone numbers
+                if len(phone_number) > 4:
+                    return (phone_number, country)
 
-                # Check if the phone number is part of a URL (to avoid false positives)
-                if not any(url in text[max(0, match.start()-30):min(len(text), match.end()+30)] for url in urls):
-                    return f"Phone Number: {country}/{phone_number}"  # Return immediately upon first valid match
-
-        # Return None if no valid phone numbers were found
+        # Return None if no valid phone numbers are found
         return None
 
     # Embedded function to validate credit card numbers using Luhn's algorithm
