@@ -117,7 +117,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.985"
+Version="0.0.0.0.990"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2420,7 +2420,9 @@ async def on_message(message):
             ut=[message.author.id,time.time()]
             active_joins[key].append(ut)
 
-        # Ignore messages from the bot itself
+        # Ignore messages from the bot itself. This does NOT work with webhooks,
+        # so We need to check for that too.
+
         if message.author==client.user:
             return
 
@@ -2471,6 +2473,12 @@ async def on_message(message):
         # Log everything
         if bot['AutoLogging'].lower()!='no':
             DisectMessage("Received message",message)
+
+        # Now that we have a bot name, we can check for webhooks and make sure
+        # they are not my own.
+
+        if message.webhook_id and message.author.name==bot['BotName']:
+            return
 
         # MUST BE FIRST!
         # Imposter among us no more!
@@ -2527,9 +2535,23 @@ async def on_message(message):
             return
 
         # Check for input for personal identifying information (PII). Even
-        # Companion will get caught in these validations.
+        # Companion will get caught in these validations. Ignore bots... This
+        # may be a bad idea, but Bots seem to have a wicked high number of false
+        # positives. Once an AI classifier is in place, this may not be needed.
 
         if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
+            # Check whitelist
+            piiList=bot['PIIWhitelist'].split(',')
+            for uc in piiList:
+                # Is this a whitelisted user
+                if uc[0]=='@':
+                    if uc[1:].lower()==message.author.name.lower():
+                        return
+                # Is this a white listed channel
+                if uc[0]=='#':
+                    if uc[1:].lower()==message.channel.name.lower():
+                        return
+
             HasPII=await DetectPII(message.content)
             if HasPII:
                 await ModeratorNotify(bot,message.guild,f"PII detected: {message.author.name}/{message.author.id} in {message.channel.name}, {HasPII}")
