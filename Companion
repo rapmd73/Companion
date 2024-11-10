@@ -2275,6 +2275,40 @@ async def on_member_join(member):
         # If there is a moderator area, send a message to it.
         await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
 
+        # Impersonation check
+        # Retrieve the guild and owner information
+        guild = member.guild
+        owner = guild.owner
+        owner_name = owner.name.lower()
+        owner_nick = owner.display_name.lower()
+        member_name = member.name.lower()
+        member_nick = member.display_name.lower()
+
+        # Check if the new member has the same username or display name as the owner
+        if member != owner and (member_name == owner_name or member_nick == owner_nick):
+            # Fetch URLs for avatars
+            member_avatar_url = member.display_avatar.url
+            owner_avatar_url = owner.display_avatar.url
+
+            # Load images for comparison
+            try:
+                member_avatar_image = LoadImageURL(member_avatar_url)
+                owner_avatar_image = LoadImageURL(owner_avatar_url)
+            except Exception as err:
+                ErrorLog(f"OMJ Broken: Avatar load/{err}")
+                return
+
+            # Convert avatars to perceptual hashes
+            member_hash = imagehash.phash(member_avatar_image)
+            owner_hash = imagehash.phash(owner_avatar_image)
+
+            # Compare hash distance (simple comparison)
+            if member_hash == owner_hash:
+                # Ban the member for impersonation
+                await member.ban(reason="Impersonating the server owner")
+                await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
+                return
+
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
             response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
