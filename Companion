@@ -8,18 +8,20 @@
 # ***** IMPORTANT:
 #   This program uses ADMINISTRATOR priviledges.
 
-# Forum and thread support is a strange approach. Threads are treated like channels,
-# with a few extra bits. Webhooks, slowdown mode, edits, even the way message are sent
-# into the thread is effected. Activitieshave to be tested and is it is a thread, most
-# of the time, you have to pull the parent channel. Webhooks and slowdown mode, in
-# particular, do NOT have separate functionalities of a channel, even though discord
-# treats them like a channel.
+# Forum and thread support is a strange approach. Threads are treated like
+# channels, with a few extra bits. Webhooks, slowdown mode, edits, even the way
+# message are sent into the thread is effected. Activitieshave to be tested and
+# is it is a thread, most of the time, you have to pull the parent channel.
+# Webhooks and slowdown mode, in particular, do NOT have separate
+# functionalities of a channel, even though discord treats them like a channel.
 
 ### *** At some point, I'm going to really have to rewrite this. The forum/thread
 ###     detection code is a stinking hot mess and scattered everywhere.
 
-# TODO list:
-#   Figure out how to handle channel config setting across diferent servers.
+# Areas where a classifier can improve functionality (at a higher cost):
+#   Phone number detection would have a significantly lower lecel of false positives.
+#   Technical messages versus non-technical for varying the temperature of the
+#       conversation.
 
 # Listed in order of when the service was added.
 
@@ -34,9 +36,9 @@
 
 # --> Not in a specific order, add support for the following engines:
 
+#   perplexity.ai
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
-#   perplexity.ai
 #   fireworks.ai
 #   OctoML AI
 #   Vertex AI
@@ -65,8 +67,9 @@
 #   Imposter detection - completed
 #   Auto slow mode - completed
 #   Anti-raid - completed
+#   Find a way to identify personal information: email, phone numbers, SSN, EIN,
+#       Credit Card numbers
 
-#   Find a way to identify personal information: email, addresses, phone numbers, SSN, EIN, Credit Card numbers
 #   Anti nuke
 #   Ticket management
 #   Anti nudity verification for images.
@@ -117,7 +120,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.990"
+Version="0.0.0.0.1000"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -452,7 +455,7 @@ def GetWordList(text):
 # straightforward way.
 
 async def DetectPII(text):
-    def detect_phone_number(text):
+    async def detect_phone_number(text):
         # Define phone number patterns for different countries
         phone_patterns = [
             (r'(?<!\d)(\+?86)?1[3-9]\d{9}(?!\d)', 'China'),        # China (11 digits, starts with 13-19)
@@ -488,6 +491,7 @@ async def DetectPII(text):
                 # Skip numbers that are too short to be valid phone numbers
                 if len(phone_number) > 4:
                     return (phone_number, country)
+            await asyncio.sleep(0)
 
         # Return None if no valid phone numbers are found
         return None
@@ -550,9 +554,9 @@ async def DetectPII(text):
             return f"{pii_type}: {detected_value}"
         await asyncio.sleep(0)
 
-        match=detect_phone_number(text)
+        match=await detect_phone_number(text)
         if match:
-            return match
+            return f"Phone Number: {match}"
 
     # If no PII pattern was found
     return None
@@ -945,7 +949,10 @@ def GetBabble(message,text):
 
         # Load the persona and memory files
         # NSFW not allowed in threads directly, so find parent channel
-        # Question: Do we take info of NSFW state or force verify? Currebt is face value
+
+        # Question: Do we take info of NSFW state or force verify? Currebt is
+        # face value
+
         bot=None
         if isinstance(message.channel,discord.Thread):
             pchannel=str(message.channel.parent)
@@ -1939,6 +1946,78 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
             if ShowResults:
                 await admin.send(f"**This server has PASSED the security audit.**")
 
+# Check for owner impersonations.
+
+async def ImposterAmoungUs(guild,member):
+    try:
+        # Retrieve the guild and owner information
+        guild = guild
+        owner = guild.owner
+        owner_name = owner.name.lower()
+        owner_nick = owner.display_name.lower()
+        member_name = member.name.lower()
+        member_nick = member.display_name.lower()
+
+        # Check if the new member has the same username or display name as the owner
+        if member != owner and (member_name == owner_name or member_nick == owner_nick):
+            # Fetch URLs for avatars
+            member_avatar_url = member.display_avatar.url
+            owner_avatar_url = owner.display_avatar.url
+
+            # Load images for comparison
+            try:
+                member_avatar_image = LoadImageURL(member_avatar_url)
+                owner_avatar_image = LoadImageURL(owner_avatar_url)
+            except Exception as err:
+                ErrorLog(f"IAU Broken: Avatar load/{err}")
+                return False
+
+            # Convert avatars to perceptual hashes
+            member_hash = imagehash.phash(member_avatar_image)
+            owner_hash = imagehash.phash(owner_avatar_image)
+
+            # Compare hash distance (simple comparison)
+            if member_hash == owner_hash:
+                # Ban the member for impersonation
+                await member.ban(reason="Impersonating the server owner")
+                await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
+                return True
+    except Exception as err:
+        ErrorLog(f'IAU: {sys.exc_info()[-1].tb_lineno}/{err}')
+    return False
+
+# Check for input for personal identifying information (PII). Even Companion
+# will get caught in these validations. This may be a bad idea, but Bots seem to
+# have a wicked high number of false positives. Once an AI classifier is in
+# place, this may not be needed.
+
+async def IsPIIDetected(bot,message):
+    if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
+        # Check whitelist
+        piiList=bot['PIIWhitelist'].split(',')
+        for uc in piiList:
+            # Is this a whitelisted user
+            if uc[0]=='@':
+                if uc[1:].lower()==message.author.name.lower():
+                    return False
+            # Is this a white listed channel
+            if uc[0]=='#':
+                if uc[1:].lower()==message.channel.name.lower():
+                    return False
+
+        HasPII=await DetectPII(message.content)
+        if HasPII:
+            await ModeratorNotify(bot,message.guild,f"PII detected: {message.author.name}/{message.author.id} in {message.channel.name}, {HasPII}")
+            await ModeratorNotify(bot,message.guild,f"{message.content}")
+            author=str(message.author.mention)
+            # If its a bot, it doesn't deserve a response
+            if not message.author.bot:
+                await send_response(bot,message,PickRandomResponse(bot['PII']),delete=300)
+            await message.delete()
+            return True
+
+    return False
+
 ###
 ### Background Tasks
 ###
@@ -2275,39 +2354,8 @@ async def on_member_join(member):
         # If there is a moderator area, send a message to it.
         await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
 
-        # Impersonation check
-        # Retrieve the guild and owner information
-        guild = member.guild
-        owner = guild.owner
-        owner_name = owner.name.lower()
-        owner_nick = owner.display_name.lower()
-        member_name = member.name.lower()
-        member_nick = member.display_name.lower()
-
-        # Check if the new member has the same username or display name as the owner
-        if member != owner and (member_name == owner_name or member_nick == owner_nick):
-            # Fetch URLs for avatars
-            member_avatar_url = member.display_avatar.url
-            owner_avatar_url = owner.display_avatar.url
-
-            # Load images for comparison
-            try:
-                member_avatar_image = LoadImageURL(member_avatar_url)
-                owner_avatar_image = LoadImageURL(owner_avatar_url)
-            except Exception as err:
-                ErrorLog(f"OMJ Broken: Avatar load/{err}")
-                return
-
-            # Convert avatars to perceptual hashes
-            member_hash = imagehash.phash(member_avatar_image)
-            owner_hash = imagehash.phash(owner_avatar_image)
-
-            # Compare hash distance (simple comparison)
-            if member_hash == owner_hash:
-                # Ban the member for impersonation
-                await member.ban(reason="Impersonating the server owner")
-                await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
-                return
+        if ImposterAmoungUs(member.guild,member):
+            return
 
         if os.path.exists(bot['Welcome']):
             # Figure out which persona is calling the shots.
@@ -2516,47 +2564,9 @@ async def on_message(message):
 
         # MUST BE FIRST!
         # Imposter among us no more!
-        # Check to see if the user trying to impersonate the owner
-        owner=guild.owner
-        owner_name=owner.name.lower()
-        owner_nick=owner.display_name.lower()
-        member_name=message.author.name.lower()
-        member_nick=message.author.display_name.lower()
 
-        # Check for exact matches (username or display name).
-        if message.author!=owner and (member_name==owner_name or member_nick==owner_nick):
-            # If the names are identical, check the avatar.
-            # Fetch URLs for avatars
-            member_avatar_url=message.author.display_avatar.url
-            owner_avatar_url=owner.display_avatar.url
-
-            # Load images for comparison
-            member_avatar_image=LoadImageURL(member_avatar_url)
-            owner_avatar_image=LoadImageURL(owner_avatar_url)
-
-            # Convert avatars to perceptual hashes
-            member_hash=imagehash.phash(member_avatar_image)
-            owner_hash=imagehash.phash(owner_avatar_image)
-
-            # Compare hash distance (simple comparison)
-            if member_hash==owner_hash:
-                # Send embed indicating imposter before deleting the message
-                embed=discord.Embed(
-                    title="🚨 IMPOSTER DETECTED 🚨",
-                    description=f"User {message.author.mention} (**ID: {message.author.id}**) is impersonating the server owner.\n\n"
-                                f"**THIS IS NOT THE OWNER**. DO NOT ACCEPT DIRECT MESSAGES FROM THIS USER!",
-                    color=discord.Color.red()
-                )
-                embed.add_field(name="Imposter Message", value=message.content, inline=False)
-                embed.set_footer(text="Action: Message will be deleted, and user will be banned.")
-
-                # Send the embed to the channel where the message was sent
-                await send_response(bot,message,None,embed=embed,delete=300)
-                # Delete the imposter's message
-                await message.delete()
-                # Kick the imposter
-                await message.author.ban(reason="Impersonating the server owner")
-                return
+        if await ImposterAmoungUs(message.guild,message.author):
+            return
 
         # Check for input that is a number only
         if bot['AutoModeration'].lower()!='no' and os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
@@ -2568,34 +2578,9 @@ async def on_message(message):
             await message.delete()
             return
 
-        # Check for input for personal identifying information (PII). Even
-        # Companion will get caught in these validations. Ignore bots... This
-        # may be a bad idea, but Bots seem to have a wicked high number of false
-        # positives. Once an AI classifier is in place, this may not be needed.
-
-        if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
-            # Check whitelist
-            piiList=bot['PIIWhitelist'].split(',')
-            for uc in piiList:
-                # Is this a whitelisted user
-                if uc[0]=='@':
-                    if uc[1:].lower()==message.author.name.lower():
-                        return
-                # Is this a white listed channel
-                if uc[0]=='#':
-                    if uc[1:].lower()==message.channel.name.lower():
-                        return
-
-            HasPII=await DetectPII(message.content)
-            if HasPII:
-                await ModeratorNotify(bot,message.guild,f"PII detected: {message.author.name}/{message.author.id} in {message.channel.name}, {HasPII}")
-                await ModeratorNotify(bot,message.guild,f"{message.content}")
-                author=str(message.author.mention)
-                # If its a bot, it doesn't deserve a response
-                if not message.author.bot:
-                    await send_response(bot,message,PickRandomResponse(bot['PII']),delete=300)
-                await message.delete()
-                return
+        # Check if message has any PII
+        if await IsPIIDetected(bot,message):
+            return
 
         # This is really the only absolute exception to BOT responsing...
         # Check for scam links and delete them.
