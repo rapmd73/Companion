@@ -32,11 +32,11 @@
 # added huggingface     (free key is 1000 requests per day, fragmented responses, 1
 #                        respons coud = 8 requests or more)
 # added anthropic       (token counting is a hot mess, but functional,
-#                        no free credits)
+#                        no free credits, pay upfront)
+# added perplexity.ai   (No free credits, pay upfront)
 
 # --> Not in a specific order, add support for the following engines:
 
-#   perplexity.ai
 #   DeepInfra           https://deepinfra.com/pricing
 #   google.ai (genini)
 #   fireworks.ai
@@ -120,7 +120,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1000"
+Version="0.0.0.0.1005"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -664,10 +664,10 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
         elif engine=='cohere':
             current_tokens=sum(len(co.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
         else:
-            # Generic fall through. Anthropic does NOT hav a clean way of doing this...
-            # I've tried several. the 20 at the end is what Anthropic calls overhead.
-            # They say 12, but as wrong as the rest of this has been, the extra can not
-            # hurt.
+            # Generic fall through. Anthropic, Perplexity do NOT have a
+            # clean way of doing this... I've tried several. the 20 at the
+            # end is what Anthropic calls overhead. They say 12, but as
+            # wrong as the rest of this has been, the extra can not hurt.
 
             current_tokens=0
             for message in messages:
@@ -1216,14 +1216,16 @@ def PutNextRequest(gid,msg):
 ### AI handlers (Optimized)
 ###
 
-# The `GetAIResponse` function is responsible for communicating with the AI to generate
-# thoughtful replies based on user messages. When a user sends a message to the bot,
-# this function takes all relevant information—like the context of the conversation and
-# any specific instructions—and sends it to the AI service.  Here's how it works: once
-# the necessary details are gathered, this function makes a request to the appropriate
-# AI provider (such as OpenAI or Hugging Face) using their API. It specifies parameters
-# like which model to use and how creative or focused the response should be. After
-# sending this request, it waits for a reply from the AI.
+# The `GetAIResponse` function is responsible for communicating with the
+# AI to generate thoughtful replies based on user messages. When a user
+# sends a message to the bot, this function takes all relevant
+# information—like the context of the conversation and any specific
+# instructions—and sends it to the AI service.  Here's how it works: once
+# the necessary details are gathered, this function makes a request to the
+# appropriate AI provider (such as OpenAI or Hugging Face) using their
+# API. It specifies parameters like which model to use and how creative or
+# focused the response should be. After sending this request, it waits for
+# a reply from the AI.
 
 def GetAIResponse(gid,persona,bot):
     print(gid,bot.get('Model'), bot.get('Encoding'))
@@ -1250,6 +1252,9 @@ def GetAIResponse(gid,persona,bot):
         WorkingPersona=MaintainTokenLimit(Tokens, persona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
         if WorkingPersona is None:
             return PickRandomResponse(bot['TooMuchInformation'])
+
+        # Set response to a consistant value
+        completion=None
 
         if provider=='openai':
             clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
@@ -1340,9 +1345,37 @@ def GetAIResponse(gid,persona,bot):
                 messages=WorkingPersona
             )
 
+        elif provider=='perplexity':
+            # Prepare the payload for the request
+            payload = {
+                "model": model,
+                "messages": WorkingPersona,
+                "temperature": bot['Temperature'],
+            }
+
+            # Perplexity URL
+            PerplexityURL = "https://api.perplexity.ai/chat/completions"
+
+            # Set up headers including authorization
+            headers = {
+                "Authorization": f"Bearer {Tokens['Perplexity']}",
+                "Content-Type": "application/json"
+            }
+
+            # Make the POST request to the Perplexity API
+            response = requests.post(PerplexityURL, json=payload, headers=headers,timeout=tout)
+
+            # Check if the request was successful
+            if response.status_code == 200:
+                completion = response.json()
+
+        # Engine not recognized.
+        else:
+            return None
+
         # Parse response
         try:
-            if provider=='openai' or provider=='togwetherai':
+            if provider=='openai' or provider=='togetherai':
                 response=completion.choices[0].message.content.strip()
             elif provider=='huggingface':
                 response=' '.join(hfresponses).strip()
@@ -1352,6 +1385,16 @@ def GetAIResponse(gid,persona,bot):
                 response=completion.content[0].text.strip()
             elif provider=='ollama':
                 response=completion['message']['content'].strip()
+            elif provider=='perplexity':
+                response=completion["choices"][0]["message"]["content"].strip()
+
+                # If there are citations in the choices text portion,
+                # append them to the response. This is not neccessary, but
+                # it does look nice and adds to the bot's presence.
+
+                IsCitations=any(re.search(r'\[\d+\]', choice.get("message", {}).get("content", "")) for choice in completion.get("choices", []))
+                if IsCitations:
+                    response+="\n\n"+"\n".join(f"<{url}>" for url in completion['citations'])
             else:
                 response=None
         except:
@@ -2848,5 +2891,6 @@ if __name__=='__main__':
         ErrorLog(f"Broken MAIN: {err}")
 
 ### END OF PROGRAM
+
 
 
