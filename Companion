@@ -28,26 +28,41 @@
 # added openai
 # added ollama
 # added together.ai
-# added cohere          (trial key 1000 free requests per month)
-# added huggingface     (free key is 1000 requests per day, fragmented responses, 1
-#                        respons coud = 8 requests or more)
-# added anthropic       (token counting is a hot mess, but functional,
-#                        no free credits, pay upfront)
-# added perplexity.ai   (No free credits, pay upfront)
+# added cohere          Trial key 1000 free requests per month
+# added huggingface     free key is 1000 requests per day, fragmented responses, 1
+#                       respons coud = 8 requests or more
+# added anthropic       token counting is a hot mess, but functional,
+#                       no free credits, pay upfront
+# added perplexity.ai   No free credits, pay upfront, search oriented, not
+#                       good for conversational, but searching is outstanding.
+# added openrouter.ai   Several free models, has just about every major
+#                       provider, even some of the more difficult ones
+#                       to build for. Paid models will have a premium
+#                       for the normalization service. No direct model
+#                       support like you would get directly from model
+#                       vender (OpenAI, Anthropic, so on). Uses all
+#                       OpenAI code. Token counting is a nighmare but
+#                       the basic len/4 works reasonly well. toktoken()
+#                       does NOT work.
 
-# --> Not in a specific order, add support for the following engines:
+# --> Not in a specific order, add support for the following engines (Maybe):
 
 #   DeepInfra           https://deepinfra.com/pricing
-#   google.ai (genini)
 #   fireworks.ai
-#   OctoML AI
-#   Vertex AI
-#   AI21labs
 #   Azure
 #   Anyscale
 #   Replicate
-#   octo.ai
-#   openrouter.ai
+#   google.ai (genini)  This is a hot mess to try to develop for. There
+#                       are a serious cascading issues from message
+#                       format to usage consideration... The API is
+#                       free, but the developement process is hideous.
+#   Vertex AI           Now GoogleAI
+#   AI21labs            Seriously broken in multiple ways. API does not work.
+#                       Disappointing becuse this really looked put
+#                       together with as much expertise as Open AI, even
+#                       directly addressing token counting upfront.
+#   OctoML AI           Bought out by NVIDIA. (Web site broken with 500
+#                       internal server error.
 
 # Special USER commands: (Completed)
 
@@ -120,7 +135,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1005"
+Version="0.0.0.0.1010"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -657,7 +672,7 @@ def ErrorLog(text):
 def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',model="gpt-4o",encoding=None,HuggingFace=False):
     def count_tokens():
         # Calculate current tokens in the message list
-        if engine=='openai':    #not HuggingFace:
+        if engine=='openai':
             current_tokens=sum(len(enc.encode(message["content"])) for message in messages)
         elif engine=='huggingface':
             current_tokens=sum(len(enc(message["content"])["input_ids"]) for message in messages)
@@ -679,25 +694,24 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
 
         return current_tokens
 
-    if engine=='openai': #not HuggingFace:
-        if encoding!=None:
-            enc=tiktoken.get_encoding(encoding)
-        else:
-            enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
-    elif engine=='huggingface':
-        enc=AutoTokenizer.from_pretrained(model)
-    elif engine=='cohere':
-        co=cohere.ClientV2(api_key=Tokens['Cohere'])
-#    elif engine=='anthropic':
-#        enc=anthropic.Anthropic(api_key=Tokens['Anthropic'])
-#    else:
-        # Gated, needs env HF_HUB_READ_TOKEN
-#        enc=AutoTokenizer.from_pretrained(encoding)
-
-    # Make a separate working copy of the original messages.
-    messages=orgmessages.copy()
-
     try:
+        if engine=='openai':
+            if encoding!=None:
+                enc=tiktoken.get_encoding(encoding)
+            else:
+                enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+        elif engine=='huggingface' or engine=='googleai':
+            enc=AutoTokenizer.from_pretrained(model)
+        elif engine=='cohere':
+            co=cohere.ClientV2(api_key=Tokens['Cohere'])
+#        elif engine=='openrouter':
+#                enc=tiktoken.encoding_for_model(model)
+#        elif engine=='anthropic':
+#            enc=anthropic.Anthropic(api_key=Tokens['Anthropic'])
+
+        # Make a separate working copy of the original messages.
+        messages=orgmessages.copy()
+
         current_tokens=count_tokens()
 
         old_tokens=current_tokens
@@ -1256,8 +1270,11 @@ def GetAIResponse(gid,persona,bot):
         # Set response to a consistant value
         completion=None
 
-        if provider=='openai':
-            clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
+        if provider=='openai' or provider=='openrouter':
+            if provider=='openai':
+                clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
+            else:
+                clientAI=openai.OpenAI(base_url="https://openrouter.ai/api/v1",api_key=Tokens['OpenRouter'])
             completion=clientAI.chat.completions.create(
                 model=model,
                 frequency_penalty=bot['FreqPenality'],
@@ -1375,7 +1392,7 @@ def GetAIResponse(gid,persona,bot):
 
         # Parse response
         try:
-            if provider=='openai' or provider=='togetherai':
+            if provider=='openai' or provider=='togetherai' or provider=='openrouter':
                 response=completion.choices[0].message.content.strip()
             elif provider=='huggingface':
                 response=' '.join(hfresponses).strip()
