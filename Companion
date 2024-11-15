@@ -27,7 +27,7 @@
 
 # added openai
 # added ollama
-# added together.ai
+# added together.ai     Free models available.
 # added cohere          Trial key 1000 free requests per month
 # added huggingface     free key is 1000 requests per day, fragmented responses, 1
 #                       respons coud = 8 requests or more
@@ -47,6 +47,7 @@
 
 # --> Not in a specific order, add support for the following engines (Maybe):
 
+#   GitHub model
 #   DeepInfra           https://deepinfra.com/pricing
 #   fireworks.ai
 #   Azure
@@ -83,7 +84,7 @@
 #   Auto slow mode - completed
 #   Anti-raid - completed
 #   Find a way to identify personal information: email, phone numbers, SSN, EIN,
-#       Credit Card numbers
+#       Credit Card numbers - completed
 
 #   Anti nuke
 #   Ticket management
@@ -135,7 +136,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1010"
+Version="0.0.0.0.1020"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1230,6 +1231,180 @@ def PutNextRequest(gid,msg):
 ### AI handlers (Optimized)
 ###
 
+# Get a response from OpenAI directly. Should not depend on bot structure,
+# for classifiers.
+
+def GetOpenAI(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        clientAI=openai.OpenAI(api_key=apikey)
+        completion=clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=freqpenality,
+                temperature=temperature,
+                messages=messages,
+                timeout=timeout
+            )
+        clientAI.close()
+        response=completion.choices[0].message.content.strip()
+        RawLog(f"OpenAI/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"OpenAI {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+# Get response from OpwenRouter using OpenAI interface
+
+def GetOpenRouter(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        clientAI=openai.OpenAI(api_key=apikey,base_url="https://openrouter.ai/api/v1")
+        completion=clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=freqpenality,
+                temperature=temperature,
+                messages=messages,
+                timeout=timeout
+            )
+        clientAI.close()
+        response=completion.choices[0].message.content.strip()
+        RawLog(f"OpenRouter/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"OpenRouter {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetAnthropic(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        clientAI=anthropic.Anthropic(api_key=apikey,timeout=timeout)
+        completion=clientAI.messages.create(
+                system=messages[0]['content'],
+                model=model,
+                max_tokens=4096,
+                temperature=temperature,
+                messages=messages[1:],
+                stream=False
+            )
+        clientAI.close()
+        response=completion.content[0].text.strip()
+        RawLog(f"Anthropic/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"Anthropic {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetHuggingFace(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        clientAI=InferenceClient(token=apikey,timeout=timeout)
+        completion=clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=freqpenality,
+                temperature=temperature,
+                messages=messages,
+                stream=False
+            )
+        stop=completion.choices[0].finish_reason
+        response=completion.choices[0].message.content.strip()
+        RawLog(f"HuggingFace/{model}: {str(completion)}")
+        return response,stop
+    except Exception as err:
+        ErrorLog(f"HuggingFace {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetTogetherAI(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        clientAI=together.Together(api_key=apikey, timeout=timeout)
+        completion=clientAI.chat.completions.create(
+                model=model,
+                frequency_penalty=freqpenality,
+                temperature=temperature,
+                messages=messages,
+                stream=False
+            )
+        response=completion.choices[0].message.content.strip()
+        RawLog(f"TogetherAI/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"TogetherAI {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetCohere(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        co=cohere.ClientV2(api_key=apikey, timeout=timeout)
+        completion=co.chat(
+                model=model,
+                frequency_penalty=freqpenality,
+                temperature=temperature,
+                messages=messages,
+                safety_mode="NONE"
+            )
+        response=completion.message.content[0].text.strip()
+        RawLog(f"Cohere/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"Cohere {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetOllama(apikey,messages,model,freqpenality,temperature,timeout,seed=0,mt=2048):
+    try:
+        options={
+                "temperature": temperature,
+                "frequency_penalty": freqpenality,
+                "seed": seed,
+                "num_ctx": mt
+            }
+        completion=ollama.chat(
+                keep_alive=timeout,
+                stream=False,
+                model=model,
+                options=options,
+                messages=messages
+            )
+        response=completion['message']['content'].strip()
+        RawLog(f"Ollama/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"Ollama {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+def GetPerplexity(apikey,messages,model,freqpenality,temperature,timeout):
+    try:
+        # Prepare the payload for the request
+        payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+            }
+
+        # Perplexity URL
+        PerplexityURL = "https://api.perplexity.ai/chat/completions"
+
+        # Set up headers including authorization
+        headers = {
+                "Authorization": f"Bearer {apikey}",
+                "Content-Type": "application/json"
+            }
+
+        # Make the POST request to the Perplexity API
+        response=requests.post(PerplexityURL, json=payload, headers=headers,timeout=timeout)
+
+        # Check if the request was successful
+        if response.status_code==200:
+            completion=response.json()
+
+        response=completion["choices"][0]["message"]["content"].strip()
+
+        # If there are citations in the choices text portion, append
+        # them to the response. This is not neccessary, but it does look
+        # nice and adds to the bot's presence.
+
+        IsCitations=any(re.search(r'\[\d+\]', choice.get("message", {}).get("content", "")) for choice in completion.get("choices", []))
+        if IsCitations:
+            response+="\n\n"+"\n".join(f"<{url}>" for url in completion['citations'])
+        RawLog(f"Perplexity/{model}: {str(completion)}")
+        return response
+    except Exception as err:
+        ErrorLog(f"Perplexity {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
 # The `GetAIResponse` function is responsible for communicating with the
 # AI to generate thoughtful replies based on user messages. When a user
 # sends a message to the bot, this function takes all relevant
@@ -1251,10 +1426,7 @@ def GetAIResponse(gid,persona,bot):
     try:
         # Default connection timeout
         tout=bot.get('Timeout', 60)
-        mt=bot.get('MaxTokens', 16000 if provider=='OpenAI' else 4096)
-        if provider=='ollama' and mt==0:
-            mt=2048
-
+        mt=bot.get('MaxTokens', 2048 if provider=='ollama' else 4096)
         model=bot.get('Model')
         encoding=bot.get('Encoding')
         seed=bot.get('Seed', 0)
@@ -1267,52 +1439,26 @@ def GetAIResponse(gid,persona,bot):
         if WorkingPersona is None:
             return PickRandomResponse(bot['TooMuchInformation'])
 
-        # Set response to a consistant value
-        completion=None
-
-        if provider=='openai' or provider=='openrouter':
-            if provider=='openai':
-                clientAI=openai.OpenAI(api_key=Tokens['OpenAI'])
-            else:
-                clientAI=openai.OpenAI(base_url="https://openrouter.ai/api/v1",api_key=Tokens['OpenRouter'])
-            completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=bot['FreqPenality'],
-                temperature=bot['Temperature'],
-                messages=WorkingPersona,
-                timeout=tout
-            )
-            clientAI.close()
-
-        # Anthropic has a separate system methodology then other AI services
-
+        if provider=='openai':
+           response=GetOpenAI(Tokens['OpenAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        elif provider=='openrouter':
+           response=GetOpenRouter(Tokens['OpenRouter'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
         elif provider=='anthropic':
-            clientAI=anthropic.Anthropic(api_key=Tokens['Anthropic'],timeout=tout)
-            completion=clientAI.messages.create(
-                system=WorkingPersona[0]['content'],
-                model=model,
-                max_tokens=4096,
-                temperature=bot['Temperature'],
-                messages=WorkingPersona[1:],
-                stream=False
-            )
-            clientAI.close()
-
-        # HuggingFace uses fragmentation for completion methods...
-        # Access is free for 1000 requests per day. 1 response could take 8 requests to the API.
-
+           response=GetAnthropic(Tokens['Anthropic'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        elif provider=='togetherai':
+            response=GetTogetherAI(Tokens['TogetherAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        elif provider=='cohere':
+            response=GetCohere(Tokens['Cohere'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        elif provider=='ollama':
+           response=GetOllama(None,WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout,seed=seed,mt=mt)
+        elif provider=='perplexity':
+          response=GetPerplexity(Tokens['Perplexity'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
         elif provider=='huggingface':
-            clientAI=InferenceClient(token=Tokens['HuggingFace'],timeout=tout)
+            # HuggingFace uses fragmentation for completion methods...
+            # Access is free for 1000 requests per day. 1 response could
+            # take 8 requests to the API.
             while True:
-                completion=clientAI.chat.completions.create(
-                    model=model,
-                    frequency_penalty=bot['FreqPenality'],
-                    temperature=bot['Temperature'],
-                    messages=WorkingPersona,
-                    stream=False
-                )
-                RawLog(f"{provider}/{model}: {str(completion)}")
-                resp=completion.choices[0].message.content.strip()
+                resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
                 hfresponses.append(resp)
 
                 # Emulate user typing continue. Count tokens as well...
@@ -1323,103 +1469,15 @@ def GetAIResponse(gid,persona,bot):
                     return PickRandomResponse(bot['TooMuchInformation'])
 
                 # if finish reason is length, response is fragmented.
-                print("HuggingFace fragment:",completion.choices[0].finish_reason,len(resp))
-                if completion.choices[0].finish_reason!='length' or len(resp)==0:
+                print("HuggingFace fragment:",stop,len(resp))
+                if stop!='length' or len(resp)==0:
                     break
-
-        elif provider=='togetherai':
-            clientAI=together.Together(api_key=Tokens['TogetherAI'], timeout=tout)
-            completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=bot['FreqPenality'],
-                temperature=bot['Temperature'],
-                messages=WorkingPersona,
-                stream=False
-            )
-
-        elif provider=='cohere':
-            co=cohere.ClientV2(api_key=Tokens['Cohere'], timeout=tout)
-            completion=co.chat(
-                model=model,
-                frequency_penalty=bot['FreqPenality'],
-                temperature=bot['Temperature'],
-                messages=WorkingPersona,
-                safety_mode="NONE"
-            )
-
-        elif provider=='ollama':
-            options={
-                "temperature": bot['Temperature'],
-                "frequency_penalty": bot['FreqPenality'],
-                "seed": seed,
-                "num_ctx": mt
-            }
-            completion=ollama.chat(
-                keep_alive=tout,
-                stream=False,
-                model=model,
-                options=options,
-                messages=WorkingPersona
-            )
-
-        elif provider=='perplexity':
-            # Prepare the payload for the request
-            payload = {
-                "model": model,
-                "messages": WorkingPersona,
-                "temperature": bot['Temperature'],
-            }
-
-            # Perplexity URL
-            PerplexityURL = "https://api.perplexity.ai/chat/completions"
-
-            # Set up headers including authorization
-            headers = {
-                "Authorization": f"Bearer {Tokens['Perplexity']}",
-                "Content-Type": "application/json"
-            }
-
-            # Make the POST request to the Perplexity API
-            response = requests.post(PerplexityURL, json=payload, headers=headers,timeout=tout)
-
-            # Check if the request was successful
-            if response.status_code == 200:
-                completion = response.json()
-
+            response=' '.join(hfresponses).strip()
         # Engine not recognized.
         else:
             return None
 
-        # Parse response
-        try:
-            if provider=='openai' or provider=='togetherai' or provider=='openrouter':
-                response=completion.choices[0].message.content.strip()
-            elif provider=='huggingface':
-                response=' '.join(hfresponses).strip()
-            elif provider=='cohere':
-                response=completion.message.content[0].text.strip()
-            elif provider=='anthropic':
-                response=completion.content[0].text.strip()
-            elif provider=='ollama':
-                response=completion['message']['content'].strip()
-            elif provider=='perplexity':
-                response=completion["choices"][0]["message"]["content"].strip()
-
-                # If there are citations in the choices text portion,
-                # append them to the response. This is not neccessary, but
-                # it does look nice and adds to the bot's presence.
-
-                IsCitations=any(re.search(r'\[\d+\]', choice.get("message", {}).get("content", "")) for choice in completion.get("choices", []))
-                if IsCitations:
-                    response+="\n\n"+"\n".join(f"<{url}>" for url in completion['citations'])
-            else:
-                response=None
-        except:
-            response=None
-
-        RawLog(f"{provider}/{model}: {str(completion)}")
         return response
-
     except Exception as err:
         ErrorLog(f"{provider} {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
         return None
