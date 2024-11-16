@@ -105,6 +105,8 @@ import os
 import io
 import copy
 import itertools
+import functools
+import inspect
 import datetime
 import time
 import json
@@ -136,7 +138,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1020"
+Version="0.0.0.0.1030"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -230,6 +232,63 @@ client=discord.Client(intents=intents)
 delete_list=[]
 
 ###
+### Special functions/Decorators
+###
+
+# Time the execution time of a function
+
+def function_timer(func):
+    @functools.wraps(func)
+    def sync_timer(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        print(f"{func.__name__}: {elapsed_time:.6f} seconds")
+        return result
+
+    @functools.wraps(func)
+    async def async_timer(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = await func(*args, **kwargs)
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        print(f"{func.__name__}: {elapsed_time:.6f} seconds")
+        return result
+
+    if inspect.iscoroutinefunction(func):
+        return async_timer
+    return sync_timer
+
+# Trap errors on a basic level
+
+def function_trapper(failed_result=None):
+    def decorator(func):
+        if inspect.iscoroutinefunction(func):  # Handle async functions
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as err:
+                    ErrorLog(f"{func.__name__}/{sys.exc_info()[-1].tb_lineno}: {err}")
+                    return failed_result
+            return async_wrapper
+        else:  # Handle sync functions
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as err:
+                    ErrorLog(f"{func.__name__}/{sys.exc_info()[-1].tb_lineno}: {err}")
+                    return failed_result
+            return sync_wrapper
+
+    # Handle decorator usage with or without parentheses
+    if callable(failed_result):  # Used without parentheses
+        return decorator(failed_result)
+    return decorator
+
+###
 ### General file tools
 ###
 
@@ -241,6 +300,7 @@ def mkdir(fn):
 
 # Helper function to download and load an image from a URL
 
+@function_trapper(None)
 def LoadImageURL(url):
     response=requests.get(url)
     img=Image.open(BytesIO(response.content))
@@ -248,6 +308,7 @@ def LoadImageURL(url):
 
 # Read file into buffer
 
+@function_trapper(None)
 def ReadFile(fn,binary=False):
     if os.path.exists(fn):
         if binary:
@@ -278,6 +339,7 @@ def WriteFile(fn,data):
 
 # Pick one line from a file as a response
 
+@function_trapper(None)
 def ReadFile2List(fname,ForceLower=False):
     # Something broke. Keep the responses in character
     responses=ReadFile(fname).strip().split('\n')
@@ -290,6 +352,7 @@ def ReadFile2List(fname,ForceLower=False):
 # Pick a random response from a filew
 # Something broke. Keep the responses in character
 
+@function_trapper(None)
 def PickRandomResponse(fname):
     responses=ReadFile2List(fname)
     selected_response=random.choice(responses)
@@ -304,6 +367,7 @@ def PickRandomResponse(fname):
 
 # Check a string for numbers only.
 
+@function_trapper(None)
 def NumberOnly(s):
     # Replace common look-alikes with their numeric equivalents
     look_alike_replacements={
@@ -354,6 +418,7 @@ rside=['over','old','young','under','teen','tween','tweenie','born','date','year
 # identified, even if disguised by replacing characters with
 # similar-looking ones (e.g., "age" -> "4g3").
 
+@function_trapper(None)
 def BuildDerivitives(word):
     substitutions={
         'a': ['@','4'],
@@ -412,6 +477,7 @@ def BuildDerivitives(word):
 # or intentionally modified words related to sensitive topics,
 # supporting moderation efforts.
 
+@function_trapper(None)
 def BuildLeetList(side):
     leetlist=[]
 
@@ -425,6 +491,7 @@ def BuildLeetList(side):
 
 # Strip pucnctuation.
 
+@function_trapper(None)
 def StripPunctuation(text):
     # Define punctuation and high ASCII characters
     punctuation=string.punctuation
@@ -441,6 +508,7 @@ def StripPunctuation(text):
 # Json filter
 # Filter end of line and hard spaces
 
+@function_trapper(None)
 def jsonFilter(s,FilterSpace=True):
     d=s.replace("\\n","").replace("\\t","").replace("\\r","")
 
@@ -456,6 +524,7 @@ def jsonFilter(s,FilterSpace=True):
 
 # Break input into a word list for steering.
 
+@function_trapper(None)
 def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
     return [word for word in words if word.strip()]     # Filter out empty strings (including spaces)
@@ -470,6 +539,7 @@ def GetWordList(text):
 # process helps ensure privacy by flagging potentially sensitive data in a
 # straightforward way.
 
+@function_trapper(None)
 async def DetectPII(text):
     async def detect_phone_number(text):
         # Define phone number patterns for different countries
@@ -583,6 +653,7 @@ async def DetectPII(text):
 
 # Read the token file into a token dictionary.
 
+@function_trapper({})
 def ReadTokens(gid=None):
     tokens={}
     if gid==None:
@@ -670,6 +741,7 @@ def ErrorLog(text):
 # only relevant and recent information is kept while still allowing for meaningful
 # interactions with users.
 
+@function_trapper(None)
 def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',model="gpt-4o",encoding=None,HuggingFace=False):
     def count_tokens():
         # Calculate current tokens in the message list
@@ -695,53 +767,49 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
 
         return current_tokens
 
-    try:
-        if engine=='openai':
-            if encoding!=None:
-                enc=tiktoken.get_encoding(encoding)
-            else:
-                enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
-        elif engine=='huggingface' or engine=='googleai':
-            enc=AutoTokenizer.from_pretrained(model)
-        elif engine=='cohere':
-            co=cohere.ClientV2(api_key=Tokens['Cohere'])
-#        elif engine=='openrouter':
-#                enc=tiktoken.encoding_for_model(model)
-#        elif engine=='anthropic':
-#            enc=anthropic.Anthropic(api_key=Tokens['Anthropic'])
+    if engine=='openai':
+        if encoding!=None:
+            enc=tiktoken.get_encoding(encoding)
+        else:
+            enc=tiktoken.get_encoding(tiktoken.model.MODEL_TO_ENCODING[model])
+    elif engine=='huggingface' or engine=='googleai':
+        enc=AutoTokenizer.from_pretrained(model)
+    elif engine=='cohere':
+        co=cohere.ClientV2(api_key=Tokens['Cohere'])
+#    elif engine=='openrouter':
+#        enc=tiktoken.encoding_for_model(model)
+#    elif engine=='anthropic':
+#        enc=anthropic.Anthropic(api_key=Tokens['Anthropic'])
 
-        # Make a separate working copy of the original messages.
-        messages=orgmessages.copy()
+    # Make a separate working copy of the original messages.
+    messages=orgmessages.copy()
 
+    current_tokens=count_tokens()
+
+    old_tokens=current_tokens
+    if max_tokens==0:
+        return messages
+
+    # While tokens exceed the limit, remove elements
+    while current_tokens > max_tokens:
+        for i in range(len(messages) - 1):
+            if i < len(messages) - 1:
+                if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
+                    # Remove the pair (two items)
+                    messages.pop(i)
+                    messages.pop(i)
+                    break
+                elif messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="user":
+                    # Remove only one item if two adjacent items are user/user
+                    messages.pop(i)
+                    break
+
+        # Recalculate current tokens after removal
         current_tokens=count_tokens()
-
+        # Check for the situation that we can't reduce the number of tokens.
+        if old_tokens==current_tokens and current_tokens>max_tokens:
+            return None
         old_tokens=current_tokens
-        if max_tokens==0:
-            return messages
-
-        # While tokens exceed the limit, remove elements
-        while current_tokens > max_tokens:
-            for i in range(len(messages) - 1):
-                if i < len(messages) - 1:
-                    if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
-                        # Remove the pair (two items)
-                        messages.pop(i)
-                        messages.pop(i)
-                        break
-                    elif messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="user":
-                        # Remove only one item if two adjacent items are user/user
-                        messages.pop(i)
-                        break
-
-            # Recalculate current tokens after removal
-            current_tokens=count_tokens()
-            # Check for the situation that we can't reduce the number of tokens.
-            if old_tokens==current_tokens and current_tokens>max_tokens:
-                return None
-            old_tokens=current_tokens
-    except Exception as err:
-        ErrorLog(f"MaintainTokens: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
 
     return messages
 
@@ -759,6 +827,7 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
 # txt file will have the question repeated multiple times, with multiple acceptable
 # responses. This practice is virtually identical to how we learn as children.
 
+@function_trapper(None)
 def GetSteering(bot,input_text):
     wordlist=GetWordList(StripPunctuation(input_text))
     if wordlist==None or wordlist==[]:
@@ -766,15 +835,12 @@ def GetSteering(bot,input_text):
 
     SteerDir=f"{CompanionStorage}/{bot['BotName']}/Steering"
 
-    try:
-        for word in wordlist:
-            if os.path.isdir(SteerDir+'/'+word):
-                SteerDir+='/'+word
-            elif os.path.isfile(SteerDir+'/'+word+'.txt'):
-                prompts=ReadFile(SteerDir+'/'+word+'.txt').strip().split('\n')
-                return prompts
-    except Exception as err:
-        ErrorLog(f"Steering: {sys.exc_info()[-1].tb_lineno}/{err}")
+    for word in wordlist:
+        if os.path.isdir(SteerDir+'/'+word):
+            SteerDir+='/'+word
+        elif os.path.isfile(SteerDir+'/'+word+'.txt'):
+            prompts=ReadFile(SteerDir+'/'+word+'.txt').strip().split('\n')
+            return prompts
 
     # No txt file found. No prompts available
     return None
@@ -789,6 +855,7 @@ def GetSteering(bot,input_text):
 # the bot should behave, including its name, response style, and any special rules it
 # needs to follow.
 
+@function_trapper(None)
 def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # Get the list of channels and the bot name that is allowed in a given channel
     cfg=f"{ConfigStorage}/{gid}/{gid}.cfg"
@@ -941,159 +1008,155 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 # information along with any previous context or conversation history. This complete
 # package is then sent to the AI for generating an appropriate response.
 
+@function_trapper(None)
 def GetBabble(message,text):
-    try:
-        # The "uid" and "channel" are used to load the persona and store the memory to
-        # disk. At this point, we don't have any global variables.
+    # The "uid" and "channel" are used to load the persona and store the memory to
+    # disk. At this point, we don't have any global variables.
 
-        # EXTEND to: GuildID/ChannelID:NSFW/MessageID/UID/input
+    # EXTEND to: GuildID/ChannelID:NSFW/MessageID/UID/input
 
-        dataline=text.split('/')
-        gid=message.guild.id
-        uid=dataline[0]
-        channel,cnsfw=dataline[1].split(':')
-        nsfw=(cnsfw=='T')
-        input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
+    dataline=text.split('/')
+    gid=message.guild.id
+    uid=dataline[0]
+    channel,cnsfw=dataline[1].split(':')
+    nsfw=(cnsfw=='T')
+    input_text=str(dataline[2:]).replace("'","\'").replace('"',"'")
 
-        # Don't remember this request. does NOT bypass logging
+    # Don't remember this request. does NOT bypass logging
 
-        ForgetThisMessage=False
-        if text.strip().startswith('%#>'):
-            ForgetThisMessage=True
-            input_text=input_text[3:]
+    ForgetThisMessage=False
+    if text.strip().startswith('%#>'):
+        ForgetThisMessage=True
+        input_text=input_text[3:]
 
-        # Load the persona and memory files
-        # NSFW not allowed in threads directly, so find parent channel
+    # Load the persona and memory files
+    # NSFW not allowed in threads directly, so find parent channel
 
-        # Question: Do we take info of NSFW state or force verify? Currebt is
-        # face value
+    # Question: Do we take info of NSFW state or force verify? Currebt is
+    # face value
 
-        bot=None
-        if isinstance(message.channel,discord.Thread):
-            pchannel=str(message.channel.parent)
-            bot=GetCompanionPersona(gid,pchannel,nsfw)   # message.channel.parent.nsfw
-        else:
-            bot=GetCompanionPersona(gid,channel,nsfw)
+    bot=None
+    if isinstance(message.channel,discord.Thread):
+        pchannel=str(message.channel.parent)
+        bot=GetCompanionPersona(gid,pchannel,nsfw)   # message.channel.parent.nsfw
+    else:
+        bot=GetCompanionPersona(gid,channel,nsfw)
 
-        persona=[]
-        mList=[]
+    persona=[]
+    mList=[]
 
-        # Read system role from system tag file
-        # { "role": "system", "content": ""}
+    # Read system role from system tag file
+    # { "role": "system", "content": ""}
 
-        if os.path.exists(bot['System']):
-            buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
-            sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
-        else:
-            sysList=[]
+    if os.path.exists(bot['System']):
+        buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
+        sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
+    else:
+        sysList=[]
 
-        # Read the persona file
-        if os.path.exists(bot['Persona']):
-            pfList=ReadFile(bot['Persona']).strip().split('\n')
-        else:
-            pfList=[]
-        pList=sysList+pfList
+    # Read the persona file
+    if os.path.exists(bot['Persona']):
+        pfList=ReadFile(bot['Persona']).strip().split('\n')
+    else:
+        pfList=[]
+    pList=sysList+pfList
 
-        # Load memory files, if one exists.
-        dn=f"{MemoryStorage}/{gid}/{bot['BotName']}"
-        mkdir(dn)
-        fn=f"{dn}/{bot['BotName']}.{uid}.{channel}.memory"
-        if os.path.exists(fn):
-            mList=ReadFile(fn).strip().split('\n')
-            pList+=mList
+    # Load memory files, if one exists.
+    dn=f"{MemoryStorage}/{gid}/{bot['BotName']}"
+    mkdir(dn)
+    fn=f"{dn}/{bot['BotName']}.{uid}.{channel}.memory"
+    if os.path.exists(fn):
+        mList=ReadFile(fn).strip().split('\n')
+        pList+=mList
 
-        # Build the complete persona list
+    # Build the complete persona list
 
-        for s in pList:
-            try:
-                persona.append(json.loads(s))
-            except:
-                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
+    for s in pList:
+        try:
+            persona.append(json.loads(s))
+        except:
+            ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{s}")
 
-        # Look for a "steering" file. Should be last to ensurew its not chopped of.
-        sList=GetSteering(bot,input_text)
-        if sList!=None:
-            pList+=sList
+    # Look for a "steering" file. Should be last to ensurew its not chopped of.
+    sList=GetSteering(bot,input_text)
+    if sList!=None:
+        pList+=sList
 
-        # Add user input
+    # Add user input
 
-        memU={ "role": "user", "content": input_text }
-        persona.append(memU)
+    memU={ "role": "user", "content": input_text }
+    persona.append(memU)
 
-        # Process API for the request
+    # Process API for the request
 
-        el=list(bot['Engine'].split(','))       # Engine list
-        ec=len(el)                              # Engine list length
-        tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
-        mt=len(tl)                              # Max Tokens list length
-        # Encoding alwayys takes priority over modem
-        if 'Encoding' in bot:
-            ml=list(bot['Encoding'].split(','))        # Model list
-            mc=len(ml)                              # Model list length
-        else:
-            ml=list(bot['Model'].split(','))        # Model list
-            mc=len(ml)                              # Model list length
+    el=list(bot['Engine'].split(','))       # Engine list
+    ec=len(el)                              # Engine list length
+    tl=list(bot['MaxTokens'].split(','))    # Max Tokens list
+    mt=len(tl)                              # Max Tokens list length
+    # Encoding alwayys takes priority over modem
+    if 'Encoding' in bot:
+        ml=list(bot['Encoding'].split(','))        # Model list
+        mc=len(ml)                              # Model list length
+    else:
+        ml=list(bot['Model'].split(','))        # Model list
+        mc=len(ml)                              # Model list length
 
-        # The number of models MUST equal the number of engines. 1 model per engine
+    # The number of models MUST equal the number of engines. 1 model per engine
 
-        if ec!=mc!=mt:
-            ErrorLog(f"Broke GB ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
-            return PickRandomResponse(bot['Broken'])
-
-        # Run through the engins/models until we have a response.
-
-        response=None
-        ecounter=0
-        while response==None and ecounter<ec:
-            cbot=copy.deepcopy(bot)             # Make a copy
-            cbot['Engine']=el[ecounter]
-            cbot['MaxTokens']=int(tl[ecounter])
-            # Encoding or Model
-            if 'Encoding' in cbot:
-                cbot['Encoding']=ml[ecounter]
-            else:
-                cbot['Model']=ml[ecounter]
-
-            startTime=time.time()
-            response=GetAIResponse(gid,persona,cbot)
-            endTime=time.time()
-            AppendFile(f'{LoggingStorage}/{gid}.timing',f"{datetime.datetime.fromtimestamp(startTime).strftime('%Y-%m-%d %H:%M:%S')} {cbot['Engine']} {cbot['Model']} {endTime-startTime:.6f}\n")
-            if response==None:
-                ecounter+=1
-            else:
-                break
-
-        # check to see if we got a response. If not, don't save the
-        # memory, just return.
-
-        if response==None or response=='':
-            return PickRandomResponse(bot['Broken'])
-
-        # Save "memory" to disk
-
-        memA={ "role": "assistant", "content": response }
-
-        mList.append(json.dumps(memU))
-        mList.append(json.dumps(memA))
-
-        # Keep memory at a limited amount. The *2 is because we are saving user and AI
-        # responses.
-
-        if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
-            if len(mList)>(bot['MaxMemory']*2):
-                mList=mList[2:]
-
-            fh=open(fn,'w')
-            for i in mList:
-                fh.write(i+'\n')
-            fh.close()
-
-        # Return the AI response
-
-        return response
-    except Exception as err:
-        ErrorLog(f"Broke GB: {sys.exc_info()[-1].tb_lineno}/{err}")
+    if ec!=mc!=mt:
+        ErrorLog(f"Broke GB ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
         return PickRandomResponse(bot['Broken'])
+
+    # Run through the engins/models until we have a response.
+
+    response=None
+    ecounter=0
+    while response==None and ecounter<ec:
+        cbot=copy.deepcopy(bot)             # Make a copy
+        cbot['Engine']=el[ecounter]
+        cbot['MaxTokens']=int(tl[ecounter])
+        # Encoding or Model
+        if 'Encoding' in cbot:
+            cbot['Encoding']=ml[ecounter]
+        else:
+            cbot['Model']=ml[ecounter]
+
+        startTime=time.time()
+        response=GetAIResponse(gid,persona,cbot)
+        endTime=time.time()
+        AppendFile(f'{LoggingStorage}/{gid}.timing',f"{datetime.datetime.fromtimestamp(startTime).strftime('%Y-%m-%d %H:%M:%S')} {cbot['Engine']} {cbot['Model']} {endTime-startTime:.6f}\n")
+        if response==None:
+            ecounter+=1
+        else:
+            break
+
+    # check to see if we got a response. If not, don't save the
+    # memory, just return.
+
+    if response==None or response=='':
+        return PickRandomResponse(bot['Broken'])
+
+    # Save "memory" to disk
+
+    memA={ "role": "assistant", "content": response }
+
+    mList.append(json.dumps(memU))
+    mList.append(json.dumps(memA))
+
+    # Keep memory at a limited amount. The *2 is because we are saving user and AI
+    # responses.
+
+    if bot['MaxMemory']>0 and memA['content']!=None and not ForgetThisMessage:
+        if len(mList)>(bot['MaxMemory']*2):
+            mList=mList[2:]
+
+        fh=open(fn,'w')
+        for i in mList:
+            fh.write(i+'\n')
+        fh.close()
+
+    # Return the AI response
+    return response
 
 # The `HandleOneMessage` function is designed to take care of individual messages sent
 # to the bot in a Discord server. When a user sends a message, this function steps in to
@@ -1104,76 +1167,74 @@ def GetBabble(message,text):
 # context (like whether it's a safe-for-work environment). After that, it prepares
 # everything needed for the AI to generate an appropriate response.
 
+@function_trapper(None)
+@function_timer
 async def HandleOneMessage(request):
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        try:
-            input_text=request['input']
-            guild=client.get_guild(request['gid'])
-            channel=await guild.fetch_channel(request['cid'])
-            message=await channel.fetch_message(request['mid'])
+        input_text=request['input']
+        guild=client.get_guild(request['gid'])
+        channel=await guild.fetch_channel(request['cid'])
+        message=await channel.fetch_message(request['mid'])
 
-            uid=str(message.author.id)
-            author=str(message.author.mention)
-            channel=str(message.channel)
+        uid=str(message.author.id)
+        author=str(message.author.mention)
+        channel=str(message.channel)
 
-            # NSFW not allowed in threads, so find parent channel
-            bot=None
-            if isinstance(message.channel,discord.Thread):
-                pchannel=message.channel.parent
-                bot=GetCompanionPersona(guild.id,str(pchannel),pchannel.nsfw)
-                nsfw=str(pchannel.nsfw)[0]
-                # WTAF? Really? bots have to join a thread...
-                if not message.channel.me:
-                    await message.channel.join()
-            else:
-                bot=GetCompanionPersona(guild.id,str(message.channel),message.channel.nsfw)
-                nsfw=str(message.channel.nsfw)[0]
-            if bot==None:
+        # NSFW not allowed in threads, so find parent channel
+        bot=None
+        if isinstance(message.channel,discord.Thread):
+            pchannel=message.channel.parent
+            bot=GetCompanionPersona(guild.id,str(pchannel),pchannel.nsfw)
+            nsfw=str(pchannel.nsfw)[0]
+            # WTAF? Really? bots have to join a thread...
+            if not message.channel.me:
+                await message.channel.join()
+        else:
+            bot=GetCompanionPersona(guild.id,str(message.channel),message.channel.nsfw)
+            nsfw=str(message.channel.nsfw)[0]
+        if bot==None:
+            return
+
+        print('U',guild.id,nsfw,uid,message.author,message.channel,len(message.content))
+
+        # Handle any vulgarity
+        if bot['AutoModeration'].lower()!='no' \
+        and os.path.exists(bot['Vulgarity']) \
+        and bot['AllowVulgarity'].lower()=='no' \
+        and not nsfw=='T':
+            if bool(pc.predict([ input_text ]))==True:
+                await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} chastized for vulgarity in {message.channel.name}")
+                await send_response(bot,message,PickRandomResponse(bot['Vulgarity']),delete=57)
+                try: # delete the offending message
+                    await message.delete()
+                except:
+                    pass
                 return
-
-            # Convert boolean to str as a passing argument.
-            print('U',guild.id,nsfw,uid,message.author,message.channel,len(message.content))
-
-            # Handle any vulgarity
-            if bot['AutoModeration'].lower()!='no' \
-            and os.path.exists(bot['Vulgarity']) \
-            and bot['AllowVulgarity'].lower()=='no' \
-            and not nsfw=='T':
-                if bool(pc.predict([ input_text ]))==True:
-                    await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} chastized for vulgarity in {message.channel.name}")
-                    await send_response(bot,message,PickRandomResponse(bot['Vulgarity']),delete=57)
-                    try: # delete the offending message
-                        await message.delete()
-                    except:
-                        pass
-                    return
-                else:
-                    istr=f"{uid}/{channel}:{nsfw}/{input_text}"
-                    response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
             else:
                 istr=f"{uid}/{channel}:{nsfw}/{input_text}"
                 response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
+        else:
+            istr=f"{uid}/{channel}:{nsfw}/{input_text}"
+            response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
 
-            print('B',guild.id,client.user.id,bot['BotName'],message.channel,len(response))
+        print('B',guild.id,client.user.id,bot['BotName'],message.channel,len(response))
 
-            # Check to see if we actually got a response
-            if response!=None and response.lower().strip()!="none":
-                # Handle webhooks for response
-                await send_response(bot,message,response)
+        # Check to see if we actually got a response
+        if response!=None and response.lower().strip()!="none":
+            # Handle webhooks for response
+            await send_response(bot,message,response)
+        else:
+            # Communication with AI failed. Put message back in queue
+            if ResponseLock.acquire(timeout=ResponseTimeout):
+                msg={}
+                msg['gid']=guild.id
+                msg['cid']=message.channel.id
+                msg['mid']=message.id
+                msg['input']=input_text
+                PutNextRequest(guild.id,msg)
+                ResponseLock.release()
             else:
-                # Communication with AI failed. Put message back in queue
-                if ResponseLock.acquire(timeout=ResponseTimeout):
-                    msg={}
-                    msg['gid']=guild.id
-                    msg['cid']=message.channel.id
-                    msg['mid']=message.id
-                    msg['input']=input_text
-                    PutNextRequest(guild.id,msg)
-                    ResponseLock.release()
-                else:
-                    ErrorLog("Lock failed Reput Message")
-        except Exception as err:
-            ErrorLog(f"Broken HandleOneMessage: {sys.exc_info()[-1].tb_lineno}/{err}")
+                ErrorLog("Lock failed Reput Message")
 
 # The `GetNextRequest` function is designed to retrieve the next request from a specific
 # Discord server's list of messages that need to be processed by the AI.  When users
@@ -1183,37 +1244,34 @@ async def HandleOneMessage(request):
 # each message is processed in order, allowing the AI to respond appropriately and
 # maintain smooth communication.
 
+@function_trapper(None)
 def GetNextRequest(gid):
-    try:
-        rname=f"{MemoryStorage}/{gid}/requests.txt"
+    rname=f"{MemoryStorage}/{gid}/requests.txt"
 
-        if not os.path.exists(rname):
-            return None
-
-        # Read request list for a specific server
-        request_list=ReadFile(rname).strip().split('\n')
-        # Get first request
-        try:
-            request=json.loads(request_list[0])
-        except Exception as err:
-            ErrorLog(f"Broken request: {sys.exc_info()[-1].tb_lineno}/{err}")
-            return None
-
-        # Write the rest of the list back to disc. This is the file version of
-        # popping the first item.
-
-        if (len(request_list)-1)>0:
-            fh=open(rname,'w')
-            for i in range(1,len(request_list)):
-                fh.write(request_list[i]+'\n')
-            fh.close()
-        else:
-            os.remove(rname)
-
-        return request
-    except Exception as err:
-        ErrorLog(f"GNR: {sys.exc_info()[-1].tb_lineno}/{err}")
+    if not os.path.exists(rname):
         return None
+
+    # Read request list for a specific server
+    request_list=ReadFile(rname).strip().split('\n')
+    # Get first request
+    try:
+        request=json.loads(request_list[0])
+    except Exception as err:
+        ErrorLog(f"Broken request: {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+    # Write the rest of the list back to disc. This is the file version of
+    # popping the first item.
+
+    if (len(request_list)-1)>0:
+        fh=open(rname,'w')
+        for i in range(1,len(request_list)):
+            fh.write(request_list[i]+'\n')
+        fh.close()
+    else:
+        os.remove(rname)
+
+    return request
 
 # The `PutNextRequest` function is responsible for adding a new request to a specific
 # Discord server's list of messages that need to be processed by the AI.  When users
@@ -1234,176 +1292,152 @@ def PutNextRequest(gid,msg):
 # Get a response from OpenAI directly. Should not depend on bot structure,
 # for classifiers.
 
+@function_trapper(None)
 def GetOpenAI(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        clientAI=openai.OpenAI(api_key=apikey)
-        completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=freqpenality,
-                temperature=temperature,
-                messages=messages,
-                timeout=timeout
-            )
-        clientAI.close()
-        response=completion.choices[0].message.content.strip()
-        RawLog(f"OpenAI/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"OpenAI {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=openai.OpenAI(api_key=apikey)
+    completion=clientAI.chat.completions.create(
+            model=model,
+            frequency_penalty=freqpenality,
+            temperature=temperature,
+            messages=messages,
+            timeout=timeout
+        )
+    clientAI.close()
+    response=completion.choices[0].message.content.strip()
+    RawLog(f"OpenAI/{model}: {str(completion)}")
+    return response
 
 # Get response from OpwenRouter using OpenAI interface
 
+@function_trapper(None)
 def GetOpenRouter(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        clientAI=openai.OpenAI(api_key=apikey,base_url="https://openrouter.ai/api/v1")
-        completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=freqpenality,
-                temperature=temperature,
-                messages=messages,
-                timeout=timeout
-            )
-        clientAI.close()
-        response=completion.choices[0].message.content.strip()
-        RawLog(f"OpenRouter/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"OpenRouter {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=openai.OpenAI(api_key=apikey,base_url="https://openrouter.ai/api/v1")
+    completion=clientAI.chat.completions.create(
+            model=model,
+            frequency_penalty=freqpenality,
+            temperature=temperature,
+            messages=messages,
+            timeout=timeout
+        )
+    clientAI.close()
+    response=completion.choices[0].message.content.strip()
+    RawLog(f"OpenRouter/{model}: {str(completion)}")
+    return response
 
+@function_trapper(None)
 def GetAnthropic(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        clientAI=anthropic.Anthropic(api_key=apikey,timeout=timeout)
-        completion=clientAI.messages.create(
-                system=messages[0]['content'],
-                model=model,
-                max_tokens=4096,
-                temperature=temperature,
-                messages=messages[1:],
-                stream=False
-            )
-        clientAI.close()
-        response=completion.content[0].text.strip()
-        RawLog(f"Anthropic/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"Anthropic {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=anthropic.Anthropic(api_key=apikey,timeout=timeout)
+    completion=clientAI.messages.create(
+            system=messages[0]['content'],
+            model=model,
+            max_tokens=4096,
+            temperature=temperature,
+            messages=messages[1:],
+            stream=False
+        )
+    clientAI.close()
+    response=completion.content[0].text.strip()
+    RawLog(f"Anthropic/{model}: {str(completion)}")
+    return response
 
+@function_trapper(None)
 def GetHuggingFace(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        clientAI=InferenceClient(token=apikey,timeout=timeout)
-        completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=freqpenality,
-                temperature=temperature,
-                messages=messages,
-                stream=False
-            )
-        stop=completion.choices[0].finish_reason
-        response=completion.choices[0].message.content.strip()
-        RawLog(f"HuggingFace/{model}: {str(completion)}")
-        return response,stop
-    except Exception as err:
-        ErrorLog(f"HuggingFace {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=InferenceClient(token=apikey,timeout=timeout)
+    completion=clientAI.chat.completions.create(
+            model=model,
+            frequency_penalty=freqpenality,
+            temperature=temperature,
+            messages=messages,
+            stream=False
+        )
+    stop=completion.choices[0].finish_reason
+    response=completion.choices[0].message.content.strip()
+    RawLog(f"HuggingFace/{model}: {str(completion)}")
+    return response,stop
 
+@function_trapper(None)
 def GetTogetherAI(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        clientAI=together.Together(api_key=apikey, timeout=timeout)
-        completion=clientAI.chat.completions.create(
-                model=model,
-                frequency_penalty=freqpenality,
-                temperature=temperature,
-                messages=messages,
-                stream=False
-            )
-        response=completion.choices[0].message.content.strip()
-        RawLog(f"TogetherAI/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"TogetherAI {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=together.Together(api_key=apikey, timeout=timeout)
+    completion=clientAI.chat.completions.create(
+            model=model,
+            frequency_penalty=freqpenality,
+            temperature=temperature,
+            messages=messages,
+            stream=False
+        )
+    response=completion.choices[0].message.content.strip()
+    RawLog(f"TogetherAI/{model}: {str(completion)}")
+    return response
 
+@function_trapper(None)
 def GetCohere(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        co=cohere.ClientV2(api_key=apikey, timeout=timeout)
-        completion=co.chat(
-                model=model,
-                frequency_penalty=freqpenality,
-                temperature=temperature,
-                messages=messages,
-                safety_mode="NONE"
-            )
-        response=completion.message.content[0].text.strip()
-        RawLog(f"Cohere/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"Cohere {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    clientAI=cohere.ClientV2(api_key=apikey, timeout=timeout)
+    completion=clientAI.chat(
+            model=model,
+            frequency_penalty=freqpenality,
+            temperature=temperature,
+            messages=messages,
+            safety_mode="NONE"
+        )
+    response=completion.message.content[0].text.strip()
+    RawLog(f"Cohere/{model}: {str(completion)}")
+    return response
 
+@function_trapper(None)
 def GetOllama(apikey,messages,model,freqpenality,temperature,timeout,seed=0,mt=2048):
-    try:
-        options={
-                "temperature": temperature,
-                "frequency_penalty": freqpenality,
-                "seed": seed,
-                "num_ctx": mt
-            }
-        completion=ollama.chat(
-                keep_alive=timeout,
-                stream=False,
-                model=model,
-                options=options,
-                messages=messages
-            )
-        response=completion['message']['content'].strip()
-        RawLog(f"Ollama/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"Ollama {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    options={
+            "temperature": temperature,
+            "frequency_penalty": freqpenality,
+            "seed": seed,
+            "num_ctx": mt
+        }
+    completion=ollama.chat(
+            keep_alive=timeout,
+            stream=False,
+            model=model,
+            options=options,
+            messages=messages
+        )
+    response=completion['message']['content'].strip()
+    RawLog(f"Ollama/{model}: {str(completion)}")
+    return response
 
+@function_trapper(None)
 def GetPerplexity(apikey,messages,model,freqpenality,temperature,timeout):
-    try:
-        # Prepare the payload for the request
-        payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-            }
+    # Prepare the payload for the request
+    payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+        }
 
-        # Perplexity URL
-        PerplexityURL = "https://api.perplexity.ai/chat/completions"
+    # Perplexity URL
+    PerplexityURL = "https://api.perplexity.ai/chat/completions"
 
-        # Set up headers including authorization
-        headers = {
-                "Authorization": f"Bearer {apikey}",
-                "Content-Type": "application/json"
-            }
+    # Set up headers including authorization
+    headers = {
+            "Authorization": f"Bearer {apikey}",
+            "Content-Type": "application/json"
+        }
 
-        # Make the POST request to the Perplexity API
-        response=requests.post(PerplexityURL, json=payload, headers=headers,timeout=timeout)
+    # Make the POST request to the Perplexity API
+    response=requests.post(PerplexityURL, json=payload, headers=headers,timeout=timeout)
 
-        # Check if the request was successful
-        if response.status_code==200:
-            completion=response.json()
+    # Check if the request was successful
+    if response.status_code==200:
+        completion=response.json()
 
-        response=completion["choices"][0]["message"]["content"].strip()
+    response=completion["choices"][0]["message"]["content"].strip()
 
-        # If there are citations in the choices text portion, append
-        # them to the response. This is not neccessary, but it does look
-        # nice and adds to the bot's presence.
+    # If there are citations in the choices text portion, append
+    # them to the response. This is not neccessary, but it does look
+    # nice and adds to the bot's presence.
 
-        IsCitations=any(re.search(r'\[\d+\]', choice.get("message", {}).get("content", "")) for choice in completion.get("choices", []))
-        if IsCitations:
-            response+="\n\n"+"\n".join(f"<{url}>" for url in completion['citations'])
-        RawLog(f"Perplexity/{model}: {str(completion)}")
-        return response
-    except Exception as err:
-        ErrorLog(f"Perplexity {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return None
+    IsCitations=any(re.search(r'\[\d+\]', choice.get("message", {}).get("content", "")) for choice in completion.get("choices", []))
+    if IsCitations:
+        response+="\n\n"+"\n".join(f"<{url}>" for url in completion['citations'])
+    RawLog(f"Perplexity/{model}: {str(completion)}")
+    return response
 
 # The `GetAIResponse` function is responsible for communicating with the
 # AI to generate thoughtful replies based on user messages. When a user
@@ -1416,6 +1450,7 @@ def GetPerplexity(apikey,messages,model,freqpenality,temperature,timeout):
 # focused the response should be. After sending this request, it waits for
 # a reply from the AI.
 
+@function_trapper(None)
 def GetAIResponse(gid,persona,bot):
     print(gid,bot.get('Model'), bot.get('Encoding'))
     provider=bot.get('Engine').lower()
@@ -1423,64 +1458,60 @@ def GetAIResponse(gid,persona,bot):
     # HuggingFace uses mutiple responses...
     hfresponses=[]
 
-    try:
-        # Default connection timeout
-        tout=bot.get('Timeout', 60)
-        mt=bot.get('MaxTokens', 2048 if provider=='ollama' else 4096)
-        model=bot.get('Model')
-        encoding=bot.get('Encoding')
-        seed=bot.get('Seed', 0)
+    # Default connection timeout
+    tout=bot.get('Timeout', 60)
+    mt=bot.get('MaxTokens', 2048 if provider=='ollama' else 4096)
+    model=bot.get('Model')
+    encoding=bot.get('Encoding')
+    seed=bot.get('Seed', 0)
 
-        # Provider-specific handling
-        Tokens=ReadTokens(gid)
+    # Provider-specific handling
+    Tokens=ReadTokens(gid)
 
-        # Adjust persona based on token limit
-        WorkingPersona=MaintainTokenLimit(Tokens, persona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
-        if WorkingPersona is None:
-            return PickRandomResponse(bot['TooMuchInformation'])
+    # Adjust persona based on token limit
+    WorkingPersona=MaintainTokenLimit(Tokens, persona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
+    if WorkingPersona is None:
+        return PickRandomResponse(bot['TooMuchInformation'])
 
-        if provider=='openai':
-           response=GetOpenAI(Tokens['OpenAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='openrouter':
-           response=GetOpenRouter(Tokens['OpenRouter'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='anthropic':
-           response=GetAnthropic(Tokens['Anthropic'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='togetherai':
-            response=GetTogetherAI(Tokens['TogetherAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='cohere':
-            response=GetCohere(Tokens['Cohere'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='ollama':
-           response=GetOllama(None,WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout,seed=seed,mt=mt)
-        elif provider=='perplexity':
-          response=GetPerplexity(Tokens['Perplexity'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-        elif provider=='huggingface':
-            # HuggingFace uses fragmentation for completion methods...
-            # Access is free for 1000 requests per day. 1 response could
-            # take 8 requests to the API.
-            while True:
-                resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
-                hfresponses.append(resp)
+    if provider=='openai':
+       response=GetOpenAI(Tokens['OpenAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='openrouter':
+       response=GetOpenRouter(Tokens['OpenRouter'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='anthropic':
+       response=GetAnthropic(Tokens['Anthropic'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='togetherai':
+        response=GetTogetherAI(Tokens['TogetherAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='cohere':
+        response=GetCohere(Tokens['Cohere'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='ollama':
+       response=GetOllama(None,WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout,seed=seed,mt=mt)
+    elif provider=='perplexity':
+      response=GetPerplexity(Tokens['Perplexity'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+    elif provider=='huggingface':
+        # HuggingFace uses fragmentation for completion methods...
+        # Access is free for 1000 requests per day. 1 response could
+        # take 8 requests to the API.
+        while True:
+            resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+            hfresponses.append(resp)
 
-                # Emulate user typing continue. Count tokens as well...
-                WorkingPersona.append({"role":"assistant", "content":resp})
-                WorkingPersona.append({"role":"user", "content":"Continue"})
-                WorkingPersona=MaintainTokenLimit(Tokens, WorkingPersona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
-                if WorkingPersona is None:
-                    return PickRandomResponse(bot['TooMuchInformation'])
+            # Emulate user typing continue. Count tokens as well...
+            WorkingPersona.append({"role":"assistant", "content":resp})
+            WorkingPersona.append({"role":"user", "content":"Continue"})
+            WorkingPersona=MaintainTokenLimit(Tokens, WorkingPersona, max_tokens=mt, engine=provider, model=model, encoding=encoding, HuggingFace=(provider != 'openai'))
+            if WorkingPersona is None:
+                return PickRandomResponse(bot['TooMuchInformation'])
 
-                # if finish reason is length, response is fragmented.
-                print("HuggingFace fragment:",stop,len(resp))
-                if stop!='length' or len(resp)==0:
-                    break
-            response=' '.join(hfresponses).strip()
-        # Engine not recognized.
-        else:
-            return None
-
-        return response
-    except Exception as err:
-        ErrorLog(f"{provider} {model}: {sys.exc_info()[-1].tb_lineno}/{err}")
+            # if finish reason is length, response is fragmented.
+            print("HuggingFace fragment:",stop,len(resp))
+            if stop!='length' or len(resp)==0:
+                break
+        response=' '.join(hfresponses).strip()
+    # Engine not recognized.
+    else:
         return None
+
+    return response
 
 ###
 ### Special features
@@ -1495,6 +1526,7 @@ def GetAIResponse(gid,persona,bot):
 # entries. The results are organized by word length, allowing users to see which words
 # can be created from their given letters.
 
+@function_trapper(None)
 def AnagramSolver(fromletters):
     def load_dictionary(file_path):
         # Load dictionary words from a file and return them as a set.
@@ -1541,6 +1573,7 @@ def AnagramSolver(fromletters):
 
 # Read tags from a YouTube video
 
+@function_trapper('{[(*VNF*)]}')
 def yttags2text(url):
     def extract_video_id(url):
         # Match either a youtu.be or youtube.com URL to extract the video ID
@@ -1575,41 +1608,35 @@ def yttags2text(url):
         else:
             return '{[(*VNF*)]}'
 
-    try:
-        # Create YouTube Object
-        youtube=build('youtube', 'v3', developerKey=Tokens['YouTube'])
+    # Create YouTube Object
+    youtube=build('youtube', 'v3', developerKey=Tokens['YouTube'])
 
-        # Retrieve and display tags
-        tags=get_video_tags(extract_video_id(url))
+    # Retrieve and display tags
+    tags=get_video_tags(extract_video_id(url))
 
-        if isinstance(tags, list):
-            return '\n'.join(tags)
-        return tags
-    except Exception as err:
-        ErrorLog(f"Broke yttags: {sys.exc_info()[-1].tb_lineno}/{err}")
-        return '{[(*VNF*)]}'
+    if isinstance(tags, list):
+        return '\n'.join(tags)
+    return tags
 
 # Read a YouTube URL and pull the transcript
 
+@function_trapper(None)
 def youtube2text(video_url):
-    try:
-        # Extract the video ID from the URL
-        #video_id=video_url.split('v=')[1]
-        video_id=re.search(r'(v=|be/|embed/|v/|youtu\.be/|\/videos\/|\/shorts\/|\/watch\?v=|\/watch\?si=|\/watch\?.*?&v=)([a-zA-Z0-9_-]{11})',video_url).group(2)
+    # Extract the video ID from the URL
+    #video_id=video_url.split('v=')[1]
+    video_id=re.search(r'(v=|be/|embed/|v/|youtu\.be/|\/videos\/|\/shorts\/|\/watch\?v=|\/watch\?si=|\/watch\?.*?&v=)([a-zA-Z0-9_-]{11})',video_url).group(2)
 
-        # Fetch the transcript using the YouTubeTranscriptApi
-        transcript_list=youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
+    # Fetch the transcript using the YouTubeTranscriptApi
+    transcript_list=youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
 
-        # Use the TextFormatter to convert the transcript into plain text
-        transcript_text='\n'.join(line['text'] for line in transcript_list)
+    # Use the TextFormatter to convert the transcript into plain text
+    transcript_text='\n'.join(line['text'] for line in transcript_list)
 
-        return 'Video Transcript: '+transcript_text
-    except Exception as err:
-        ErrorLog(f"Broke youtube2text: {sys.exc_info()[-1].tb_lineno}/{err}")
-    return None
+    return 'Video Transcript: '+transcript_text
 
 # Read PDF from buffer
 
+@function_trapper(None)
 def PDF2Text(pdf_buffer):
     with pdfplumber.open(io.BytesIO(pdf_buffer)) as pdf:
         text=""
@@ -1619,63 +1646,59 @@ def PDF2Text(pdf_buffer):
 
 # Get a URL and scrub it to pure text
 
+@function_trapper(None)
 def html2text(url):
+    # Set the user agent
+    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+    request=urllib.request.Request(url, headers=headers)
+
+    print("Fetch:",url)
+
+    # Video transcript?
+    if 'youtube.com/watch' in url or 'youtu.be/' in url:
+        input_text=youtube2text(url)
+        return input_text
+
+    # Not a YouTube transcript, Fetch the HTML content from the URL
+
     try:
-        # Set the user agent
-        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        request=urllib.request.Request(url, headers=headers)
-
-        print("Fetch:",url)
-
-        # Video transcript?
-        if 'youtube.com/watch' in url or 'youtu.be/' in url:
-            input_text=youtube2text(url)
-            return input_text
-
-        # Not a YouTube transcript, Fetch the HTML content from the URL
-
-        try:
-            with urllib.request.urlopen(request,timeout=60) as response:
-                html=response.read()
-        except Exception as err:
-            print("URL Error:",url,str(err))
-            return None
-
-        if response.code>=400:
-            print("URL Code:",response.code,url)
-            return None
-
-        # Check for PDF signature
-        if html[:5]=='%PDF-':
-            text=PDF2Text(html).strip()
-            print("PDF:",len(text),url)
-            return text
-
-        # Decoding MUST be done AFTER pdf test
-        html=html.decode('utf-8',errors='ignore')
-
-        # Remove the entire head section
-        html=re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
-
-        # Remove script and style elements
-        html=re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.DOTALL)
-
-        # Reduce <a> elements to their text content
-        html=re.sub(r'<a[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
-
-        # Remove all other HTML tags
-        text=re.sub(r'<[^>]+>', '', html)
-
-        # Remove extra whitespace
-        text=re.sub(r'\s+', ' ', text).strip()
-
-        print("URL:",len(text),url)
-
-        return 'Web Page Content: '+text
+        with urllib.request.urlopen(request,timeout=60) as response:
+            html=response.read()
     except Exception as err:
-        ErrorLog(f"Broke html2text: {sys.exc_info()[-1].tb_lineno}/{err}")
+        print("URL Error:",url,str(err))
+        return None
 
-    return None
+    if response.code>=400:
+        print("URL Code:",response.code,url)
+        return None
+
+    # Check for PDF signature
+    if html[:5]=='%PDF-':
+        text=PDF2Text(html).strip()
+        print("PDF:",len(text),url)
+        return text
+
+    # Decoding MUST be done AFTER pdf test
+    html=html.decode('utf-8',errors='ignore')
+
+    # Remove the entire head section
+    html=re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
+
+    # Remove script and style elements
+    html=re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.DOTALL)
+
+    # Reduce <a> elements to their text content
+    html=re.sub(r'<a[^>]*>(.*?)</a>', r'\1', html, flags=re.DOTALL)
+
+    # Remove all other HTML tags
+    text=re.sub(r'<[^>]+>', '', html)
+
+    # Remove extra whitespace
+    text=re.sub(r'\s+', ' ', text).strip()
+
+    print("URL:",len(text),url)
+
+    return 'Web Page Content: '+text
 
 ###
 ### Discord support functions
@@ -1683,6 +1706,7 @@ def html2text(url):
 
 # Disect discord messages. Forensic logging
 
+@function_trapper(None)
 def DisectMessage(event,message):
     if DisectLock.acquire(timeout=DisectTimeout):
         # Set up convience variables
@@ -1778,6 +1802,7 @@ def DisectMessage(event,message):
 
 # Change the nick name and avatar
 
+@function_trapper(None)
 async def ChangeNickAvatar(bot,message):
     # Only change avatar if channels change.
     channel=str(message.channel)
@@ -1787,15 +1812,12 @@ async def ChangeNickAvatar(bot,message):
 
         # Only seems to work with Administrator priviledges
         # Change the nickname if the bot.
-        try:
-            # Add code to check avatar name and channel. Only change avatar when
-            # channel changes.
-            await message.guild.me.edit(nick=bot['BotName'])
-            pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
-            png=ReadFile(pname,binary=True)
-            await client.user.edit(avatar=png)
-        except Exception as err:
-            ErrorLog(f"Broken Nick/Avatar: {sys.exc_info()[-1].tb_lineno}/{err}")
+        # Add code to check avatar name and channel. Only change avatar when
+        # channel changes.
+        await message.guild.me.edit(nick=bot['BotName'])
+        pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
+        png=ReadFile(pname,binary=True)
+        await client.user.edit(avatar=png)
 
 # The `send_response` function is responsible for sending messages from the bot back to
 # users in a Discord channel. When the bot generates a reply—whether it’s an answer to a
@@ -1806,119 +1828,116 @@ async def ChangeNickAvatar(bot,message):
 # components) to enhance how information is presented. If needed, it can also schedule
 # messages for automatic deletion after a certain period.
 
+@function_trapper(None)
 async def send_response(bot,message,response,embed=None,delete=None,member=None):
     global delete_list
     whmsg=[]
 
-    try:
-        if bot['Channel']==None:
-            webhooks=await member.guild.system_channel.webhooks()
+    if bot['Channel']==None:
+        webhooks=await member.guild.system_channel.webhooks()
+    else:
+        # If its a thread, get the parent channel
+        pchannel=message.channel
+        if isinstance(message.channel,discord.Thread):
+            pchannel=message.channel.parent
+        webhooks=await pchannel.webhooks()
+
+    # Delete all webhooks with the name "Companion Temporary Webhook"
+    for webhook in webhooks:
+        if webhook.name=='Companion Temporary Webhook':
+            await webhook.delete()
+
+    threadID=None
+    # Create a new webhook
+    if bot['Channel']==None:
+        syschannel=member.guild.system_channel
+        webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
+        author=None
+    else:
+        # Handle thread issues, get parent channel
+        pchannel=message.channel
+        if isinstance(message.channel,discord.Thread):
+            pchannel=message.channel.parent
+        webhook=await pchannel.create_webhook(name='Companion Temporary Webhook')
+        # Get the name of the person this message is going to
+        author=str(message.author.mention)
+        if isinstance(message.channel,discord.Thread):
+            threadID=message.channel # Actual thread ID
+
+    # If the message is less then 1900 characters, just send it with a reply.
+    if embed!=None:
+        if author!=None:
+            x1=f"{author}"
         else:
-            # If its a thread, get the parent channel
-            pchannel=message.channel
-            if isinstance(message.channel,discord.Thread):
-                pchannel=message.channel.parent
-            webhooks=await pchannel.webhooks()
-
-        # Delete all webhooks with the name "Companion Temporary Webhook"
-        for webhook in webhooks:
-            if webhook.name=='Companion Temporary Webhook':
-                await webhook.delete()
-
-        threadID=None
-        # Create a new webhook
-        if bot['Channel']==None:
-            syschannel=member.guild.system_channel
-            webhook=await syschannel.create_webhook(name='Companion Temporary Webhook')
-            author=None
+            x1=''
+        if threadID:
+            wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
         else:
-            # Handle thread issues, get parent channel
-            pchannel=message.channel
-            if isinstance(message.channel,discord.Thread):
-                pchannel=message.channel.parent
-            webhook=await pchannel.create_webhook(name='Companion Temporary Webhook')
-            # Get the name of the person this message is going to
-            author=str(message.author.mention)
-            if isinstance(message.channel,discord.Thread):
-                threadID=message.channel # Actual thread ID
-
-        # If the message is less then 1900 characters, just send it with a reply.
-        if embed!=None:
-            if author!=None:
-                x1=f"{author}"
-            else:
-                x1=''
-            if threadID:
-                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
-            else:
-                wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-            whmsg.append(wm)
-        elif len(response)<=1900:
-            if author!=None:
-                x1=f"{author} {response}"
-            else:
-                x1=f"{response}"
-            # sending with and without threads must be separate
-            if threadID:
-                wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
-            else:
-                wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-            whmsg.append(wm)
-        else:
-
-            # Break this up into multiple messages. Discord does NOT allow
-            # direct reply with multiple message parts.
-
+            wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+        whmsg.append(wm)
+    elif len(response)<=1900:
+        if author!=None:
             x1=f"{author} {response}"
-            l=len(x1)
-            while l>1900:
-                # We need to deal with the possibility that a \n doesn't exist in the input data.
-                pmax=1900
-                # Look for new line first
-                p=x1.rfind('\n',0,pmax)
-                if p==-1:
-                    # Look for a period  Separate at a sentence
-                    p=x1.rfind('.',0,pmax)
-                    if p==-1:
-                        # Look for a space  Separate at a word
-                        p=x1.rfind(' ',0,pmax)
-                        if p==-1:
-                            # Brute split
-                            pmax=1900
-                if len(x1[:p])>0:
-                    if threadID:
-                        wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
-                    else:
-                        wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-                    whmsg.append(wm)
-                if x1[p]=='.' or x1[p]==' ':
-                    p+=1
-                x1=x1[p:].strip()
-                l=len(x1)
-            if l>0:
-                if threadID:
-                    wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
-                else:
-                    wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
-                whmsg.append(wm)
+        else:
+            x1=f"{response}"
+        # sending with and without threads must be separate
+        if threadID:
+            wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+        else:
+            wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+        whmsg.append(wm)
+    else:
 
-        # Queue autodelete messages. Responses can be multiple messages.
-        if delete!=None:
-            if DeleteLock.acquire(timeout=DeleteTimeout):
-                for whm in whmsg:
-                    delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
-                DeleteLock.release()
+        # Break this up into multiple messages. Discord does NOT allow
+        # direct reply with multiple message parts.
+
+        x1=f"{author} {response}"
+        l=len(x1)
+        while l>1900:
+            # We need to deal with the possibility that a \n doesn't exist in the input data.
+            pmax=1900
+            # Look for new line first
+            p=x1.rfind('\n',0,pmax)
+            if p==-1:
+                # Look for a period  Separate at a sentence
+                p=x1.rfind('.',0,pmax)
+                if p==-1:
+                    # Look for a space  Separate at a word
+                    p=x1.rfind(' ',0,pmax)
+                    if p==-1:
+                        # Brute split
+                        pmax=1900
+            if len(x1[:p])>0:
+                if threadID:
+                    wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
+                else:
+                    wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                whmsg.append(wm)
+            if x1[p]=='.' or x1[p]==' ':
+                p+=1
+            x1=x1[p:].strip()
+            l=len(x1)
+        if l>0:
+            if threadID:
+                wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
             else:
-                ErrorLog("Lock failed SR autodelete")
-        # Delete the webhook
-        await webhook.delete()
-    except discord.errors.HTTPException as err:
-        ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
-    except Exception as err:
-        ErrorLog(f'Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+                wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+            whmsg.append(wm)
+
+    # Queue autodelete messages. Responses can be multiple messages.
+    if delete!=None:
+        if DeleteLock.acquire(timeout=DeleteTimeout):
+            for whm in whmsg:
+                delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
+            DeleteLock.release()
+        else:
+            ErrorLog("Lock failed SR autodelete")
+    # Delete the webhook
+    await webhook.delete()
 
 # Post message is moderation area
 
+@function_trapper(None)
 async def ModeratorNotify(bot,guild,text):
     # If there is a moderator area, send a message to it.
     if 'ModerationArea' in bot:
@@ -1930,50 +1949,49 @@ async def ModeratorNotify(bot,guild,text):
 # Verify the CompanionAdministration channel exists and is set to the
 # owner role.
 
+@function_trapper(None)
 async def VerifyCompanionAdministration(guild):
-    try:
-        # Create the owner role if not present
-        orole=discord.utils.get(guild.roles,name='owner')
-        if not orole:
-            # create the owner role
-            orole=await guild.create_role(name='owner', \
-                permissions=discord.Permissions(read_messages=True,send_messages=True), \
-                mentionable=False,color=discord.Color(0xFF0000))
+    # Create the owner role if not present
+    orole=discord.utils.get(guild.roles,name='owner')
+    if not orole:
+        # create the owner role
+        orole=await guild.create_role(name='owner', \
+            permissions=discord.Permissions(read_messages=True,send_messages=True), \
+            mentionable=False,color=discord.Color(0xFF0000))
 
-            # assign it to thew owner
-            if orole not in guild.owner.roles:
-                await guild.owner.add_roles(orole)
+        # assign it to thew owner
+        if orole not in guild.owner.roles:
+            await guild.owner.add_roles(orole)
 
-        # Check for the 'companion-administration' channel
-        channel=discord.utils.get(guild.text_channels, name='companion-administration')
+    # Check for the 'companion-administration' channel
+    channel=discord.utils.get(guild.text_channels, name='companion-administration')
 
-        # Set up default security
-        overwrites={ guild.default_role: discord.PermissionOverwrite( view_channel=False,
-                        send_messages=False,read_messages=False,read_message_history=False,
-                        mention_everyone=False,add_reactions=False,attach_files=False,
-                        send_tts_messages=False),
-                     orole: discord.PermissionOverwrite(read_messages=True,read_message_history=True,
-                        send_messages=True) }
+    # Set up default security
+    overwrites={ guild.default_role: discord.PermissionOverwrite( view_channel=False,
+                    send_messages=False,read_messages=False,read_message_history=False,
+                    mention_everyone=False,add_reactions=False,attach_files=False,
+                    send_tts_messages=False),
+                 orole: discord.PermissionOverwrite(read_messages=True,read_message_history=True,
+                    send_messages=True) }
 
-        # If the channel does not exist, create it
-        if not channel:
-            if orole:
-                # Create the channel and set permissions
-                channel = await guild.create_text_channel('companion-administration', \
-                    overwrites=overwrites, position=len(guild.channels), \
-                    topic='This channel is for Companion administration.')
-            else:
-                # Owner role does not exist, should never happen.
-                return None
+    # If the channel does not exist, create it
+    if not channel:
+        if orole:
+            # Create the channel and set permissions
+            channel = await guild.create_text_channel('companion-administration', \
+                overwrites=overwrites, position=len(guild.channels), \
+                topic='This channel is for Companion administration.')
         else:
-            # Force channel to proper security settings
-            channel.edit(overwrites=overwrites)
-        return channel
-    except Exception as err:
-        ErrorLog(f'VCA: {sys.exc_info()[-1].tb_lineno}/{err}')
+            # Owner role does not exist, should never happen.
+            return None
+    else:
+        # Force channel to proper security settings
+        channel.edit(overwrites=overwrites)
+    return channel
 
 # Perform security audit on a given guild
 
+@function_trapper(None)
 async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     # failsafe catch
     if guild==None and message==None:
@@ -2066,49 +2084,47 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
 
 # Check for owner impersonations.
 
+@function_trapper(False)
 async def ImposterAmoungUs(guild,member):
-    try:
-        # Retrieve the guild and owner information
-        guild = guild
-        owner = guild.owner
-        owner_name = owner.name.lower()
-        owner_nick = owner.display_name.lower()
-        member_name = member.name.lower()
-        member_nick = member.display_name.lower()
+    # Retrieve the guild and owner information
+    guild = guild
+    owner = guild.owner
+    owner_name = owner.name.lower()
+    owner_nick = owner.display_name.lower()
+    member_name = member.name.lower()
+    member_nick = member.display_name.lower()
 
-        # Check if the new member has the same username or display name as the owner
-        if member != owner and (member_name == owner_name or member_nick == owner_nick):
-            # Fetch URLs for avatars
-            member_avatar_url = member.display_avatar.url
-            owner_avatar_url = owner.display_avatar.url
+    # Check if the new member has the same username or display name as the owner
+    if member != owner and (member_name == owner_name or member_nick == owner_nick):
+        # Fetch URLs for avatars
+        member_avatar_url = member.display_avatar.url
+        owner_avatar_url = owner.display_avatar.url
 
-            # Load images for comparison
-            try:
-                member_avatar_image = LoadImageURL(member_avatar_url)
-                owner_avatar_image = LoadImageURL(owner_avatar_url)
-            except Exception as err:
-                ErrorLog(f"IAU Broken: Avatar load/{err}")
-                return False
+        # Load images for comparison
+        try:
+            member_avatar_image = LoadImageURL(member_avatar_url)
+            owner_avatar_image = LoadImageURL(owner_avatar_url)
+        except Exception as err:
+            ErrorLog(f"IAU Broken: Avatar load/{err}")
+            return False
 
-            # Convert avatars to perceptual hashes
-            member_hash = imagehash.phash(member_avatar_image)
-            owner_hash = imagehash.phash(owner_avatar_image)
+        # Convert avatars to perceptual hashes
+        member_hash = imagehash.phash(member_avatar_image)
+        owner_hash = imagehash.phash(owner_avatar_image)
 
-            # Compare hash distance (simple comparison)
-            if member_hash == owner_hash:
-                # Ban the member for impersonation
-                await member.ban(reason="Impersonating the server owner")
-                await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
-                return True
-    except Exception as err:
-        ErrorLog(f'IAU: {sys.exc_info()[-1].tb_lineno}/{err}')
-    return False
+        # Compare hash distance (simple comparison)
+        if member_hash == owner_hash:
+            # Ban the member for impersonation
+            await member.ban(reason="Impersonating the server owner")
+            await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
+            return True
 
 # Check for input for personal identifying information (PII). Even Companion
 # will get caught in these validations. This may be a bad idea, but Bots seem to
 # have a wicked high number of false positives. Once an AI classifier is in
 # place, this may not be needed.
 
+@function_trapper(False)
 async def IsPIIDetected(bot,message):
     if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
         # Check whitelist
@@ -2143,6 +2159,7 @@ async def IsPIIDetected(bot,message):
 # Run automated security audit
 
 @tasks.loop(hours=23)
+@function_trapper
 async def AutomatedSecurityAudit():
     for guild in client.guilds:
         await SecurityAudit(guild,None,False,True)
@@ -2153,6 +2170,7 @@ async def AutomatedSecurityAudit():
 # storage and there MUST be reasonable limits. Rune ONCE a day.
 
 @tasks.loop(hours=23)
+@function_trapper
 async def MemoryMaintenance():
     # Get server CFg files
     cfg_files=[os.path.join(ConfigStorage, file) for file in os.listdir(ConfigStorage) if file.endswith('.cfg')]
@@ -2194,6 +2212,7 @@ async def MemoryMaintenance():
 # message from the guild, channel, and message IDs.
 
 @tasks.loop(seconds=3)
+@function_trapper
 async def autodelete_messages():
     global delete_list
 
@@ -2217,6 +2236,7 @@ async def autodelete_messages():
 
 # Handle the circular queue for the guilds.
 
+@function_trapper(None)
 def RotateGuildQueue():
     global GuildQueueLock
     global GuildQueue
@@ -2240,50 +2260,48 @@ def RotateGuildQueue():
 # serialized, but multiple servers can run concurrently.
 
 @tasks.loop(seconds=3)
+@function_trapper
 async def update_response_data():
     global BabbleLock
     global ResponseLock
     global GuildQueueLock
     global GuildQueue
 
-    try:
-        guild=RotateGuildQueue()
+    guild=RotateGuildQueue()
 
-        # Check to see is the guild is available to babble
-        if guild.id in BabbleLock and BabbleLock[guild.id].locked():
-            return
+    # Check to see is the guild is available to babble
+    if guild.id in BabbleLock and BabbleLock[guild.id].locked():
+        return
 
-        # Pull the next request
+    # Pull the next request
 
-        request=None
-        if ResponseLock.acquire(timeout=ResponseTimeout):
-            request=GetNextRequest(guild.id)
-            ResponseLock.release()
+    request=None
+    if ResponseLock.acquire(timeout=ResponseTimeout):
+        request=GetNextRequest(guild.id)
+        ResponseLock.release()
 
-        # Only 1 AI request at a time
+    # Only 1 AI request at a time
 
-        if request!=None:
-            # Create guild lock for babbling
-            if guild.id not in BabbleLock:
-                BabbleLock[guild.id]=threading.Lock()
+    if request!=None:
+        # Create guild lock for babbling
+        if guild.id not in BabbleLock:
+            BabbleLock[guild.id]=threading.Lock()
 
-            if BabbleLock[guild.id].acquire(timeout=BabbleTimeout):
-                try:
-                    await HandleOneMessage(request)
-                except Exception as err:
-                    # It broke, try to put the request back in the queue
-                    if ResponseLock.acquire(timeout=ResponseTimeout):
-                        PutNextRequest(guild.id,request)
-                        ResponseLock.release()
-                    ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
-                BabbleLock[guild.id].release()
-            else:
-                # Couldn't get the lock, try to put the request back in the queue
+        if BabbleLock[guild.id].acquire(timeout=BabbleTimeout):
+            try:
+                await HandleOneMessage(request)
+            except Exception as err:
+                # It broke, try to put the request back in the queue
                 if ResponseLock.acquire(timeout=ResponseTimeout):
                     PutNextRequest(guild.id,request)
                     ResponseLock.release()
-    except Exception as err:
-        ErrorLog(f'Broke URD: {sys.exc_info()[-1].tb_lineno}/{err}')
+                ErrorLog(f"Broke: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+            BabbleLock[guild.id].release()
+        else:
+            # Couldn't get the lock, try to put the request back in the queue
+            if ResponseLock.acquire(timeout=ResponseTimeout):
+                PutNextRequest(guild.id,request)
+                ResponseLock.release()
 
 # This function cleans up the active user lists.
 
@@ -2292,34 +2310,31 @@ async def update_response_data():
 # appripriate to the channel "pressure".
 
 @tasks.loop(seconds=60)
+@function_trapper
 async def track_active_users():
     global active_users
     global active_joins
 
-    try:
-        current_time=time.time()
-        # Sweep every channel
-        for ac in list(active_users):
-            # Sweep users in a channel
-            for au in list(active_users[ac]):
-                # Check time added againt expiration
-                if (current_time-au[1])>SLOW_MODE_COOLDOWN:
-                    # reduce factor
-                    au[2]-=1
-                    if au[2]<1:
-                        active_users[ac].remove(au)
-                    else:
-                        au[1]=time.time()
+    current_time=time.time()
+    # Sweep every channel
+    for ac in list(active_users):
+        # Sweep users in a channel
+        for au in list(active_users[ac]):
+            # Check time added againt expiration
+            if (current_time-au[1])>SLOW_MODE_COOLDOWN:
+                # reduce factor
+                au[2]-=1
+                if au[2]<1:
+                    active_users[ac].remove(au)
+                else:
+                    au[1]=time.time()
 
-        # Sweep all guilds
-        for ag in list(active_joins):
-            # Sweep all users in join list
-            for au in list(active_joins[ag]):
-                if (current_time-au[1])>SLOW_MODE_COOLDOWN:
-                    active_joins[ag].remove(au)
-
-    except Exception as err:
-        ErrorLog(f'TAU Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
+    # Sweep all guilds
+    for ag in list(active_joins):
+        # Sweep all users in join list
+        for au in list(active_joins[ag]):
+            if (current_time-au[1])>SLOW_MODE_COOLDOWN:
+                active_joins[ag].remove(au)
 
 ###
 ### Discord event functions
@@ -2345,6 +2360,7 @@ async def track_active_users():
 # original message.
 
 @client.event
+@function_trapper
 async def on_message_edit(before, after):
     # Search for word in list
     def CheckWordList(side,sampleText):
@@ -2355,84 +2371,81 @@ async def on_message_edit(before, after):
                 break
         return Found
 
-    try:
-        if after.content==before.content:
+    if after.content==before.content:
+        return
+
+    # If this is a thread, get the parent channel
+    pchannel=after.channel
+    nsfw=None
+    if isinstance(after.channel,discord.Thread):
+        pchannel=after.channel.parent
+        nsfw=after.channel.parent.nsfw
+    else:
+        nsfw=after.channel.nsfw
+
+    channel=str(pchannel)
+    uid=str(after.author.id)
+    bot=GetCompanionPersona(after.guild.id,channel,nsfw)
+    if bot==None:
+        return
+
+    # Log everything
+    if bot['AutoLogging'].lower()!='no':
+        DisectMessage("Message edited (before)",before)
+        DisectMessage("Message edited (after)",after)
+
+    # Manage automated moderation
+    if bot['AutoModeration'].lower()=='no':
+        return
+
+    # Build leet lists
+
+    leftside=BuildLeetList(lside)
+    rightside=BuildLeetList(rside)
+
+    sampleText=StripPunctuation(after.content.lower())
+
+    leftFound=CheckWordList(leftside,sampleText)
+    rightFound=CheckWordList(rightside,sampleText)
+
+    # NEED a global moderation switch
+    # Check for vulgarity in the edited response
+
+    # This could be a problem at the global level of a server, where
+    # partial moderation may be desired, vs an absolute approach.
+
+    if bot['AutoModeration'].lower()!='no' \
+    and os.path.exists(bot['Vulgarity']) \
+    and bot['AllowVulgarity'].lower()!='yes' \
+    and not nsfw:
+        if bool(pc.predict([ after.content ]))==True:
+            await ModeratorNotify(bot,after.guild,f"{after.author.name}/{after.author.id} chastized for vulgarity in {after.channel.name}")
+            await send_response(bot,after,PickRandomResponse(bot['Vulgarity']),delete=57)
+            try: # delete the offending message
+                await after.delete()
+            except:
+                pass
             return
 
-        # If this is a thread, get the parent channel
-        pchannel=after.channel
-        nsfw=None
-        if isinstance(after.channel,discord.Thread):
-            pchannel=after.channel.parent
-            nsfw=after.channel.parent.nsfw
-        else:
-            nsfw=after.channel.nsfw
-
-        channel=str(pchannel)
-        uid=str(after.author.id)
-        bot=GetCompanionPersona(after.guild.id,channel,nsfw)
-        if bot==None:
-            return
-
-        # Log everything
-        if bot['AutoLogging'].lower()!='no':
-            DisectMessage("Message edited (before)",before)
-            DisectMessage("Message edited (after)",after)
-
-        # Manage automated moderation
-        if bot['AutoModeration'].lower()=='no':
-            return
-
-        # Build leet lists
-
-        leftside=BuildLeetList(lside)
-        rightside=BuildLeetList(rside)
-
-        sampleText=StripPunctuation(after.content.lower())
-
-        leftFound=CheckWordList(leftside,sampleText)
-        rightFound=CheckWordList(rightside,sampleText)
-
-        # NEED a global moderation switch
-        # Check for vulgarity in the edited response
-
-        # This could be a problem at the global level of a server, where
-        # partial moderation may be desired, vs an absolute approach.
-
-        if bot['AutoModeration'].lower()!='no' \
-        and os.path.exists(bot['Vulgarity']) \
-        and bot['AllowVulgarity'].lower()!='yes' \
-        and not nsfw:
-            if bool(pc.predict([ after.content ]))==True:
-                await ModeratorNotify(bot,after.guild,f"{after.author.name}/{after.author.id} chastized for vulgarity in {after.channel.name}")
-                await send_response(bot,after,PickRandomResponse(bot['Vulgarity']),delete=57)
-                try: # delete the offending message
-                    await after.delete()
-                except:
-                    pass
-                return
-
-        if leftFound and rightFound:
-            await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name}")
-            # This seems to be a better way to ruin the attacker's plan
-            embed=discord.Embed(
-                title='Message edited',
-                description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
-                color=discord.Color.red() )
-#            try: # delete the edited message
-#                await after.delete()
-#            except:
-#                pass
-            await send_response(bot,after,None,embed=embed)
-            return
-
-    except Exception as err:
-        ErrorLog(f'Broken Edit: {sys.exc_info()[-1].tb_lineno}/{err}')
+    if leftFound and rightFound:
+        await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name}")
+        # This seems to be a better way to ruin the attacker's plan
+        embed=discord.Embed(
+            title='Message edited',
+            description=f'UID: {uid}\nAuthor: {after.author}\n\nBefore edit:\n\n{before.content}\n\nAfter edit:\n\n{after.content}\n\n',
+            color=discord.Color.red() )
+#        try: # delete the edited message
+#            await after.delete()
+#        except:
+#            pass
+        await send_response(bot,after,None,embed=embed)
+        return
 
 # Log deleted messages. Nothing escapes the watchful eye of the moderation
 # system
 
 @client.event
+@function_trapper
 async def on_message_delete(message):
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
@@ -2449,156 +2462,150 @@ async def on_message_delete(message):
 # 'Welcome' bot to provide a nice welcoming message.
 
 @client.event
+@function_trapper
 async def on_member_join(member):
     global active_joins
 
-    try:
-        # Track new member joins
-        key=member.guild.id
-        if key not in active_joins:
-            active_joins[key]=[]
-        if member.id not in active_joins[key]:
-            ut=[member.id,time.time()]
-            active_joins[key].append(ut)
+    # Track new member joins
+    key=member.guild.id
+    if key not in active_joins:
+        active_joins[key]=[]
+    if member.id not in active_joins[key]:
+        ut=[member.id,time.time()]
+        active_joins[key].append(ut)
 
-        # Welcome forces the default bot.
-        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
-        if bot==None:
-            return
+    # Welcome forces the default bot.
+    bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
+    if bot==None:
+        return
 
-        if bot['AutoLogging'].lower()!='no':
-            ErrorLog(f"OMJ: {member}")
+    if bot['AutoLogging'].lower()!='no':
+        ErrorLog(f"OMJ: {member}")
 
-        # If there is a moderator area, send a message to it.
-        await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
+    # If there is a moderator area, send a message to it.
+    await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
 
-        if ImposterAmoungUs(member.guild,member):
-            return
+    if ImposterAmoungUs(member.guild,member):
+        return
 
-        if os.path.exists(bot['Welcome']):
-            # Figure out which persona is calling the shots.
-            response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
-            # A message of None will automatically refer to the system channel
-            await send_response(bot,None,response,member=member)
-    except Exception as err:
-        ErrorLog(f'OMJ: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+    if os.path.exists(bot['Welcome']):
+        # Figure out which persona is calling the shots.
+        response=PickRandomResponse(bot['Welcome']).replace('{username}',f'**{member.mention}**')
+        # A message of None will automatically refer to the system channel
+        await send_response(bot,None,response,member=member)
 
 # Record the user leaving the server in the designated moderator area.
 
 @client.event
+@function_trapper
 async def on_member_remove(member):
-    try:
-        # Welcome forces the default bot.
-        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
-        if bot==None:
-            return
+    # Welcome forces the default bot.
+    bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
+    if bot==None:
+        return
 
-        if bot['AutoLogging'].lower()!='no':
-            ErrorLog(f"OMR: {member}")
+    if bot['AutoLogging'].lower()!='no':
+        ErrorLog(f"OMR: {member}")
 
-        # If there is a moderator area, send a message to it.
-        await ModeratorNotify(bot,member.guild,f"{member}/{member.id} left.")
-    except Exception as err:
-        ErrorLog(f'OMR: Error sending message: {sys.exc_info()[-1].tb_lineno}/{err}')
+    # If there is a moderator area, send a message to it.
+    await ModeratorNotify(bot,member.guild,f"{member}/{member.id} left.")
 
 # Implement an auto slowmode based on actual users typing per channel
 # NOT bot dependant... RETHINK this for CFG settings and enable/disable.
 
 @client.event
+@function_trapper
 async def on_typing(channel, user, when):
     global active_users
     global active_joins
 
-    try:
-        # if direct message, ignore
-        if isinstance(channel,discord.DMChannel):
-            return
+    # if direct message, ignore
+    if isinstance(channel,discord.DMChannel):
+        return
 
-        # If this is a thread, get the parent channel
-        pchannel=channel
-        if isinstance(channel,discord.Thread):
-            pchannel=channel.parent
+    # If this is a thread, get the parent channel
+    pchannel=channel
+    if isinstance(channel,discord.Thread):
+        pchannel=channel.parent
 
-        # Track active member joins
+    # Track active member joins
+    joins=1
+    if pchannel.guild.id in active_joins:
+        joins=len(active_joins[channel.guild.id])
+
+    # joins will be used a a multiplier so is the threshold is not met, then
+    # a multiplier of 1 is used is keep the method simple.
+
+    if joins<=int(len(pchannel.guild.members)*0.01):
         joins=1
-        if pchannel.guild.id in active_joins:
-            joins=len(active_joins[channel.guild.id])
 
-        # joins will be used a a multiplier so is the threshold is not met, then
-        # a multiplier of 1 is used is keep the method simple.
+    # Create a unique key for the channel using guild and channel IDs
+    key = f"{pchannel.guild.id}.{pchannel.id}"
 
-        if joins<=int(len(pchannel.guild.members)*0.01):
-            joins=1
+    # When this function gets called, someone was typing. Add them to
+    # the channel tracking list.
 
-        # Create a unique key for the channel using guild and channel IDs
-        key = f"{pchannel.guild.id}.{pchannel.id}"
+    if key not in active_users:
+        active_users[key]=[]
 
-        # When this function gets called, someone was typing. Add them to
-        # the channel tracking list.
+    found=False
+    for u in active_users[key]:
+        if u[0]==user.id:
+            # Reset the timer
+            u[1]=time.time()
+            u[2]+=1*joins
+            found=True
 
-        if key not in active_users:
-            active_users[key]=[]
+    if not found:
+        # User ID, and the time they were typing, factor
+        # The factor is used as a decrementer to prevent manipulation
+        ut=[user.id,time.time(),joins]
+        active_users[key].append(ut)
 
-        found=False
-        for u in active_users[key]:
-            if u[0]==user.id:
-                # Reset the timer
-                u[1]=time.time()
-                u[2]+=1*joins
-                found=True
+    # Calculate the number of typing users in the channel
+    typing_count=len(active_users[key])
 
-        if not found:
-            # User ID, and the time they were typing, factor
-            # The factor is used as a decrementer to prevent manipulation
-            ut=[user.id,time.time(),joins]
-            active_users[key].append(ut)
+    # Check if the cooldown has expired. Slowdown can only be adjust
+    # ONCE every 5 minutes per channel.
 
-        # Calculate the number of typing users in the channel
-        typing_count=len(active_users[key])
+    current_time = time.time()
+    last_change = last_slow_mode_change.get(key, 0)
+    if current_time - last_change < SLOW_MODE_COOLDOWN:
+        return  # Skip the adjustment process if still in cooldown
 
-        # Check if the cooldown has expired. Slowdown can only be adjust
-        # ONCE every 5 minutes per channel.
+    # Calculate expected users
+    server = channel.guild
 
-        current_time = time.time()
-        last_change = last_slow_mode_change.get(key, 0)
-        if current_time - last_change < SLOW_MODE_COOLDOWN:
-            return  # Skip the adjustment process if still in cooldown
+    # Theory: 1% of all active users throughout the server should be
+    # active normally. Assuming the distribution of users will be
+    # spread out over the number of channels, gives us an expected
+    # number of users per channel. This is a fallacy, but it is a
+    # reasonable starting point to build the theory on. Possible
+    # expansions could be actually messuring user activity per
+    # channel, but to get something very basic, I felt this was
+    # reasonable enough for most applications given that I am using
+    # only 3 secords per user as the slowdown rate, unless the number
+    # of user is above the expected amount. This is a primitive
+    # anti-raid method.
 
-        # Calculate expected users
-        server = channel.guild
+    expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
+    if expected_users<1:
+        expected_users=1
 
-        # Theory: 1% of all active users throughout the server should be
-        # active normally. Assuming the distribution of users will be
-        # spread out over the number of channels, gives us an expected
-        # number of users per channel. This is a fallacy, but it is a
-        # reasonable starting point to build the theory on. Possible
-        # expansions could be actually messuring user activity per
-        # channel, but to get something very basic, I felt this was
-        # reasonable enough for most applications given that I am using
-        # only 3 secords per user as the slowdown rate, unless the number
-        # of user is above the expected amount. This is a primitive
-        # anti-raid method.
+    # Determine slow mode duration
+    if typing_count > 2 * expected_users:  # Over threshold
+        bot=GetCompanionPersona(server.id,None,Welcome=True)
+        await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users > {expected_users} users")
+        slow_mode_duration = SLOW_MODE_DURATION * typing_count*10*joins
+    elif typing_count > expected_users:
+        slow_mode_duration = SLOW_MODE_DURATION * typing_count*joins
+    else:
+        slow_mode_duration = 0
 
-        expected_users = int(max(1, round(len(server.members) * 0.01 / len(server.channels))))
-        if expected_users<1:
-            expected_users=1
-
-        # Determine slow mode duration
-        if typing_count > 2 * expected_users:  # Over threshold
-            bot=GetCompanionPersona(server.id,None,Welcome=True)
-            await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users > {expected_users} users")
-            slow_mode_duration = SLOW_MODE_DURATION * typing_count*10*joins
-        elif typing_count > expected_users:
-            slow_mode_duration = SLOW_MODE_DURATION * typing_count*joins
-        else:
-            slow_mode_duration = 0
-
-        # Apply slow mode
-        await pchannel.edit(slowmode=slow_mode_duration)
-        last_slow_mode_change[key] = current_time  # Update the last change time
-        print(f"Slowmode {server.id}/{channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
-    except Exception as err:
-        ErrorLog(f'OnType Broke: {sys.exc_info()[-1].tb_lineno}/{err}')
+    # Apply slow mode
+    await pchannel.edit(slowmode=slow_mode_duration)
+    last_slow_mode_change[key] = current_time  # Update the last change time
+    print(f"Slowmode {server.id}/{channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
 
 # Get the user message and add it to a processing list. This really is the
 # driving point of the AI responses. Currently it responds to any message
@@ -2606,6 +2613,7 @@ async def on_typing(channel, user, when):
 # message of a particular interest, like cooking, or programming.
 
 @client.event
+@function_trapper
 async def on_message(message):
     global ResponseLock
     global GuildQueueLock
@@ -2877,93 +2885,86 @@ async def on_message(message):
             print(f"Rate limit hit. Retrying after {retry_after} seconds.")
             await asyncio.sleep(retry_after)
             await on_message(message)  # Retry the request
-    except Exception as err:
-        ErrorLog(f"OM: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
 
 # When Companion joins a new guild
 
 @client.event
+@function_trapper
 async def on_guild_join(guild):
     global GuildQueueLock
     global GuildQueue
 
-    try:
-        ErrorLog(f"Companion invited to new guild: {guild}/{guild.id}")
-        # Add the guild to the circular guild queue
-        if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
-            GuildQueue.append(guild)
-            GuildQueueLock.release()
+    ErrorLog(f"Companion invited to new guild: {guild}/{guild.id}")
+    # Add the guild to the circular guild queue
+    if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+        GuildQueue.append(guild)
+        GuildQueueLock.release()
 
-        mkdir(f'{MemoryStorage}/{guild.id}')
-        mkdir(f'{LoggingStorage}/{guild.id}')
-        await SecurityAudit(guild,None,False,True)
-    except Exception as err:
-        ErrorLog(f"OGJ: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+    mkdir(f'{MemoryStorage}/{guild.id}')
+    mkdir(f'{LoggingStorage}/{guild.id}')
+    await SecurityAudit(guild,None,False,True)
 
 # When Companion is removed from a guild.
 # TODO: purge all guild files.
 
 @client.event
+@function_trapper
 async def on_guild_remove(guild):
     global GuildQueueLock
     global GuildQueue
 
-    try:
-        ErrorLog(f"Companion kicked out of guild: {guild}/{guild.id}")
-        # Add the guild to the circular guild queue
-        if guild.id in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
-            GuildQueue.remove(guild)
-            GuildQueueLock.release()
-    except Exception as err:
-        ErrorLog(f"OGR: {sys.exc_info()[-1].tb_lineno}/{str(err)}")
+    ErrorLog(f"Companion kicked out of guild: {guild}/{guild.id}")
+    # Add the guild to the circular guild queue
+    if guild.id in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+        GuildQueue.remove(guild)
+        GuildQueueLock.release()
 
 # Start the timer task for responses.
 
 @client.event
+@function_trapper
 async def on_ready():
     print(f'Logged in as {client.user}')
 
-    try:
-        # Print some fluff
-        for guild in client.guilds:
-            # Add the guild to the circular guild queue, if not already in it.
-            if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
-                GuildQueue.append(guild)
-                GuildQueueLock.release()
+    # Print some fluff
+    for guild in client.guilds:
+        # Add the guild to the circular guild queue, if not already in it.
+        if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
+            GuildQueue.append(guild)
+            GuildQueueLock.release()
 
-            # Make sure the neccessary directories exist
-            mkdir(f'{MemoryStorage}/{guild.id}')
-            mkdir(f'{LoggingStorage}/{guild.id}')
+        # Make sure the neccessary directories exist
+        mkdir(f'{MemoryStorage}/{guild.id}')
+        mkdir(f'{LoggingStorage}/{guild.id}')
 
-            # Check if the bot's role has administrator permissions
-            if not guild.me.guild_permissions.administrator:
-                print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
+        # Check if the bot's role has administrator permissions
+        if not guild.me.guild_permissions.administrator:
+            print(f"  Error: Companion does not have administrator privileges in {guild.name}.")
 
-        # Start the task when the bot is ready
-        update_response_data.start()
-        autodelete_messages.start()
-        track_active_users.start()
-        MemoryMaintenance.start()
-        AutomatedSecurityAudit.start()
+    # Start the task when the bot is ready
+    update_response_data.start()
+    autodelete_messages.start()
+    track_active_users.start()
+    MemoryMaintenance.start()
+    AutomatedSecurityAudit.start()
 
-        print("Ready to serve!")
-    except Exception as err:
-        print(f"ERR: {err}")
+    print("Ready to serve!")
 
 ###
 ### STARTUP: starts the bot with the corresponding token
 ###
 
+@function_trapper
+def main():
+    print(f'Companion {Version}')
+    mkdir(ConfigStorage)
+
+    Tokens=ReadTokens()
+
+    client.run(Tokens['Discord'],log_handler=None)
+
 if __name__=='__main__':
-    try:
-        print(f'Companion {Version}')
-        mkdir(ConfigStorage)
-
-        Tokens=ReadTokens()
-
-        client.run(Tokens['Discord'],log_handler=None)
-    except Exception as err:
-        ErrorLog(f"Broken MAIN: {err}")
+    main()
 
 ### END OF PROGRAM
 
