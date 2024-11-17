@@ -48,9 +48,9 @@
 # --> Not in a specific order, add support for the following engines (Maybe):
 
 #   GitHub model
+#   Azure
 #   DeepInfra           https://deepinfra.com/pricing
 #   fireworks.ai
-#   Azure
 #   Anyscale
 #   Replicate
 #   google.ai (genini)  This is a hot mess to try to develop for. There
@@ -85,6 +85,7 @@
 #   Anti-raid - completed
 #   Find a way to identify personal information: email, phone numbers, SSN, EIN,
 #       Credit Card numbers - completed
+#       Refine with an AI classifier - in progress
 
 #   Anti nuke
 #   Ticket management
@@ -107,6 +108,7 @@ import copy
 import itertools
 import functools
 import inspect
+import traceback
 import datetime
 import time
 import json
@@ -270,7 +272,9 @@ def function_trapper(failed_result=None):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as err:
-                    ErrorLog(f"{func.__name__}/{sys.exc_info()[-1].tb_lineno}: {err}")
+                    tb=traceback.extract_tb(sys.exc_info()[-1])
+                    errline = tb[-1].lineno
+                    ErrorLog(f"{func.__name__}/{errline}: {err}")
                     return failed_result
             return async_wrapper
         else:  # Handle sync functions
@@ -279,7 +283,9 @@ def function_trapper(failed_result=None):
                 try:
                     return func(*args, **kwargs)
                 except Exception as err:
-                    ErrorLog(f"{func.__name__}/{sys.exc_info()[-1].tb_lineno}: {err}")
+                    tb=traceback.extract_tb(sys.exc_info()[-1])
+                    errline = tb[-1].lineno
+                    ErrorLog(f"{func.__name__}/{errline}: {err}")
                     return failed_result
             return sync_wrapper
 
@@ -401,11 +407,6 @@ def NumberOnly(s):
         return True
 
     return False
-
-# Leet list deritives for trying to get someone's age.
-
-lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
-rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
 
 # Building the leet derivitives. This was a royal pain in the ass, but
 # by doing so, if any user trying to bypass the edit detection can be
@@ -2362,6 +2363,11 @@ async def track_active_users():
 @client.event
 @function_trapper
 async def on_message_edit(before, after):
+    # Leet list deritives for trying to get someone's age.
+
+    lside=['ask','how','is','are','your','you','when','whens','what','whats','wut','wuts','was','tell','ur','u','r']
+    rside=['over','old','young','under','teen','tween','tweenie','born','date','year','yr','age','birth','birthed','birthdate','birthday','bday','bd','born']
+
     # Search for word in list
     def CheckWordList(side,sampleText):
         Found=False
@@ -2369,7 +2375,10 @@ async def on_message_edit(before, after):
             if side[w] in sampleText:
                 Found=True
                 break
-        return Found
+        return Found,side[w]
+
+    # Don't do any processing if the content between before and after are
+    # identical.
 
     if after.content==before.content:
         return
@@ -2405,8 +2414,8 @@ async def on_message_edit(before, after):
 
     sampleText=StripPunctuation(after.content.lower())
 
-    leftFound=CheckWordList(leftside,sampleText)
-    rightFound=CheckWordList(rightside,sampleText)
+    leftFound,leftWord=CheckWordList(leftside,sampleText)
+    rightFound,rightWord=CheckWordList(rightside,sampleText)
 
     # NEED a global moderation switch
     # Check for vulgarity in the edited response
@@ -2428,7 +2437,7 @@ async def on_message_edit(before, after):
             return
 
     if leftFound and rightFound:
-        await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name}")
+        await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name} matching {leftWord}/{rightWord}")
         # This seems to be a better way to ruin the attacker's plan
         embed=discord.Embed(
             title='Message edited',
@@ -2450,7 +2459,7 @@ async def on_message_delete(message):
     # Figure out which persona is calling the shots.
     channel=str(message.channel)
     uid=str(message.author.id)
-    bot=GetCompanionPersona(message.guild.id,channel,message,channel.nsfw)
+    bot=GetCompanionPersona(message.guild.id,channel,message,message.channel.nsfw)
     if bot==None:
         return
 
