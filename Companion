@@ -140,7 +140,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1030"
+Version="0.0.0.0.1035"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -980,11 +980,11 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
         bot['Engine']="openai"
     if 'Model' not in bot:
         bot['Model']="gpt-4o-mini"
-    if 'FreqPenality' not in bot:
-        bot['FreqPenality']=0.67
+    if 'freqpenalty' not in bot:
+        bot['freqpenalty']=0.67
     else:
-        if type(bot['FreqPenality'])!=float:
-            bot['FreqPenality']=float(bot['FreqPenality'])
+        if type(bot['freqpenalty'])!=float:
+            bot['freqpenalty']=float(bot['freqpenalty'])
     if 'Temperature' not in bot:
         bot['Temperature']=0.37
     else:
@@ -1294,11 +1294,11 @@ def PutNextRequest(gid,msg):
 # for classifiers.
 
 @function_trapper(None)
-def GetOpenAI(apikey,messages,model,freqpenality,temperature,timeout):
+def GetOpenAI(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=openai.OpenAI(api_key=apikey)
     completion=clientAI.chat.completions.create(
             model=model,
-            frequency_penalty=freqpenality,
+            frequency_penalty=freqpenalty,
             temperature=temperature,
             messages=messages,
             timeout=timeout
@@ -1311,11 +1311,11 @@ def GetOpenAI(apikey,messages,model,freqpenality,temperature,timeout):
 # Get response from OpwenRouter using OpenAI interface
 
 @function_trapper(None)
-def GetOpenRouter(apikey,messages,model,freqpenality,temperature,timeout):
+def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=openai.OpenAI(api_key=apikey,base_url="https://openrouter.ai/api/v1")
     completion=clientAI.chat.completions.create(
             model=model,
-            frequency_penalty=freqpenality,
+            frequency_penalty=freqpenalty,
             temperature=temperature,
             messages=messages,
             timeout=timeout
@@ -1326,7 +1326,7 @@ def GetOpenRouter(apikey,messages,model,freqpenality,temperature,timeout):
     return response
 
 @function_trapper(None)
-def GetAnthropic(apikey,messages,model,freqpenality,temperature,timeout):
+def GetAnthropic(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=anthropic.Anthropic(api_key=apikey,timeout=timeout)
     completion=clientAI.messages.create(
             system=messages[0]['content'],
@@ -1342,11 +1342,11 @@ def GetAnthropic(apikey,messages,model,freqpenality,temperature,timeout):
     return response
 
 @function_trapper(None)
-def GetHuggingFace(apikey,messages,model,freqpenality,temperature,timeout):
+def GetHuggingFace(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=InferenceClient(token=apikey,timeout=timeout)
     completion=clientAI.chat.completions.create(
             model=model,
-            frequency_penalty=freqpenality,
+            frequency_penalty=freqpenalty,
             temperature=temperature,
             messages=messages,
             stream=False
@@ -1357,11 +1357,11 @@ def GetHuggingFace(apikey,messages,model,freqpenality,temperature,timeout):
     return response,stop
 
 @function_trapper(None)
-def GetTogetherAI(apikey,messages,model,freqpenality,temperature,timeout):
+def GetTogetherAI(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=together.Together(api_key=apikey, timeout=timeout)
     completion=clientAI.chat.completions.create(
             model=model,
-            frequency_penalty=freqpenality,
+            frequency_penalty=freqpenalty,
             temperature=temperature,
             messages=messages,
             stream=False
@@ -1371,11 +1371,11 @@ def GetTogetherAI(apikey,messages,model,freqpenality,temperature,timeout):
     return response
 
 @function_trapper(None)
-def GetCohere(apikey,messages,model,freqpenality,temperature,timeout):
+def GetCohere(apikey,messages,model,freqpenalty,temperature,timeout):
     clientAI=cohere.ClientV2(api_key=apikey, timeout=timeout)
     completion=clientAI.chat(
             model=model,
-            frequency_penalty=freqpenality,
+            frequency_penalty=freqpenalty,
             temperature=temperature,
             messages=messages,
             safety_mode="NONE"
@@ -1385,15 +1385,15 @@ def GetCohere(apikey,messages,model,freqpenality,temperature,timeout):
     return response
 
 @function_trapper(None)
-def GetOllama(apikey,messages,model,freqpenality,temperature,timeout,seed=0,mt=2048):
+def GetOllama(apikey,messages,model,freqpenalty,temperature,timeout,seed=0,mt=2048):
     options={
             "temperature": temperature,
-            "frequency_penalty": freqpenality,
+            "frequency_penalty": freqpenalty,
             "seed": seed,
             "num_ctx": mt
         }
-    completion=ollama.chat(
-            keep_alive=timeout,
+    clientAI=ollama.Client(timeout=timeout)
+    completion=clientAI.chat(
             stream=False,
             model=model,
             options=options,
@@ -1404,7 +1404,7 @@ def GetOllama(apikey,messages,model,freqpenality,temperature,timeout,seed=0,mt=2
     return response
 
 @function_trapper(None)
-def GetPerplexity(apikey,messages,model,freqpenality,temperature,timeout):
+def GetPerplexity(apikey,messages,model,freqpenalty,temperature,timeout):
     # Prepare the payload for the request
     payload = {
             "model": model,
@@ -1475,25 +1475,25 @@ def GetAIResponse(gid,persona,bot):
         return PickRandomResponse(bot['TooMuchInformation'])
 
     if provider=='openai':
-       response=GetOpenAI(Tokens['OpenAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+       response=GetOpenAI(Tokens['OpenAI'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='openrouter':
-       response=GetOpenRouter(Tokens['OpenRouter'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+       response=GetOpenRouter(Tokens['OpenRouter'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='anthropic':
-       response=GetAnthropic(Tokens['Anthropic'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+       response=GetAnthropic(Tokens['Anthropic'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='togetherai':
-        response=GetTogetherAI(Tokens['TogetherAI'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        response=GetTogetherAI(Tokens['TogetherAI'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='cohere':
-        response=GetCohere(Tokens['Cohere'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+        response=GetCohere(Tokens['Cohere'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='ollama':
-       response=GetOllama(None,WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout,seed=seed,mt=mt)
+       response=GetOllama(None,WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout,seed=seed,mt=mt)
     elif provider=='perplexity':
-      response=GetPerplexity(Tokens['Perplexity'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+      response=GetPerplexity(Tokens['Perplexity'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
     elif provider=='huggingface':
         # HuggingFace uses fragmentation for completion methods...
         # Access is free for 1000 requests per day. 1 response could
         # take 8 requests to the API.
         while True:
-            resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['FreqPenality'],bot['Temperature'],tout)
+            resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
             hfresponses.append(resp)
 
             # Emulate user typing continue. Count tokens as well...
