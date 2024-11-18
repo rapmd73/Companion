@@ -140,7 +140,7 @@ from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1035"
+Version="0.0.0.0.1040"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2129,16 +2129,18 @@ async def ImposterAmoungUs(guild,member):
 async def IsPIIDetected(bot,message):
     if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
         # Check whitelist
-        piiList=bot['PIIWhitelist'].split(',')
-        for uc in piiList:
-            # Is this a whitelisted user
-            if uc[0]=='@':
-                if uc[1:].lower()==message.author.name.lower():
-                    return False
-            # Is this a white listed channel
-            if uc[0]=='#':
-                if uc[1:].lower()==message.channel.name.lower():
-                    return False
+        if 'PIIWhitelist' in bot:
+            piiList=bot['PIIWhitelist'].split(',')
+            print(piiList)
+            for uc in piiList:
+                # Is this a whitelisted user
+                if uc[0]=='@':
+                    if uc[1:].lower()==message.author.name.lower():
+                        return False
+                # Is this a white listed channel
+                if uc[0]=='#':
+                    if uc[1:].lower()==message.channel.name.lower():
+                        return False
 
         HasPII=await DetectPII(message.content)
         if HasPII:
