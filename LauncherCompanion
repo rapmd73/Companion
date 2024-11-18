@@ -3,7 +3,7 @@
 # Crontab entry ( without hash mark #
 # @reboot ( /home/Companion/LauncherCompanion & ) > /dev/null 2>&1
 
-#export OLLAMA_HOST=http://1.2.3.4:19758/api/generate
+export OLLAMA_HOST=http://127.0.0.1:11434
 
 BaseDir="/home/Companion"
 
