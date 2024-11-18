@@ -47,7 +47,7 @@
 
 # --> Not in a specific order, add support for the following engines (Maybe):
 
-#   GitHub model
+#   GitHub model        https://github.com/marketplace/models (Uses Azure, Paid)
 #   Azure
 #   DeepInfra           https://deepinfra.com/pricing
 #   fireworks.ai
@@ -1213,10 +1213,10 @@ async def HandleOneMessage(request):
                 return
             else:
                 istr=f"{uid}/{channel}:{nsfw}/{input_text}"
-                response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
+                response=await client.loop.run_in_executor(pool,GetBabble,message,istr)
         else:
             istr=f"{uid}/{channel}:{nsfw}/{input_text}"
-            response=await client.loop.run_in_executor(pool, GetBabble,message, istr)
+            response=await client.loop.run_in_executor(pool,GetBabble,message,istr)
 
         print('B',guild.id,client.user.id,bot['BotName'],message.channel,len(response))
 
@@ -2247,8 +2247,8 @@ def RotateGuildQueue():
         top=GuildQueue.pop(0)
         GuildQueue.append(top)
         GuildQueueLock.release()
-
-    return top
+        return top
+    return None
 
 # The dirty part. I wanted to serialize requests for the bot, so a timer
 # approach is used coupled with a locking method. This keep a rate limit
@@ -2269,6 +2269,9 @@ async def update_response_data():
     global GuildQueue
 
     guild=RotateGuildQueue()
+    if guild==None:
+        ErrorLog("Guild rotation failed.")
+        return
 
     # Check to see is the guild is available to babble
     if guild.id in BabbleLock and BabbleLock[guild.id].locked():
