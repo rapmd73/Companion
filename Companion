@@ -2131,7 +2131,6 @@ async def IsPIIDetected(bot,message):
         # Check whitelist
         if 'PIIWhitelist' in bot:
             piiList=bot['PIIWhitelist'].split(',')
-            print(piiList)
             for uc in piiList:
                 # Is this a whitelisted user
                 if uc[0]=='@':
