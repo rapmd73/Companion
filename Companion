@@ -1645,7 +1645,18 @@ def PDF2Text(pdf_buffer):
             text+=page.extract_text()
         return 'PDF Content: '+text
 
-# Get a URL and scrub it to pure text
+# The `html2text` function is used to fetch and convert the content of a
+# web page into plain text. First, it sets a user agent to mimic a browser
+# request to the given URL. If the URL points to a YouTube video, it
+# retrieves the video's transcript using the `youtube2text` function. For
+# other types of pages, it makes an HTTP request to fetch the HTML content.
+# The function handles errors gracefully, such as when a page is not found
+# or if there is an issue with the URL. It checks if the content is a PDF
+# and converts it to text if it is. Then, it processes the HTML by removing
+# the head section, script, and style elements, and strips out other
+# unnecessary HTML tags. The result is a cleaned-up, plain-text version of
+# the web page, with extra whitespace removed. The function prints the
+# length of the content fetched and returns it as a readable string.
 
 @function_trapper(None)
 def html2text(url):
@@ -1705,7 +1716,16 @@ def html2text(url):
 ### Discord support functions
 ###
 
-# Disect discord messages. Forensic logging
+# The `DisectMessage` function is designed to capture and log detailed
+# information about messages in a Discord server. It collects data such as
+# the message's content, author, channel, and timestamp, as well as any
+# mentions, reactions, attachments, or embeds. Additionally, it logs any
+# special features like stickers, references to other messages, and
+# interactive components like buttons or menus. The function ensures that
+# no two instances run at the same time by using a lock mechanism, and it
+# handles errors gracefully if any details are unavailable. This makes it a
+# comprehensive tool for tracking and auditing messages, helping to monitor
+# and manage communication within a Discord server.
 
 @function_trapper(None)
 def DisectMessage(event,message):
@@ -1820,14 +1840,17 @@ async def ChangeNickAvatar(bot,message):
         png=ReadFile(pname,binary=True)
         await client.user.edit(avatar=png)
 
-# The `send_response` function is responsible for sending messages from the bot back to
-# users in a Discord channel. When the bot generates a reply—whether it’s an answer to a
-# question, information, or an alert—this function takes care of delivering that message
-# appropriately.  Here's how it works: the function checks where the response should be
-# sent, whether it's in a regular chat channel or a thread. It formats the message and
-# can even include special features like embeds (which are visually appealing message
-# components) to enhance how information is presented. If needed, it can also schedule
-# messages for automatic deletion after a certain period.
+# This function handles sending a response via a webhook in Discord,
+# including the possibility of auto-deleting messages after a set time. It
+# first checks if the bot is operating in a specific channel or system
+# channel, and retrieves existing webhooks from that channel. It then
+# ensures any existing "Companion Temporary Webhook" is deleted before
+# creating a new one. The response, which may include text and an optional
+# embed, is sent via the webhook. If the response exceeds 1900 characters,
+# it's broken up into smaller parts. The function also queues messages for
+# deletion after a specified time, ensuring that the deletion lock is
+# respected. Once the message is sent and queued for deletion (if
+# applicable), the webhook is deleted.
 
 @function_trapper(None)
 async def send_response(bot,message,response,embed=None,delete=None,member=None):
@@ -1936,7 +1959,12 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
     # Delete the webhook
     await webhook.delete()
 
-# Post message is moderation area
+# This function checks if a "ModerationArea" is specified in the bot's
+# settings. If it exists, the function iterates through the guild's
+# channels to find a text channel matching the name of the
+# "ModerationArea." Once the correct channel is found, it sends the
+# provided text message to that channel. The function stops once the
+# message is sent, ensuring that only one notification is made.
 
 @function_trapper(None)
 async def ModeratorNotify(bot,guild,text):
@@ -1947,8 +1975,16 @@ async def ModeratorNotify(bot,guild,text):
                 await channel.send(text)
                 break
 
-# Verify the CompanionAdministration channel exists and is set to the
-# owner role.
+# This function ensures that the server has a proper "owner" role and a
+# secure "companion-administration" channel for server management. First,
+# it checks if the "owner" role exists, and if not, it creates one with
+# specific permissions and assigns it to the server owner. Next, the
+# function checks for the existence of a "companion-administration"
+# channel. If the channel doesn’t exist, it creates the channel with
+# restricted permissions for most users, allowing only the owner role to
+# access and manage it. If the channel already exists, it ensures the
+# security settings are correct. The function returns the channel object
+# for further use.
 
 @function_trapper(None)
 async def VerifyCompanionAdministration(guild):
@@ -1990,7 +2026,16 @@ async def VerifyCompanionAdministration(guild):
         channel.edit(overwrites=overwrites)
     return channel
 
-# Perform security audit on a given guild
+# This function checks the security setup of a Discord server to ensure
+# it’s well-protected and highlights any weak points. It verifies if an
+# "owner" role exists, has the highest permissions, and is assigned to the
+# server owner. It examines key settings, such as strict account
+# verification for new members, explicit content filtering, two-factor
+# authentication, and restrictions on the `@everyone` role to prevent spam
+# or abuse. If issues are found, it sends detailed recommendations to an
+# admin channel, explaining what needs to be fixed and why. If everything
+# is secure, it reports a successful audit, and it can run automatically
+# for ongoing safety monitoring.
 
 @function_trapper(None)
 async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
@@ -2083,7 +2128,19 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
             if ShowResults:
                 await admin.send(f"**This server has PASSED the security audit.**")
 
-# Check for owner impersonations.
+# The `ImposterAmoungUs` function is designed to detect and prevent
+# impersonation in a Discord server. When a new member joins, it checks if
+# the member's username or display name matches that of the server owner.
+# If a match is found, the function then compares the avatars of the new
+# member and the owner to determine if they are using the same image,
+# likely attempting to impersonate the owner. The comparison is made using
+# perceptual hashing (`phash`), which generates a hash based on the visual
+# features of the image. If the avatars are visually identical (i.e., the
+# perceptual hashes match), the function takes action by banning the new
+# member for impersonating the owner and notifies the moderators. If there
+# are any issues loading the avatars or comparing the images, an error is
+# logged. This function helps maintain the integrity of the server and
+# protects against impersonation attempts.
 
 @function_trapper(False)
 async def ImposterAmoungUs(guild,member):
@@ -2119,11 +2176,24 @@ async def ImposterAmoungUs(guild,member):
             await member.ban(reason="Impersonating the server owner")
             await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
             return True
+    return False
 
-# Check for input for personal identifying information (PII). Even Companion
-# will get caught in these validations. This may be a bad idea, but Bots seem to
-# have a wicked high number of false positives. Once an AI classifier is in
-# place, this may not be needed.
+# The `IsPIIDetected` function is an asynchronous handler that checks for
+# personally identifiable information (PII) in a message sent in a Discord
+# server. It first verifies if PII moderation is enabled by checking a bot
+# configuration. If a whitelist is provided (`PIIWhitelist`), it checks
+# whether the message sender or the channel matches any whitelisted user or
+# channel names. If the sender or channel is whitelisted, the function
+# skips the PII check. If not, the function uses the `DetectPII` function
+# to scan the message content for sensitive information like names,
+# addresses, or other private details. If PII is detected, the function
+# notifies the server moderators about the violation, including the
+# author's name, ID, channel, and the content of the message. If the
+# message contains PII, it sends a predefined response (from the
+# `PickRandomResponse` function), deletes the message, and prevents further
+# action from the bot, unless the sender is a bot. The function ensures
+# that any potential violation is swiftly dealt with while respecting the
+# settings for whitelisted users and channels.
 
 @function_trapper(False)
 async def IsPIIDetected(bot,message):
