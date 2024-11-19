@@ -109,6 +109,7 @@ import itertools
 import functools
 import inspect
 import traceback
+from collections import deque
 import datetime
 import time
 import json
@@ -135,12 +136,10 @@ import youtube_transcript_api
 import imagehash
 from transformers import AutoTokenizer
 from googleapiclient.discovery import build
-from PIL import Image
-from io import BytesIO
 
 # Active version
 
-Version="0.0.0.0.1040"
+Version="0.0.0.0.1050"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -166,7 +165,7 @@ CompanionAutoFilter=f'{CompanionBase}/Companion.autofilter'
 # `GuildQueueLock`: Ensures safe modification of the guild queue structure during
 # request management across different servers.
 
-GuildQueue=[]
+GuildQueue=deque()
 GuildQueueLock=threading.Lock()
 GuildQueueTimeout=60
 
@@ -303,14 +302,6 @@ def function_trapper(failed_result=None):
 def mkdir(fn):
     if not os.path.exists(fn):
         os.makedirs(fn,exist_ok=True)
-
-# Helper function to download and load an image from a URL
-
-@function_trapper(None)
-def LoadImageURL(url):
-    response=requests.get(url)
-    img=Image.open(BytesIO(response.content))
-    return img
 
 # Read file into buffer
 
@@ -880,7 +871,10 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     # one one random, and vwerify that it has a welcome file.
 
     if Welcome==True:
-        bot['BotName']=Config['Welcome']
+        if 'Welcome' in Config:
+            bot['BotName']=Config['Welcome']
+        else:
+            bot['BotName']=Config['Default']
         bot['Channel']=None
     else:
         Channels=Config['Channels']
@@ -1290,8 +1284,16 @@ def PutNextRequest(gid,msg):
 ### AI handlers (Optimized)
 ###
 
-# Get a response from OpenAI directly. Should not depend on bot structure,
-# for classifiers.
+# This group of functions is designed to retrieve AI-generated responses
+# from various platforms using APIs. Each function interfaces with a
+# different AI service, including OpenAI, Anthropic, Hugging Face,
+# TogetherAI, Cohere, Ollama, and Perplexity. The functions send input
+# messages, along with parameters such as temperature and frequency
+# penalty, to the respective service and receive a response. The responses
+# are then processed and returned as text, often with additional details
+# logged for transparency. These functions allow for flexibility in using
+# multiple AI models, enabling seamless integration with different AI
+# providers based on the user's preference or specific use case.
 
 @function_trapper(None)
 def GetOpenAI(apikey,messages,model,freqpenalty,temperature,timeout):
@@ -1307,8 +1309,6 @@ def GetOpenAI(apikey,messages,model,freqpenalty,temperature,timeout):
     response=completion.choices[0].message.content.strip()
     RawLog(f"OpenAI/{model}: {str(completion)}")
     return response
-
-# Get response from OpwenRouter using OpenAI interface
 
 @function_trapper(None)
 def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
@@ -2145,7 +2145,6 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
 @function_trapper(False)
 async def ImposterAmoungUs(guild,member):
     # Retrieve the guild and owner information
-    guild = guild
     owner = guild.owner
     owner_name = owner.name.lower()
     owner_nick = owner.display_name.lower()
@@ -2154,28 +2153,14 @@ async def ImposterAmoungUs(guild,member):
 
     # Check if the new member has the same username or display name as the owner
     if member != owner and (member_name == owner_name or member_nick == owner_nick):
-        # Fetch URLs for avatars
-        member_avatar_url = member.display_avatar.url
-        owner_avatar_url = owner.display_avatar.url
-
-        # Load images for comparison
-        try:
-            member_avatar_image = LoadImageURL(member_avatar_url)
-            owner_avatar_image = LoadImageURL(owner_avatar_url)
-        except Exception as err:
-            ErrorLog(f"IAU Broken: Avatar load/{err}")
-            return False
-
-        # Convert avatars to perceptual hashes
-        member_hash = imagehash.phash(member_avatar_image)
-        owner_hash = imagehash.phash(owner_avatar_image)
-
-        # Compare hash distance (simple comparison)
-        if member_hash == owner_hash:
-            # Ban the member for impersonation
-            await member.ban(reason="Impersonating the server owner")
-            await ModeratorNotify(bot,member.guild,f"{member}/{member.id} banned for impersonating owner.")
-            return True
+        # Kick the member for impersonation
+        txt=f"{member}/{member.id}/{member.display_name} kicked for impersonating owner."
+        ErrorLog(txt)
+        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
+        if bot!=None:
+            await ModeratorNotify(bot,member.guild,txt)
+        await member.kick(reason="Impersonating the server owner")
+        return True
     return False
 
 # The `IsPIIDetected` function is an asynchronous handler that checks for
@@ -2228,7 +2213,14 @@ async def IsPIIDetected(bot,message):
 ### Background Tasks
 ###
 
-# Run automated security audit
+# This function conducts a routine automated security audit for all the
+# servers the bot is a part of, running every 23 hours. For each server
+# (`guild`), it invokes a `SecurityAudit` function to check for potential
+# security vulnerabilities or issues, with specific parameters to
+# customize the audit process. The use of `await asyncio.sleep(0)` ensures
+# smooth operation without blocking other asynchronous tasks. This helps
+# maintain server security and ensures compliance with any predefined
+# security protocols.
 
 @tasks.loop(hours=23)
 @function_trapper
@@ -2237,9 +2229,16 @@ async def AutomatedSecurityAudit():
         await SecurityAudit(guild,None,False,True)
         await asyncio.sleep(0)
 
-# This task sweeps all memry fils in a given server and purges any memory
-# file over X days. Housekeeping is required otherwise users will burn
-# storage and there MUST be reasonable limits. Rune ONCE a day.
+# This function performs routine maintenance to manage memory files for
+# servers, ensuring they don’t exceed retention limits. It operates on a
+# 23-hour loop, reviewing configuration files for each server to determine
+# the maximum allowable age for memory files, defined in days and
+# converted to seconds. It then scans the memory file directory,
+# identifies files older than the specified limit, and deletes them. The
+# process includes error handling for damaged configuration files and
+# utilizes asynchronous operations (`asyncio.sleep(0)`) to maintain
+# responsiveness during execution. This keeps server memory storage
+# optimized and prevents excessive accumulation of outdated data.
 
 @tasks.loop(hours=23)
 @function_trapper
@@ -2283,6 +2282,8 @@ async def MemoryMaintenance():
 # is executed, the original message may not exist. We have to fetch
 # message from the guild, channel, and message IDs.
 
+# Optime this similar to the active_join strategy.
+
 @tasks.loop(seconds=3)
 @function_trapper
 async def autodelete_messages():
@@ -2315,7 +2316,7 @@ def RotateGuildQueue():
 
     # Add the guild to the circular guild queue
     if GuildQueueLock.acquire(timeout=GuildQueueTimeout):
-        top=GuildQueue.pop(0)
+        top=GuildQueue.popleft()
         GuildQueue.append(top)
         GuildQueueLock.release()
         return top
@@ -2541,6 +2542,32 @@ async def on_message_delete(message):
     if bot['AutoLogging'].lower()!='no':
         DisectMessage("Deleted message",message)
 
+# Monitor member updates and test for impersonations.
+
+@client.event
+@function_trapper
+async def on_member_update(before, after):
+    """
+    print(before)
+    print(after)
+
+    before_name = before.name.lower()
+    before_nick = before.display_name.lower()
+    after_name = after.name.lower()
+    after_nick = after.display_name.lower()
+
+    print(before.name,after.name)
+    print(before.nick,after.nick)
+    print(before.avatar,after.avatar)
+
+    if before.name!=after.name or before.nick!=after.nick or before.avatar!=after.avatar:
+    """
+    # Impersonation detection
+    if await ImposterAmoungUs(after.guild,after):
+            return
+    # Any other operations
+    return
+
 # Make a nice announcement welcoming the user to the server.  Use the
 # 'Welcome' bot to provide a nice welcoming message.
 
@@ -2565,11 +2592,12 @@ async def on_member_join(member):
     if bot['AutoLogging'].lower()!='no':
         ErrorLog(f"OMJ: {member}")
 
+    # Impersonation detection
+    if await ImposterAmoungUs(member.guild,member):
+        return
+
     # If there is a moderator area, send a message to it.
     await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
-
-    if ImposterAmoungUs(member.guild,member):
-        return
 
     if os.path.exists(bot['Welcome']):
         # Figure out which persona is calling the shots.
@@ -2775,6 +2803,7 @@ async def on_message(message):
         # Imposter among us no more!
 
         if await ImposterAmoungUs(message.guild,message.author):
+            await message.delete()
             return
 
         # Check for input that is a number only
