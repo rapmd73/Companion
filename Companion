@@ -139,7 +139,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1050"
+Version="0.0.0.0.1055"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1821,25 +1821,6 @@ def DisectMessage(event,message):
             WriteLog(gid,uid,channel,f"Error accessing message attributes: {e}")
         DisectLock.release()
 
-# Change the nick name and avatar
-
-@function_trapper(None)
-async def ChangeNickAvatar(bot,message):
-    # Only change avatar if channels change.
-    channel=str(message.channel)
-    cname=ReadFile(RunningName+'.lastchannel')
-    if cname==None or channel.strip()!=cname:
-        WriteFile(RunningName+'.lastchannel',channel+'\n')
-
-        # Only seems to work with Administrator priviledges
-        # Change the nickname if the bot.
-        # Add code to check avatar name and channel. Only change avatar when
-        # channel changes.
-        await message.guild.me.edit(nick=bot['BotName'])
-        pname=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.png"
-        png=ReadFile(pname,binary=True)
-        await client.user.edit(avatar=png)
-
 # This function handles sending a response via a webhook in Discord,
 # including the possibility of auto-deleting messages after a set time. It
 # first checks if the bot is operating in a specific channel or system
@@ -2128,39 +2109,42 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
             if ShowResults:
                 await admin.send(f"**This server has PASSED the security audit.**")
 
-# The `ImposterAmoungUs` function is designed to detect and prevent
-# impersonation in a Discord server. When a new member joins, it checks if
-# the member's username or display name matches that of the server owner.
-# If a match is found, the function then compares the avatars of the new
-# member and the owner to determine if they are using the same image,
-# likely attempting to impersonate the owner. The comparison is made using
-# perceptual hashing (`phash`), which generates a hash based on the visual
-# features of the image. If the avatars are visually identical (i.e., the
-# perceptual hashes match), the function takes action by banning the new
-# member for impersonating the owner and notifies the moderators. If there
-# are any issues loading the avatars or comparing the images, an error is
-# logged. This function helps maintain the integrity of the server and
-# protects against impersonation attempts.
+# This function safeguards a Discord server by identifying and addressing
+# cases where a new member attempts to impersonate the server owner. It
+# compares the username and display name of the incoming member with those
+# of the owner, and if a match is detected, it logs the incident, notifies
+# moderators via a configured companion bot (if available), and promptly
+# kicks the impersonator from the server with a clear reason. By
+# automatically enforcing these measures, the function helps maintain the
+# server’s integrity, ensuring a secure and trustworthy environment for its
+# members.
 
 @function_trapper(False)
-async def ImposterAmoungUs(guild,member):
-    # Retrieve the guild and owner information
-    owner = guild.owner
-    owner_name = owner.name.lower()
-    owner_nick = owner.display_name.lower()
+async def ImposterAmoungUs(guild, member):
+    # Retrieve the "owner" role and members
+    owner_role=discord.utils.get(guild.roles, name="owner")
+    owner_members=owner_role.members if owner_role else [guild.owner]
+
+    # Standardize the new member's username and display name for comparison
     member_name = member.name.lower()
     member_nick = member.display_name.lower()
 
-    # Check if the new member has the same username or display name as the owner
-    if member != owner and (member_name == owner_name or member_nick == owner_nick):
-        # Kick the member for impersonation
-        txt=f"{member}/{member.id}/{member.display_name} kicked for impersonating owner."
-        ErrorLog(txt)
-        bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
-        if bot!=None:
-            await ModeratorNotify(bot,member.guild,txt)
-        await member.kick(reason="Impersonating the server owner")
-        return True
+    # Check if the new member has the same username or display name as any "owner" role member
+    for owner in owner_members:
+        owner_name = owner.name.lower()
+        owner_nick = owner.display_name.lower()
+
+        if member != owner and (member_name == owner_name or member_nick == owner_nick):
+            # Log and notify about impersonation
+            txt = f"{member}/{member.id}/{member.display_name} kicked for impersonating an owner."
+            ErrorLog(txt)
+            bot = GetCompanionPersona(member.guild.id, None, Welcome=True)
+            if bot is not None:
+                await ModeratorNotify(bot, member.guild, txt)
+
+            # Kick the impersonator
+            await member.kick(reason="Impersonating a server owner")
+            return True
     return False
 
 # The `IsPIIDetected` function is an asynchronous handler that checks for
@@ -2240,7 +2224,7 @@ async def AutomatedSecurityAudit():
 # responsiveness during execution. This keeps server memory storage
 # optimized and prevents excessive accumulation of outdated data.
 
-@tasks.loop(hours=23)
+@tasks.loop(hours=17)
 @function_trapper
 async def MemoryMaintenance():
     # Get server CFg files
@@ -2307,7 +2291,15 @@ async def autodelete_messages():
     else:
         ErrorLog("Lock failed ADM")
 
-# Handle the circular queue for the guilds.
+# This function manages a circular queue of guilds in a thread-safe manner,
+# ensuring orderly rotation and access. By acquiring a global lock
+# (`GuildQueueLock`) within a defined timeout, it extracts the first guild
+# in the queue, moves it to the end, and then releases the lock to allow
+# other processes access. If the lock cannot be acquired within the
+# timeout, the function safely exits and returns `None`. This mechanism
+# facilitates balanced and sequential processing of guild-related tasks
+# while avoiding conflicts or race conditions in a multi-threaded
+# environment.
 
 @function_trapper(None)
 def RotateGuildQueue():
@@ -2322,15 +2314,19 @@ def RotateGuildQueue():
         return top
     return None
 
-# The dirty part. I wanted to serialize requests for the bot, so a timer
-# approach is used coupled with a locking method. This keep a rate limit
-# approach for the open AI api in accordance to its policies. Sleeping
-# method can also be added.
-
-# The downside to a completely serializd approach is that handling large
-# multiple guilds can monopolize resources. To address this issue, I am
-# using a circular queue where requests in a single server are
-# serialized, but multiple servers can run concurrently.
+# This asynchronous function, running every X seconds, manages response
+# data processing across multiple guilds in a controlled and efficient
+# manner. It rotates through a global queue of guilds using a thread-safe
+# mechanism to ensure fair access. For each guild, it checks if processing
+# ("babbling") is already locked, skipping it if busy. If available, it
+# attempts to retrieve the next request in a thread-safe way. When a
+# request is found, the function ensures that only one AI-related task per
+# guild is handled at a time using a per-guild lock. It processes the
+# request through `HandleOneMessage`, gracefully handling exceptions by
+# reinserting failed requests back into the queue. The system leverages
+# multiple locking mechanisms (`BabbleLock`, `ResponseLock`,
+# `GuildQueueLock`) to maintain robust concurrency control while balancing
+# workloads among guilds.
 
 @tasks.loop(seconds=3)
 @function_trapper
@@ -2379,11 +2375,17 @@ async def update_response_data():
                 PutNextRequest(guild.id,request)
                 ResponseLock.release()
 
-# This function cleans up the active user lists.
-
-# The reduce factor weighs in on the user typing within the channel. It
-# acts as a cool down to prevent a channel raid. and keep the slowmode
-# appripriate to the channel "pressure".
+# The `track_active_users` function, running every X seconds, manages and
+# tracks active users across channels and guilds by sweeping through two
+# main data structures: `active_users` and `active_joins`. It checks each
+# user's activity in channels, and if the time since their last recorded
+# activity exceeds the `SLOW_MODE_COOLDOWN`, it reduces their activity
+# factor. If the factor drops below 1, the user is removed from the
+# channel’s active list; otherwise, the timestamp is updated. Similarly,
+# for users in the `active_joins` list, if the elapsed time since their
+# join exceeds the cooldown, they are removed. This process ensures that
+# user activity is efficiently tracked and cleaned up, maintaining an
+# accurate state while respecting cooldowns for both channels and guilds.
 
 @tasks.loop(seconds=60)
 @function_trapper
@@ -2416,24 +2418,32 @@ async def track_active_users():
 ### Discord event functions
 ###
 
-# This section deals with a particularly visicous attack where the
-# attacker asks an innocent question like "how many sides to an octogon?"
-
-# The victim will respond 8.
-
-# The attacker then edits the question to read "How old are you?" or
-# "what is your age?" and takes a screen shot. The attacker then uses the
-# screen shot to get the victim permenantly banned, as it looks like the
-# victim violated Discord's age restrictions. The is a zero tolorence
-# policy for Discord and a viscious way to target people.
-
-# There is one serious restriction to this. Is a message is posted prior
-# to the bot being loaded, but edited after the fact, the bot won't
-# receive the edit notification. THIS IS A MAJOR LOOPHOLE, but one only
-# DISCORD can fix.
-
-# It seems one of the best ways to defeat this is just to delete the
-# original message.
+#The `on_message_edit` event handles edited messages in Discord, checking
+#for potential moderation issues such as leetspeak attempts, vulgarity, and
+#malicious edits aimed at extracting personal information like age. Upon
+#detecting an edit, it first verifies that the content has indeed changed
+#before proceeding. It then checks if the message is in a thread and
+#adjusts accordingly. If the message involves a bot persona, it logs the
+#changes and proceeds with moderation. The function scans the edited
+#message for specific "leet" words that might indicate an attempt to bypass
+#filters or ask for personal details like age. Additionally, it checks for
+#vulgar language, comparing the message content with a predictive model. If
+#vulgarity is found and the bot is set to block it, the message is deleted,
+#and the user is notified. If leetspeak is detected, the bot notifies
+#moderators with details of the edit, and an embedded message is created
+#for transparency. One of the more insidious attacks the bot counters
+#involves an attacker initially asking an innocent question, like "how many
+#sides to an octagon?" The victim may respond "8," and then the attacker
+#edits the message to read, "How old are you?" or "What is your age?" The
+#attacker takes a screenshot of the edited message, which could be used to
+#falsely accuse the victim of violating Discord's age restrictions, risking
+#a permanent ban. This malicious tactic exploits the fact that Discord's
+#age policy is strictly enforced. A major vulnerability in this system
+#exists when a message is posted before the bot is loaded and then edited
+#afterward; the bot will not receive the edit notification, creating a
+#loophole that only Discord can fix. To combat this, the bot aims to delete
+#the original message, preventing such malicious actions. If the message
+#passes all checks, no action is taken.
 
 @client.event
 @function_trapper
@@ -2525,8 +2535,15 @@ async def on_message_edit(before, after):
         await send_response(bot,after,None,embed=embed)
         return
 
-# Log deleted messages. Nothing escapes the watchful eye of the moderation
-# system
+# The `on_message_delete` event is triggered when a message is deleted in a
+# Discord channel. It first determines which bot persona is responsible for
+# handling the message by checking the channel, user ID, and the message
+# content. If a bot persona is found for the given guild and channel, it
+# proceeds to log the deleted message, provided that automatic logging is
+# enabled in the bot's configuration. The message is dissected and logged
+# for audit purposes, allowing administrators or the bot itself to track
+# deleted messages for transparency and moderation purposes. If no relevant
+# bot persona is found, no action is taken.
 
 @client.event
 @function_trapper
@@ -2542,34 +2559,39 @@ async def on_message_delete(message):
     if bot['AutoLogging'].lower()!='no':
         DisectMessage("Deleted message",message)
 
-# Monitor member updates and test for impersonations.
+# The `on_member_update` event is triggered when a member's profile
+# information (such as their username or nickname) is updated. It checks if
+# any changes were made to the member's identity by comparing the values of
+# their name and nickname before and after the update. The function also
+# includes a built-in impersonation detection mechanism that calls the
+# `ImposterAmoungUs` function to detect if the member's profile changes
+# resemble that of a server owner or another prominent figure in the
+# community. If impersonation is detected, the function takes action and
+# terminates further processing. The event can be extended to include
+# additional operations as needed, but impersonation is the primary focus
+# here.
 
 @client.event
 @function_trapper
 async def on_member_update(before, after):
-    """
-    print(before)
-    print(after)
-
-    before_name = before.name.lower()
-    before_nick = before.display_name.lower()
-    after_name = after.name.lower()
-    after_nick = after.display_name.lower()
-
-    print(before.name,after.name)
-    print(before.nick,after.nick)
-    print(before.avatar,after.avatar)
-
-    if before.name!=after.name or before.nick!=after.nick or before.avatar!=after.avatar:
-    """
     # Impersonation detection
     if await ImposterAmoungUs(after.guild,after):
             return
     # Any other operations
     return
 
-# Make a nice announcement welcoming the user to the server.  Use the
-# 'Welcome' bot to provide a nice welcoming message.
+# The `on_member_join` event is triggered whenever a new member joins a
+# guild. It tracks new member joins by recording the member's ID and the
+# current time in the `active_joins` dictionary for the respective guild.
+# If a companion bot is set for the guild (with the `Welcome=True` flag),
+# it checks whether the bot is available and logs a welcome message if
+# `AutoLogging` is enabled. Additionally, the event includes an
+# impersonation detection check using the `ImposterAmoungUs` function. If
+# the bot detects impersonation, it terminates further processing. If there
+# is a moderator area, it sends a notification about the new member
+# joining. Finally, if a welcome message exists for the bot, it sends a
+# personalized welcome message to the system channel, replacing
+# `{username}` with the new member's mention.
 
 @client.event
 @function_trapper
@@ -2605,7 +2627,14 @@ async def on_member_join(member):
         # A message of None will automatically refer to the system channel
         await send_response(bot,None,response,member=member)
 
-# Record the user leaving the server in the designated moderator area.
+# The `on_member_remove` event is triggered when a member leaves a guild.
+# It checks if a companion bot is set for the guild (with the
+# `Welcome=True` flag) and proceeds if the bot is available. If
+# `AutoLogging` is enabled, it logs the departure of the member. The event
+# also sends a notification to the moderator area of the guild, informing
+# about the member's departure, using the `ModeratorNotify` function. This
+# helps ensure that the moderator team is kept updated about any member
+# leaving the server.
 
 @client.event
 @function_trapper
@@ -2621,8 +2650,27 @@ async def on_member_remove(member):
     # If there is a moderator area, send a message to it.
     await ModeratorNotify(bot,member.guild,f"{member}/{member.id} left.")
 
-# Implement an auto slowmode based on actual users typing per channel
-# NOT bot dependant... RETHINK this for CFG settings and enable/disable.
+# The `on_typing` event is triggered when a user begins typing in a text
+# channel. This method is used to manage user activity by adjusting slow
+# mode settings based on typing behavior. It first checks if the typing
+# event is occurring in a direct message or thread and ensures it operates
+# only in regular channels. The code tracks user activity by assigning a
+# multiplier (`joins`) to factor in the number of recent member joins in
+# the guild. This helps adjust the expected number of typing users in a
+# channel based on the server size.
+
+#The primary function of this event is to detect potential raid-like
+#activity by analyzing the number of typing users in a channel. If the
+#typing count exceeds a certain threshold (based on the server's size and
+#channel distribution), slow mode is applied to prevent spam. The slow mode
+#duration is dynamically adjusted based on the number of typing users and
+#the expected user count for that channel. If the number of typing users is
+#significantly higher than expected, the bot logs a potential raid attempt
+#and sets a more aggressive slow mode duration.
+
+#Additionally, the event includes a cooldown mechanism that prevents
+#multiple slow mode adjustments in a short period, ensuring that changes
+#are made only once every 5 minutes per channel.
 
 @client.event
 @function_trapper
@@ -2718,10 +2766,42 @@ async def on_typing(channel, user, when):
     last_slow_mode_change[key] = current_time  # Update the last change time
     print(f"Slowmode {server.id}/{channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
 
-# Get the user message and add it to a processing list. This really is the
-# driving point of the AI responses. Currently it responds to any message
-# in the designated areas, but it could easily be adapted to respond to
-# message of a particular interest, like cooking, or programming.
+# At the heart of the bot is its core function, which revolves around
+# processing and responding to messages within a Discord server. When a
+# message is received, the bot first examines who sent it and confirms that
+# it wasn’t sent by itself, ensuring it only interacts with users. Once
+# this is established, the bot determines which persona it should adopt
+# based on the server settings. This allows the bot to be flexible and
+# respond in different ways depending on the environment it’s in. For
+# example, it might be more formal in some servers and more casual in
+# others.
+
+# After identifying the appropriate persona, the bot processes the content
+# of the message. It looks for key words or phrases to understand the
+# intent of the message. If the message is a command or question, the bot
+# will trigger the corresponding response or action. This could range from
+# providing an answer to a query to executing a special function like
+# checking the status of the server or deleting harmful content. The bot’s
+# responses are always carefully crafted to be contextually appropriate,
+# ensuring that it communicates in a way that matches the tone and setting
+# of the conversation.
+
+# The function also includes checks for harmful content, like spam or
+# malicious links. If a message contains something that could disrupt the
+# conversation or harm the server, the bot can take immediate action, such
+# as deleting the message or issuing a warning. This ensures that the
+# environment stays safe and free from unwanted disruptions. Additionally,
+# the bot is programmed to detect when users are engaging in private
+# messages and will politely remind them that it only interacts within the
+# server, maintaining clear boundaries for its interactions.
+
+# Ultimately, this core function allows the bot to continuously monitor and
+# interact with the flow of conversation in the server. It ensures that the
+# bot remains responsive and adaptive, delivering personalized messages
+# while keeping the space safe and organized. By focusing on this core
+# task, the bot can maintain a smooth and engaging experience for users,
+# adjusting its behavior as needed to meet the specific needs of each
+# server.
 
 @client.event
 @function_trapper
@@ -2998,7 +3078,14 @@ async def on_message(message):
             await asyncio.sleep(retry_after)
             await on_message(message)  # Retry the request
 
-# When Companion joins a new guild
+# When the bot joins a new server (guild), this function logs the event and
+# ensures the server is properly set up. It adds the new server to a queue,
+# ensuring that no duplicates are added, and creates necessary directories
+# for storing memory and log files specific to that server. Additionally, a
+# security audit is triggered for the new server to ensure everything is
+# properly configured and secure. This function helps to integrate the bot
+# smoothly into the new environment, ensuring that all operational
+# requirements are met from the start.
 
 @client.event
 @function_trapper
@@ -3016,7 +3103,13 @@ async def on_guild_join(guild):
     mkdir(f'{LoggingStorage}/{guild.id}')
     await SecurityAudit(guild,None,False,True)
 
-# When Companion is removed from a guild.
+# When the bot is removed from a server (guild), this function logs the
+# event and ensures that the server is properly removed from the queue. It
+# checks if the server exists in the queue, and if so, it safely removes it
+# while ensuring proper synchronization with a lock. This function helps
+# maintain an updated queue of active servers, ensuring that the bot only
+# tracks relevant servers.
+
 # TODO: purge all guild files.
 
 @client.event
@@ -3031,7 +3124,16 @@ async def on_guild_remove(guild):
         GuildQueue.remove(guild)
         GuildQueueLock.release()
 
-# Start the timer task for responses.
+# When the bot is ready, this function initializes several tasks to ensure
+# smooth operation across all servers it is connected to. It logs in, adds
+# servers to a processing queue, creates necessary directories for each
+# server, and checks that the bot has the required administrator
+# permissions in each server. If any permissions are missing, a warning is
+# logged. Then, the function starts a series of background tasks like
+# updating response data, auto-deleting messages, tracking active users,
+# and conducting security audits to maintain the bot’s performance and
+# security. Finally, it prints a confirmation that the bot is fully
+# operational and ready to serve.
 
 @client.event
 @function_trapper
