@@ -521,6 +521,19 @@ def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
     return [word for word in words if word.strip()]     # Filter out empty strings (including spaces)
 
+# This function, `AIClassifier`, serves as a versatile interface to
+# interact with different AI models from multiple providers. It accepts a
+# `gid` (guild ID), a `classifier` configuration (which includes the AI
+# engine type and model details), and a `text` input to be processed by
+# the AI. The function first prepares the system and user messages by
+# reading and formatting the provided instructions and text. It retrieves
+# API tokens and settings from the `gid` and sets the relevant parameters,
+# including a timeout and token limit. Based on the selected AI engine
+# (e.g., OpenAI, Anthropic, Cohere, etc.), it sends the formatted request
+# to the respective service and waits for a response. If an unrecognized
+# engine is provided, it logs an error and returns a fallback response.
+# The response from the AI is returned, completing the function's task.
+
 @function_timer
 @function_trapper('No')
 async def AIClassifier(gid,classifier,text,FailResp="No"):
@@ -555,7 +568,6 @@ async def AIClassifier(gid,classifier,text,FailResp="No"):
     else:
         ErrorLog(f"Invalid classifier engine: {provider}")
         return FailResp
-    print(response)
     return response
 
 # This function scans a piece of text to identify sensitive personal information, such
