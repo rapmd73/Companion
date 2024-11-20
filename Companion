@@ -139,7 +139,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1055"
+Version="0.0.0.0.1060"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -521,6 +521,43 @@ def GetWordList(text):
     words=text.lower().split()                          # Split the string by spaces
     return [word for word in words if word.strip()]     # Filter out empty strings (including spaces)
 
+@function_timer
+@function_trapper('No')
+async def AIClassifier(gid,classifier,text,FailResp="No"):
+    msg=[]
+    instr=ReadFile(classifier['Instructions']).replace('\n',' ').strip()
+    input=text.replace('\n',' ').strip()
+    msg.append({ "role":"system", "content":instr })
+    msg.append({ "role":"user", "content":input })
+
+    Tokens=ReadTokens(gid)
+    mt=int(classifier.get('MaxTokens',2048))
+    provider=classifier['Engine'].lower()
+    model=classifier['Model']
+    tout=classifier.get('Timeout',60)
+
+    if provider=='openai':
+       response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
+    elif provider=='openrouter':
+       response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
+    elif provider=='anthropic':
+       response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
+    elif provider=='togetherai':
+        response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
+    elif provider=='cohere':
+        response=GetCohere(Tokens['Cohere'],msg,model,0,0,tout)
+    elif provider=='ollama':
+       response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mt)
+    elif provider=='perplexity':
+      response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
+    elif provider=='huggingface':
+      response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
+    else:
+        ErrorLog(f"Invalid classifier engine: {provider}")
+        return FailResp
+    print(response)
+    return response
+
 # This function scans a piece of text to identify sensitive personal information, such
 # as Social Security numbers, phone numbers, email addresses, credit card numbers, IP
 # addresses, and Employer Identification Numbers (EINs). By checking for specific
@@ -531,8 +568,9 @@ def GetWordList(text):
 # process helps ensure privacy by flagging potentially sensitive data in a
 # straightforward way.
 
+@function_timer
 @function_trapper(None)
-async def DetectPII(text):
+async def DetectPII(gid,bot,text):
     async def detect_phone_number(text):
         # Define phone number patterns for different countries
         phone_patterns = [
@@ -632,9 +670,19 @@ async def DetectPII(text):
             return f"{pii_type}: {detected_value}"
         await asyncio.sleep(0)
 
+        # Check phone numbers. This is a nasty process as local numbers
+        # can cause false positives. AI is used to verify the REGEX is
+        # accurate.
+
         match=await detect_phone_number(text)
-        if match:
-            return f"Phone Number: {match}"
+        if match!=None:
+            if "PIIClassifier" in bot:
+                txt=f'REGEX matched: {match} CONFIRM: {text}'
+                AImatch=await AIClassifier(gid,bot['PIIClassifier'],txt)
+                if AImatch.lower()=='yes':
+                    return f"AI/Phone Number: {match}"
+                else:
+                    return None
 
     # If no PII pattern was found
     return None
@@ -2180,7 +2228,7 @@ async def IsPIIDetected(bot,message):
                     if uc[1:].lower()==message.channel.name.lower():
                         return False
 
-        HasPII=await DetectPII(message.content)
+        HasPII=await DetectPII(message.guild.id,bot,message.content)
         if HasPII:
             await ModeratorNotify(bot,message.guild,f"PII detected: {message.author.name}/{message.author.id} in {message.channel.name}, {HasPII}")
             await ModeratorNotify(bot,message.guild,f"{message.content}")
@@ -3099,6 +3147,7 @@ async def on_guild_join(guild):
         GuildQueue.append(guild)
         GuildQueueLock.release()
 
+    mkdir(f"{ConfigStorage}/{guild.id}")
     mkdir(f'{MemoryStorage}/{guild.id}')
     mkdir(f'{LoggingStorage}/{guild.id}')
     await SecurityAudit(guild,None,False,True)
