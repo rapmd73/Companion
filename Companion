@@ -5,6 +5,11 @@
 # 2024 Copyright © Robert APM Darin
 # All rights reserved unconditionally.
 
+# This program uses both CamelCase (PascalCase) and snake_case. After 40+
+# years of writting code in more languages then I remember, it really
+# doesn't matter after a while. Even beginner programmers should get used
+# to seeing multiple formats intermixed.
+
 # ***** IMPORTANT:
 #   This program uses ADMINISTRATOR priviledges.
 
@@ -139,7 +144,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1060"
+Version="0.0.0.0.1065"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -156,32 +161,34 @@ ConfigStorage=f'{CompanionBase}/Servers/Config'
 # For anagram solver
 AnagramWordList=f'{CompanionBase}/AnagramSolver.txt'
 
-# This is a list of domains that are scams, frauds, or malitiouc. It is exists, it is read and message that
-# have links listed are removed. Requires the persona text file as well for responses.
+# This is a list of domains that are scams, frauds, or malitiouc. It is
+# exists, it is read and message that have links listed are removed.
+# Requires the persona text file as well for responses.
 
 CompanionScamURLS=f'{CompanionBase}/Companion.scam-urls'
 CompanionAutoFilter=f'{CompanionBase}/Companion.autofilter'
 
-# `GuildQueueLock`: Ensures safe modification of the guild queue structure during
-# request management across different servers.
+# `GuildQueueLock`: Ensures safe modification of the guild queue structure
+# during request management across different servers.
 
 GuildQueue=deque()
 GuildQueueLock=threading.Lock()
 GuildQueueTimeout=60
 
-# `ResponseLock`: Prevents simultaneous modifications when queuing responses for
-# processing.
+# `ResponseLock`: Prevents simultaneous modifications when queuing
+# responses for processing.
 
 ResponseLock=threading.Lock()
 ResponseTimeout=60
 
-# `DeleteLock`: Manages safe scheduling of message deletions without conflicts.
+# `DeleteLock`: Manages safe scheduling of message deletions without
+# conflicts.
 
 DeleteLock=threading.Lock()
 DeleteTimeout=60
 
-# `DisectLock`: Ensures accurate logging by preventing overlapping writes during message
-# dissection.
+# `DisectLock`: Ensures accurate logging by preventing overlapping writes
+# during message dissection.
 
 DisectLock=threading.Lock()
 DisectTimeout=60
@@ -2521,6 +2528,36 @@ async def track_active_users():
 ### Discord event functions
 ###
 
+# Doesn't exist in API
+"""
+@client.event
+@function_trapper
+async def on_member_kick(guild, member):
+    txt=f"{member}/{member.id}/{member.display_name} kicked."
+    ErrorLog(txt)
+    bot=GetCompanionPersona(guild.id, None, Welcome=True)
+    if bot is not None:
+        await ModeratorNotify(bot, guild, txt)
+"""
+
+@client.event
+@function_trapper
+async def on_member_ban(guild, member):
+    txt=f"{member}/{member.id}/{member.display_name} banned."
+    ErrorLog(txt)
+    bot=GetCompanionPersona(guild.id, None, Welcome=True)
+    if bot is not None:
+        await ModeratorNotify(bot, guild, txt)
+
+@client.event
+@function_trapper
+async def on_member_unban(guild, member):
+    txt=f"{member}/{member.id}/{member.display_name} unbanned."
+    ErrorLog(txt)
+    bot=GetCompanionPersona(guild.id, None, Welcome=True)
+    if bot is not None:
+        await ModeratorNotify(bot, guild, txt)
+
 #The `on_message_edit` event handles edited messages in Discord, checking
 #for potential moderation issues such as leetspeak attempts, vulgarity, and
 #malicious edits aimed at extracting personal information like age. Upon
@@ -3286,5 +3323,115 @@ if __name__=='__main__':
 
 ### END OF PROGRAM
 
+"""
+### >>> MAY or MAY NOT be implemented over time.
 
+@function_trapper
+async def on_guild_update(before, after):
+    pass
 
+@function_trapper
+async def on_guild_channel_create(channel):
+    pass
+
+@function_trapper
+async def on_guild_channel_delete(channel):
+    pass
+
+@function_trapper
+async def on_guild_channel_update(before, after):
+    pass
+
+@function_trapper
+async def on_guild_emojis_update(guild, before, after):
+    pass
+
+@function_trapper
+async def on_guild_integrations_update(guild):
+    pass
+
+@function_trapper
+async def on_guild_role_create(role):
+    pass
+
+@function_trapper
+async def on_guild_role_delete(role):
+    pass
+
+@function_trapper
+async def on_guild_role_update(before, after):
+    pass
+
+@function_trapper
+async def on_user_update(before, after):
+    pass
+
+@client.event
+@function_trapper
+async def on_connect():
+    pass
+
+@function_trapper
+async def on_disconnect():
+    pass
+
+@function_trapper
+async def on_resumed():
+    pass
+
+@function_trapper
+async def on_error(event, *args, **kwargs):
+    pass
+
+@function_trapper
+async def on_raw_message_delete(payload):
+    pass
+
+@function_trapper
+async def on_reaction_add(reaction, user):
+    pass
+
+@function_trapper
+async def on_reaction_remove(reaction, user):
+    pass
+
+@function_trapper
+async def on_reaction_clear(message, reactions):
+    pass
+
+@function_trapper
+async def on_reaction_clear_emoji(message, emoji):
+    pass
+
+@function_trapper
+async def on_invite_create(invite):
+    pass
+
+@function_trapper
+async def on_invite_delete(invite):
+    pass
+
+@function_trapper
+async def on_raw_reaction_add(payload):
+    pass
+
+@function_trapper
+async def on_raw_reaction_remove(payload):
+    pass
+
+@function_trapper
+async def on_raw_message_delete(payload):
+    pass
+
+@function_trapper
+async def on_raw_message_edit(payload):
+    pass
+
+@function_trapper
+async def on_raw_member_update(payload):
+    pass
+
+@function_trapper
+async def on_raw_user_update(payload):
+    pass
+"""
