@@ -165,7 +165,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1065"
+Version="0.0.0.0.1070"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -410,21 +410,15 @@ def PickRandomResponse(fname):
 ### Emotional Score functions
 ###
 
-# The `CalculateMinorScale` function calculates the minor emotional score
-# range based on the bot's emotional score (major scale). It disregards any
-# fractional part of the emotional score, using only the integer value to
-# determine the corresponding minor score range. When the emotional score
-# is zero, the minor range is set to span from 1.0 to -1.0. For positive
-# emotional scores, the minor range narrows, with the maximum value
-# gradually decreasing as the emotional score increases, while the minimum
-# value remains at -1.0. Conversely, for negative emotional scores, the
-# minor range adjusts such that the maximum value stays at 1.0, while the
-# minimum value becomes less negative. For example, an emotional score of
-# -1 results in a minor range from 1.0 to -0.9, and an emotional score of
-# -2 results in a minor range from 1.0 to -0.8. This dynamic adjustment
-# allows the minor scale to reflect the bot’s emotional tone accurately,
-# ensuring that user input is classified appropriately based on the bot’s
-# emotional state.
+# The `CalculateMinorScale` function translates an emotional score,
+# referred to as the "MajorScale," into a refined range of minor emotional
+# variations, represented by `MinorMax` and `MinorMin`. The MajorScale,
+# constrained between -10 and 10, determines the sensitivity of these
+# minor emotional shifts. Positive scores reduce the upper range of
+# variability, while negative scores lessen the lower range, and a neutral
+# score provides a balanced range. This ensures that emotional intensity
+# is scaled proportionally, with the output reflecting subtle fluctuations
+# formatted to two decimal places for precision.
 
 @function_trapper(0)
 def CalculateMinorScale(MajorScale):
@@ -437,19 +431,53 @@ def CalculateMinorScale(MajorScale):
 
     # Determine the range of the MinorScale based on the MajorScale
     if MajorScale == 0:
-        MinorMax = 1
-        MinorMin = -1
+        MinorMax = 0.1
+        MinorMin = -0.11
     elif MajorScale > 0:
-        MinorMax = 1 - 0.1 * MajorScale
-        MinorMin = -1
+        MinorMax = 0.1 - 0.01 * MajorScale
+        MinorMin = -0.1
     else:  # MajorScale < 0
-        MinorMax = 1
-        MinorMin = -1 + 0.1 * abs(MajorScale)
+        MinorMax = 0.1
+        MinorMin = -0.1 + 0.01 * abs(MajorScale)
 
     # Format MinorMax and MinorMin to one decimal place
-    MinorMax = float(f"{MinorMax:.1f}")
-    MinorMin = float(f"{MinorMin:.1f}")
+    MinorMax = float(f"{MinorMax:.2f}")
+    MinorMin = float(f"{MinorMin:.2f}")
     return MinorMax, MinorMin
+
+# The `CalculateEmotionalScore` function evaluates and updates the
+# emotional score (`escore`) of a conversation, using an external
+# classifier to assess the sentiment of the provided text. Starting with a
+# baseline `escore` (read from a file if available), it adjusts the
+# scoring range based on the `CalculateMinorScale` function, which
+# determines acceptable emotional variability. If the bot includes an
+# emotional classifier, the function calculates an additional sentiment
+# score (`mscore`) using the AI classifier and adjusts the `escore`
+# accordingly. The updated score is written back to the file, and any
+# placeholders in the response buffer (`buff`) are replaced with the new
+# score, ensuring dynamic emotional feedback.
+
+@function_trapper(None)
+def CalculateEmotionalScore(fn,gid,bot,buff,text):
+    # Don't waste cycles if theres no defined classifier
+    if 'EmotionClassifier' not in bot:
+        return buff
+
+    # Figure out Emotional Score
+    escore=0
+    if os.path.exists(fn):
+        escore=float(ReadFile(fn).strip())
+
+    lval,rval=CalculateMinorScale(escore)
+    mscore=0
+    if 'EmotionClassifier' in bot:
+        mscore=float(asyncio.run(AIClassifier(gid,bot['EmotionClassifier'],text,FailResp=0,lval=lval,rval=rval)))
+
+    escore+=mscore
+    WriteFile(fn,f"{escore:.2f}\n")
+    if '{ESNEUTRL}' in buff:
+        buff=buff.replace('{ESNEUTRL}',f'{escore:.2f}')
+    return buff
 
 ###
 ### Random support functions
@@ -645,7 +673,6 @@ def GetWordList(text):
 # engine is provided, it logs an error and returns a fallback response.
 # The response from the AI is returned, completing the function's task.
 
-@function_timer
 @function_trapper('No')
 async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
     msg=[]
@@ -1183,6 +1210,7 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 # information along with any previous context or conversation history. This complete
 # package is then sent to the AI for generating an appropriate response.
 
+@function_timer
 @function_trapper(None)
 def GetBabble(message,text):
     # The "uid" and "channel" are used to load the persona and store the memory to
@@ -1225,6 +1253,8 @@ def GetBabble(message,text):
 
     if os.path.exists(bot['System']):
         buff=ReadFile(bot['System']).replace('\n','\\n').replace("'","\'").replace('"',"'").strip()
+        fn=f"{MemoryStorage}/{gid}/{bot['BotName']}/{bot['BotName']}.{uid}.escore"
+        buff=CalculateEmotionalScore(fn,gid,bot,buff,input_text)
         sysList=[ '{'+ f'"role": "system", "content": "{buff}"' +'}' ]
     else:
         sysList=[]
@@ -1243,21 +1273,6 @@ def GetBabble(message,text):
     if os.path.exists(fn):
         mList=ReadFile(fn).strip().split('\n')
         pList+=mList
-
-    # Figure out Emotional Score
-    escore=0
-    fn=f"{dn}/{bot['BotName']}.{uid}.escore"
-    if os.path.exists(fn):
-        escore=float(ReadFile(fn).strip())
-
-    lval,rval=CalculateMinorScale(escore)
-    mscore=0
-    if 'EmotionClassifier' in bot:
-        mscore=float(asyncio.run(AIClassifier(gid,bot['EmotionClassifier'],input_text,FailResp=0,lval=lval,rval=rval)))
-        print(lval,rval,escore,mscore)
-
-    escore+=mscore
-    WriteFile(fn,f"{escore}\n")
 
     # Build the complete persona list
 
