@@ -165,7 +165,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1070"
+Version="0.0.0.0.1075"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -475,8 +475,8 @@ def CalculateEmotionalScore(fn,gid,bot,buff,text):
 
     escore+=mscore
     WriteFile(fn,f"{escore:.2f}\n")
-    if '{ESNEUTRL}' in buff:
-        buff=buff.replace('{ESNEUTRL}',f'{escore:.2f}')
+    if '{ESNEUTRAL}' in buff:
+        buff=buff.replace('{ESNEUTRAL}',f'{escore:.2f}')
     return buff
 
 ###
@@ -1210,7 +1210,6 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 # information along with any previous context or conversation history. This complete
 # package is then sent to the AI for generating an appropriate response.
 
-@function_timer
 @function_trapper(None)
 def GetBabble(message,text):
     # The "uid" and "channel" are used to load the persona and store the memory to
