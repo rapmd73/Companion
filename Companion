@@ -10,6 +10,13 @@
 # doesn't matter after a while. Even beginner programmers should get used
 # to seeing multiple formats intermixed.
 
+# Yes, I know Python is meant to be object oriented... When I started write the
+# program, I never really expected it to grow beyound a fasination, let alone to where
+# it is now. I litterally started with 2 functions (as seen in the Extra directory).
+# As each itdea came, problems requiring solutions started to take the shape of
+# functions. The program just grew and grew. At some point, I'll rewrite this... but
+# for now, it works well and is quite fast.
+
 # ***** IMPORTANT:
 #   This program uses ADMINISTRATOR priviledges.
 
