@@ -24,9 +24,30 @@
 ###     detection code is a stinking hot mess and scattered everywhere.
 
 # Areas where a classifier can improve functionality (at a higher cost):
-#   Phone number detection would have a significantly lower lecel of false positives.
-#   Technical messages versus non-technical for varying the temperature of the
-#       conversation.
+#   Phone number detection would have a significantly lower lecel of false
+#   positives.
+#
+#   Technical messages versus non-technical for varying the temperature of
+#   the conversation.
+
+# Emotion scoring (classifier)
+#
+#   Emotional scoring (major scale): 10 (love) to -10 (hatred) sets the
+#   overall tone of the AI towards the user. This can be translated the
+#   scale of a warm and inviting conversation to a cold and distant one.
+#   The system role could easily be adapted to act on this information.
+
+#   (Minor scale) Assuming 0 is neurtal and the starting point of all
+#   interactions, a monor scale could be used to evaluate each input from 1
+#   (warm) to -1 (cold) to give that input a score. The scale needs to
+#   adjust though to ensure the major scale doesn't climb too quickly in
+#   either direction. For example, if the emotional score (major scale) is
+#   1, then the minor scale range needs to be 0.9 to -1.
+
+#   The minor scale is added or subtracted to/from the mahor scale to get the
+#   final emotion score of the bot at the last interaction. This will carry
+#   between channel towards the same user.  The bot will greet the same user
+#   accross all channel with the same emotion resonance.
 
 # Listed in order of when the service was added.
 
@@ -386,6 +407,51 @@ def PickRandomResponse(fname):
     return selected_response
 
 ###
+### Emotional Score functions
+###
+
+# The `CalculateMinorScale` function calculates the minor emotional score
+# range based on the bot's emotional score (major scale). It disregards any
+# fractional part of the emotional score, using only the integer value to
+# determine the corresponding minor score range. When the emotional score
+# is zero, the minor range is set to span from 1.0 to -1.0. For positive
+# emotional scores, the minor range narrows, with the maximum value
+# gradually decreasing as the emotional score increases, while the minimum
+# value remains at -1.0. Conversely, for negative emotional scores, the
+# minor range adjusts such that the maximum value stays at 1.0, while the
+# minimum value becomes less negative. For example, an emotional score of
+# -1 results in a minor range from 1.0 to -0.9, and an emotional score of
+# -2 results in a minor range from 1.0 to -0.8. This dynamic adjustment
+# allows the minor scale to reflect the bot’s emotional tone accurately,
+# ensuring that user input is classified appropriately based on the bot’s
+# emotional state.
+
+@function_trapper(0)
+def CalculateMinorScale(MajorScale):
+    # Ensure the MajorScale is within the allowed range
+    MajorScale=int(MajorScale)
+    if MajorScale > 10:
+        MajorScale = 10
+    elif MajorScale < -10:
+        MajorScale = -10
+
+    # Determine the range of the MinorScale based on the MajorScale
+    if MajorScale == 0:
+        MinorMax = 1
+        MinorMin = -1
+    elif MajorScale > 0:
+        MinorMax = 1 - 0.1 * MajorScale
+        MinorMin = -1
+    else:  # MajorScale < 0
+        MinorMax = 1
+        MinorMin = -1 + 0.1 * abs(MajorScale)
+
+    # Format MinorMax and MinorMin to one decimal place
+    MinorMax = float(f"{MinorMax:.1f}")
+    MinorMin = float(f"{MinorMin:.1f}")
+    return MinorMax, MinorMin
+
+###
 ### Random support functions
 ###
 
@@ -581,9 +647,13 @@ def GetWordList(text):
 
 @function_timer
 @function_trapper('No')
-async def AIClassifier(gid,classifier,text,FailResp="No"):
+async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
     msg=[]
     instr=ReadFile(classifier['Instructions']).replace('\n',' ').strip()
+    if lval:
+        instr=instr.replace('{lval}',f'{lval}')
+    if lval:
+        instr=instr.replace('{rval}',f'{rval}')
     input=text.replace('\n',' ').strip()
     msg.append({ "role":"system", "content":instr })
     msg.append({ "role":"user", "content":input })
@@ -1146,6 +1216,13 @@ def GetBabble(message,text):
         bot=GetCompanionPersona(gid,pchannel,nsfw)   # message.channel.parent.nsfw
     else:
         bot=GetCompanionPersona(gid,channel,nsfw)
+
+    # Figure out Emotional Score
+    lval,rval=CalculateMinorScale(0)
+    mscore=0
+    if 'EmotionClassifier' in bot:
+        mscore=asyncio.run(AIClassifier(gid,bot['EmotionClassifier'],input_text,FailResp=0,lval=lval,rval=rval))
+        print(lval,rval,mscore)
 
     persona=[]
     mList=[]
@@ -3435,3 +3512,4 @@ async def on_raw_member_update(payload):
 async def on_raw_user_update(payload):
     pass
 """
+
