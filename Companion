@@ -172,7 +172,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1080"
+Version="0.0.0.0.1090"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -473,7 +473,10 @@ def CalculateEmotionalScore(fn,gid,bot,buff,text):
     # Figure out Emotional Score
     escore=0
     if os.path.exists(fn):
-        escore=float(ReadFile(fn).strip())
+        try:
+            escore=float(ReadFile(fn).strip())
+        except:
+            pass
 
     lval,rval=CalculateMinorScale(escore)
     mscore=0
@@ -716,6 +719,8 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
       response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
     else:
         ErrorLog(f"Invalid classifier engine: {provider}")
+        return FailResp
+    if response==None:
         return FailResp
     return response
 
@@ -1526,6 +1531,11 @@ def GetOpenAI(apikey,messages,model,freqpenalty,temperature,timeout):
     response=completion.choices[0].message.content.strip()
     RawLog(f"OpenAI/{model}: {str(completion)}")
     return response
+
+# Special note: meta-llama/llama-3.1-405b-instruct:free can cause errors by not
+# returning a response. function_trapper DOES it job well, but it does looks like a
+# program error. When using the free models, ALWAYS have multiple. Free means BUSY
+# and a high probability is the model not responding.
 
 @function_trapper(None)
 def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
