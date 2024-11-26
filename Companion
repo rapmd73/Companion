@@ -172,7 +172,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1075"
+Version="0.0.0.0.1080"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -236,18 +236,18 @@ BabbleLock={}
 BabbleTimeout=60
 
 # Constants For auto slowmode. Needs to be dymanic in the future
-SLOW_MODE_DURATION=3  # Seconds for individual slow mode
-SLOW_MODE_COOLDOWN=307  # 5 minutes/7 secords cooldown for slow mode adjustments
+SlowModeMultiplier=3  # Seconds for individual slow mode
+SlowwModeCooldown=307  # 5 minutes/7 secords cooldown for slow mode adjustments
 
 # Dictionary to store the last slow mode change time for each channel
-last_slow_mode_change={}
+LastSlowmodeChange={}
 
 # For counting active users per chanel
-active_users={}
+ActiveUsers={}
 
 # For active member joins. anti raid messures. Will be a multiplier for slowdown
 # mode if above 1% of total users.
-active_joins={}
+ActiveJoins={}
 
 # This is required for the bot to work properly.
 
@@ -265,7 +265,7 @@ client=discord.Client(intents=intents)
 ### sharding/multi process management.
 
 # List to stowre timed messages for deletion
-delete_list=[]
+DeleteList=[]
 
 ###
 ### Special functions/Decorators
@@ -686,7 +686,7 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
     instr=ReadFile(classifier['Instructions']).replace('\n',' ').strip()
     if lval:
         instr=instr.replace('{lval}',f'{lval}')
-    if lval:
+    if rval:
         instr=instr.replace('{rval}',f'{rval}')
     input=text.replace('\n',' ').strip()
     msg.append({ "role":"system", "content":instr })
@@ -960,7 +960,7 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
             current_tokens=sum(len(enc.tokenize(text=message["content"],model=model,offline=False).tokens) for message in messages)
         else:
             # Generic fall through. Anthropic, Perplexity do NOT have a
-            # clean way of doing this... I've tried several. the 20 at the
+            # clean way of doing this... I've tried several. the 24 at the
             # end is what Anthropic calls overhead. They say 12, but as
             # wrong as the rest of this has been, the extra can not hurt.
 
@@ -1306,8 +1306,8 @@ def GetBabble(message,text):
     mt=len(tl)                              # Max Tokens list length
     # Encoding alwayys takes priority over modem
     if 'Encoding' in bot:
-        ml=list(bot['Encoding'].split(','))        # Model list
-        mc=len(ml)                              # Model list length
+        ml=list(bot['Encoding'].split(','))     # Encoding list
+        mc=len(ml)                              # Encoding list length
     else:
         ml=list(bot['Model'].split(','))        # Model list
         mc=len(ml)                              # Model list length
@@ -1708,7 +1708,7 @@ def GetAIResponse(gid,persona,bot):
     elif provider=='huggingface':
         # HuggingFace uses fragmentation for completion methods...
         # Access is free for 1000 requests per day. 1 response could
-        # take 8 requests to the API.
+        # take 8 or more requests to the API.
         while True:
             resp,stop=GetHuggingFace(Tokens['HuggingFace'],WorkingPersona,model,bot['freqpenalty'],bot['Temperature'],tout)
             hfresponses.append(resp)
@@ -1789,7 +1789,12 @@ def AnagramSolver(fromletters):
         wstr+=' '.join(valid_words_by_length[length])+'\n\n'
     return wstr
 
-# Read tags from a YouTube video
+# The `yttags2text` function extracts tags from a YouTube video by
+# analyzing its URL to find the video ID. It then uses YouTube's API to
+# fetch details about the video, including its tags. If tags are available,
+# it returns them as a simple list. If the video can't be found or has no
+# tags, it returns a placeholder message. This process ensures the tags are
+# easily accessible from any valid YouTube link.
 
 @function_trapper('{[(*VNF*)]}')
 def yttags2text(url):
@@ -1836,7 +1841,10 @@ def yttags2text(url):
         return '\n'.join(tags)
     return tags
 
-# Read a YouTube URL and pull the transcript
+# The `youtube2text` function takes a YouTube video link, extracts its ID,
+# and fetches its transcript. It combines the transcript into a readable
+# format and returns it as a simple text summary starting with "Video
+# Transcript:".
 
 @function_trapper(None)
 def youtube2text(video_url):
@@ -1852,7 +1860,10 @@ def youtube2text(video_url):
 
     return 'Video Transcript: '+transcript_text
 
-# Read PDF from buffer
+# The `PDF2Text` function processes a PDF file and extracts its text
+# content. It reads the PDF from a given buffer, retrieves the text from
+# all pages, and combines it into a single string prefixed with "PDF
+# Content:".
 
 @function_trapper(None)
 def PDF2Text(pdf_buffer):
@@ -2052,7 +2063,7 @@ def DisectMessage(event,message):
 
 @function_trapper(None)
 async def send_response(bot,message,response,embed=None,delete=None,member=None):
-    global delete_list
+    global DeleteList
     whmsg=[]
 
     if bot['Channel']==None:
@@ -2150,7 +2161,7 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
     if delete!=None:
         if DeleteLock.acquire(timeout=DeleteTimeout):
             for whm in whmsg:
-                delete_list.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
+                DeleteList.append({"gid": whm.guild.id,"cid":whm.channel.id,"mid":whm.id,"Expires":whm.created_at.timestamp()+delete } )
             DeleteLock.release()
         else:
             ErrorLog("Lock failed SR autodelete")
@@ -2488,19 +2499,19 @@ async def MemoryMaintenance():
 @tasks.loop(seconds=3)
 @function_trapper
 async def autodelete_messages():
-    global delete_list
+    global DeleteList
 
     if DeleteLock.acquire(timeout=DeleteTimeout):
         try:
             now=time.time()
-            if delete_list:
-                for msg in list(delete_list):
+            if DeleteList:
+                for msg in list(DeleteList):
                     if now>msg['Expires']:
                         guild=client.get_guild(msg['gid'])              # Guild
                         channel=guild.get_channel(msg['cid'])           # Channel
                         message=await channel.fetch_message(msg['mid']) # Message
 
-                        delete_list.remove(msg)
+                        DeleteList.remove(msg)
                         await message.delete()
         except Exception as err:
             ErrorLog(f'Broke ADM: {sys.exc_info()[-1].tb_lineno}/{err}')
@@ -2592,44 +2603,44 @@ async def update_response_data():
                 PutNextRequest(guild.id,request)
                 ResponseLock.release()
 
-# The `track_active_users` function, running every X seconds, manages and
+# The `track_ActiveUsers` function, running every X seconds, manages and
 # tracks active users across channels and guilds by sweeping through two
-# main data structures: `active_users` and `active_joins`. It checks each
+# main data structures: `ActiveUsers` and `ActiveJoins`. It checks each
 # user's activity in channels, and if the time since their last recorded
-# activity exceeds the `SLOW_MODE_COOLDOWN`, it reduces their activity
+# activity exceeds the `SlowwModeCooldown`, it reduces their activity
 # factor. If the factor drops below 1, the user is removed from the
 # channel’s active list; otherwise, the timestamp is updated. Similarly,
-# for users in the `active_joins` list, if the elapsed time since their
+# for users in the `ActiveJoins` list, if the elapsed time since their
 # join exceeds the cooldown, they are removed. This process ensures that
 # user activity is efficiently tracked and cleaned up, maintaining an
 # accurate state while respecting cooldowns for both channels and guilds.
 
 @tasks.loop(seconds=60)
 @function_trapper
-async def track_active_users():
-    global active_users
-    global active_joins
+async def track_ActiveUsers():
+    global ActiveUsers
+    global ActiveJoins
 
     current_time=time.time()
     # Sweep every channel
-    for ac in list(active_users):
+    for ac in list(ActiveUsers):
         # Sweep users in a channel
-        for au in list(active_users[ac]):
+        for au in list(ActiveUsers[ac]):
             # Check time added againt expiration
-            if (current_time-au[1])>SLOW_MODE_COOLDOWN:
+            if (current_time-au[1])>SlowwModeCooldown:
                 # reduce factor
                 au[2]-=1
                 if au[2]<1:
-                    active_users[ac].remove(au)
+                    ActiveUsers[ac].remove(au)
                 else:
                     au[1]=time.time()
 
     # Sweep all guilds
-    for ag in list(active_joins):
+    for ag in list(ActiveJoins):
         # Sweep all users in join list
-        for au in list(active_joins[ag]):
-            if (current_time-au[1])>SLOW_MODE_COOLDOWN:
-                active_joins[ag].remove(au)
+        for au in list(ActiveJoins[ag]):
+            if (current_time-au[1])>SlowwModeCooldown:
+                ActiveJoins[ag].remove(au)
 
 ###
 ### Discord event functions
@@ -2829,7 +2840,7 @@ async def on_member_update(before, after):
 
 # The `on_member_join` event is triggered whenever a new member joins a
 # guild. It tracks new member joins by recording the member's ID and the
-# current time in the `active_joins` dictionary for the respective guild.
+# current time in the `ActiveJoins` dictionary for the respective guild.
 # If a companion bot is set for the guild (with the `Welcome=True` flag),
 # it checks whether the bot is available and logs a welcome message if
 # `AutoLogging` is enabled. Additionally, the event includes an
@@ -2843,15 +2854,15 @@ async def on_member_update(before, after):
 @client.event
 @function_trapper
 async def on_member_join(member):
-    global active_joins
+    global ActiveJoins
 
     # Track new member joins
     key=member.guild.id
-    if key not in active_joins:
-        active_joins[key]=[]
-    if member.id not in active_joins[key]:
+    if key not in ActiveJoins:
+        ActiveJoins[key]=[]
+    if member.id not in ActiveJoins[key]:
         ut=[member.id,time.time()]
-        active_joins[key].append(ut)
+        ActiveJoins[key].append(ut)
 
     # Welcome forces the default bot.
     bot=GetCompanionPersona(member.guild.id,None,Welcome=True)
@@ -2922,8 +2933,8 @@ async def on_member_remove(member):
 @client.event
 @function_trapper
 async def on_typing(channel, user, when):
-    global active_users
-    global active_joins
+    global ActiveUsers
+    global ActiveJoins
 
     # if direct message, ignore
     if isinstance(channel,discord.DMChannel):
@@ -2936,8 +2947,8 @@ async def on_typing(channel, user, when):
 
     # Track active member joins
     joins=1
-    if pchannel.guild.id in active_joins:
-        joins=len(active_joins[channel.guild.id])
+    if pchannel.guild.id in ActiveJoins:
+        joins=len(ActiveJoins[channel.guild.id])
 
     # joins will be used a a multiplier so is the threshold is not met, then
     # a multiplier of 1 is used is keep the method simple.
@@ -2951,11 +2962,11 @@ async def on_typing(channel, user, when):
     # When this function gets called, someone was typing. Add them to
     # the channel tracking list.
 
-    if key not in active_users:
-        active_users[key]=[]
+    if key not in ActiveUsers:
+        ActiveUsers[key]=[]
 
     found=False
-    for u in active_users[key]:
+    for u in ActiveUsers[key]:
         if u[0]==user.id:
             # Reset the timer
             u[1]=time.time()
@@ -2966,17 +2977,17 @@ async def on_typing(channel, user, when):
         # User ID, and the time they were typing, factor
         # The factor is used as a decrementer to prevent manipulation
         ut=[user.id,time.time(),joins]
-        active_users[key].append(ut)
+        ActiveUsers[key].append(ut)
 
     # Calculate the number of typing users in the channel
-    typing_count=len(active_users[key])
+    typing_count=len(ActiveUsers[key])
 
     # Check if the cooldown has expired. Slowdown can only be adjust
     # ONCE every 5 minutes per channel.
 
     current_time=time.time()
-    last_change=last_slow_mode_change.get(key, 0)
-    if current_time - last_change < SLOW_MODE_COOLDOWN:
+    last_change=LastSlowmodeChange.get(key, 0)
+    if current_time - last_change < SlowwModeCooldown:
         return  # Skip the adjustment process if still in cooldown
 
     # Calculate expected users
@@ -3002,15 +3013,15 @@ async def on_typing(channel, user, when):
     if typing_count > 2 * expected_users:  # Over threshold
         bot=GetCompanionPersona(server.id,None,Welcome=True)
         await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users > {expected_users} users")
-        slow_mode_duration=SLOW_MODE_DURATION * typing_count*10*joins
+        slow_mode_duration=SlowModeMultiplier * typing_count*10*joins
     elif typing_count > expected_users:
-        slow_mode_duration=SLOW_MODE_DURATION * typing_count*joins
+        slow_mode_duration=SlowModeMultiplier * typing_count*joins
     else:
         slow_mode_duration=0
 
     # Apply slow mode
     await pchannel.edit(slowmode=slow_mode_duration)
-    last_slow_mode_change[key]=current_time  # Update the last change time
+    LastSlowmodeChange[key]=current_time  # Update the last change time
     print(f"Slowmode {server.id}/{channel.name}: {slow_mode_duration} seconds, {typing_count} active, {expected_users} expected")
 
 # At the heart of the bot is its core function, which revolves around
@@ -3056,15 +3067,15 @@ async def on_message(message):
     global ResponseLock
     global GuildQueueLock
     global GuildQueue
-    global active_joins
+    global ActiveJoins
 
     try:
         key=message.guild.id
-        if key not in active_joins:
-            active_joins[key]=[]
-        if message.author.id not in active_joins[key]:
+        if key not in ActiveJoins:
+            ActiveJoins[key]=[]
+        if message.author.id not in ActiveJoins[key]:
             ut=[message.author.id,time.time()]
-            active_joins[key].append(ut)
+            ActiveJoins[key].append(ut)
 
         # Ignore messages from the bot itself. This does NOT work with webhooks,
         # so We need to check for that too.
@@ -3406,7 +3417,7 @@ async def on_ready():
     # Start the task when the bot is ready
     update_response_data.start()
     autodelete_messages.start()
-    track_active_users.start()
+    track_ActiveUsers.start()
     MemoryMaintenance.start()
     AutomatedSecurityAudit.start()
 
