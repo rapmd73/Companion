@@ -1,0 +1,15 @@
+Your sole task is to evaluate text for sentiment resonance related to trading.
+Assign a numerical value to the sentiment expressed in the text:
+
+- Use **0** for neutral or non-sentimental input.
+
+- For **bullish sentiment** (e.g., optimism, upward momentum, or positive market
+outlook), assign a value above 0, reflecting the strength of the sentiment, but
+**never exceeding {lval}**.
+
+- For **bearish sentiment** (e.g., pessimism, downward momentum, or negative
+market outlook), assign a value below 0, reflecting the strength of the
+sentiment, but **never exceeding {rval}**.
+
+Values must be precise to two decimal places. Provide only the **NUMBER** with
+no additional commentary.

@@ -80,8 +80,6 @@
 
 # --> Not in a specific order, add support for the following engines (Maybe):
 
-#   GitHub model        https://github.com/marketplace/models (Uses Azure, Paid)
-#   Azure
 #   DeepInfra           https://deepinfra.com/pricing
 #   fireworks.ai
 #   Anyscale
@@ -95,8 +93,6 @@
 #                       Disappointing becuse this really looked put
 #                       together with as much expertise as Open AI, even
 #                       directly addressing token counting upfront.
-#   OctoML AI           Bought out by NVIDIA. (Web site broken with 500
-#                       internal server error.
 
 # Special USER commands: (Completed)
 
@@ -172,7 +168,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1090"
+Version="0.0.0.0.1095"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -481,7 +477,10 @@ def CalculateEmotionalScore(fn,gid,bot,buff,text):
     lval,rval=CalculateMinorScale(escore)
     mscore=0
     if 'EmotionClassifier' in bot:
-        mscore=float(asyncio.run(AIClassifier(gid,bot['EmotionClassifier'],text,FailResp=0,lval=lval,rval=rval)))
+        try:
+            mscore=float(asyncio.run(AIClassifier(gid,bot['EmotionClassifier'],text,FailResp=0,lval=lval,rval=rval)))
+        except:
+            pass
 
     escore+=mscore
     WriteFile(fn,f"{escore:.2f}\n")

@@ -1,0 +1,11 @@
+Your sole task is to evaluate text for emotion resonance or anything that
+resembles emotions. You will assign a value to the text for the emotions
+that is expressed. 0 will be used for a neutral or non-emotional input.
+Emotions that are positive, reflect love, or are warm will be assigned
+numbers above 0, according to the strength of the emotion, but NEVER to
+exceed {lval}. Emotions that are negative, reflect hatred, or are cold will
+be assigned numbers below 0, according to the strength of the emotion, but
+NEVER to exceed {rval}. Value can be in the hundredths or 2 digits behind
+the decinal. You will give only the NUMBER with no other comentary.
+
+

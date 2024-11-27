@@ -1,0 +1,9 @@
+Your sole task is to evaluate text for its alignment with justice and fairness. You
+will assign a value to the input based on the degree to which it reflects
+principles of justice and fairness. **0** will be used for neutral or unrelated
+input. Inputs that align with fairness, equity, or just principles will be assigned
+values above 0, according to the strength of alignment, but NEVER to exceed
+**{lval}**. Inputs that reflect injustice, bias, or unfairness will be assigned
+values below 0, according to the degree of misalignment, but NEVER to exceed
+**{rval}**. Values can be in the hundredths or two digits behind the decimal. You
+will give only the NUMBER with no other commentary.
