@@ -168,7 +168,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1095"
+Version="0.0.0.0.1100"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2277,6 +2277,7 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     ExplicitContent=False
     MFAlevel=False
     IsEveryoneMention=False
+    IsEveryoneExternalApps=False
 
     orole=discord.utils.get(guild.roles,name='owner')
     if orole:
@@ -2316,6 +2317,12 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     else:
         FailedAudit=True
 
+    # Check permissions for @everyone external APPs
+    if not guild.default_role.permissions.use_embedded_activities:
+        IsEveryoneExternalApps=True
+    else:
+        FailedAudit=True
+
     # Report the results
     if ShowResults or FailedAudit:
         await admin.send(f"Guild: {guild.name} ({guild.id})")
@@ -2334,6 +2341,8 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
             await admin.send(f"This guild is NOT protected by two factor authentication. Please visit the [Discord Multifactor Authentication](https://support.discord.com/hc/en-us/articles/219576828-Setting-up-Multi-Factor-Authentication) for more details.")
         if not IsEveryoneMention:
             await admin.send(f"Allowing the `@everyone` role to ping everyone opens the door to spam and raid abuse, as any member could trigger mass notifications, disrupting user experience and overwhelming the server. This permission should always be restricted to prevent chaos and maintain a controlled, respectful communication environment. Please visit [Discord Role Management](https://support.discord.com/hc/en-us/articles/214836687-Role-Management-101) for more details.")
+        if not IsEveryoneExternalApps:
+            await admin.send(f"Allowing the `Use External Apps` permission for the `@everyone` role opens the door for malicious users to exploit embedded activities, such as inviting members to inappropriate or harmful third-party apps. This can be a vector for server raids, as attackers can coordinate disruptions, share harmful content, or lure members into unsafe interactions, undermining server security and trust.")
 
         if ShowResults:
             await admin.send(f"Current Members: {guild.member_count}")
@@ -2538,6 +2547,9 @@ async def autodelete_messages():
 # while avoiding conflicts or race conditions in a multi-threaded
 # environment.
 
+# Adapt this technique to channels, to prevent a busy channel from monopolizing
+# resources.
+
 @function_trapper(None)
 def RotateGuildQueue():
     global GuildQueueLock
@@ -2581,6 +2593,8 @@ async def update_response_data():
     # Check to see is the guild is available to babble
     if guild.id in BabbleLock and BabbleLock[guild.id].locked():
         return
+
+###> Add chanel rotation per guild. Rotate channel queue.
 
     # Pull the next request
 
