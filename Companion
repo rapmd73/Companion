@@ -168,7 +168,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1100"
+Version="0.0.0.0.1105"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2841,25 +2841,44 @@ async def on_message_delete(message):
         DisectMessage("Deleted message",message)
 
 # The `on_member_update` event is triggered when a member's profile
-# information (such as their username or nickname) is updated. It checks if
-# any changes were made to the member's identity by comparing the values of
-# their name and nickname before and after the update. The function also
-# includes a built-in impersonation detection mechanism that calls the
-# `ImposterAmoungUs` function to detect if the member's profile changes
-# resemble that of a server owner or another prominent figure in the
-# community. If impersonation is detected, the function takes action and
-# terminates further processing. The event can be extended to include
-# additional operations as needed, but impersonation is the primary focus
-# here.
+# information, such as their username, nickname, or roles, is updated. It
+# compares the values of the member's name, nickname, and roles before and
+# after the update to detect any changes. The function includes an
+# impersonation detection mechanism, calling the `ImposterAmongUs` function to
+# check if the member's profile resembles that of a server owner or a prominent
+# figure in the community. If impersonation is detected, further processing is
+# halted. Additionally, when roles are added or removed, the bot notifies the
+# moderators about the changes and provides a list of all the roles the member
+# holds, ensuring the moderators are aware of any updates to the member's
+# permissions.
 
 @client.event
 @function_trapper
 async def on_member_update(before, after):
     # Impersonation detection
     if await ImposterAmoungUs(after.guild,after):
+        return
+
+    # Check if the roles have changed
+    if before.roles != after.roles:
+        bot=GetCompanionPersona(after.guild.id,None,Welcome=True)
+        if bot==None:
             return
-    # Any other operations
-    return
+
+        added_roles = [role for role in after.roles if role not in before.roles]
+        removed_roles = [role for role in before.roles if role not in after.roles]
+
+        if added_roles:
+            for role in added_roles:
+                await ModeratorNotify(bot,after.guild,f"{after.name} was given the role: {role.name}")
+
+        if removed_roles:
+            for role in removed_roles:
+                await ModeratorNotify(bot,after.guild,f"{after.name} lost the role: {role.name}")
+
+        # Print all roles that the user has after the update
+        role_names = ', '.join([role.name for role in after.roles])
+        await ModeratorNotify(bot,after.guild,f"{after.name} now has the following roles: {role_names}")
 
 # The `on_member_join` event is triggered whenever a new member joins a
 # guild. It tracks new member joins by recording the member's ID and the
@@ -3462,118 +3481,6 @@ def main():
 if __name__=='__main__':
     main()
 
+###
 ### END OF PROGRAM
-
-"""
-### >>> MAY or MAY NOT be implemented over time.
-
-@function_trapper
-async def on_guild_update(before, after):
-    pass
-
-@function_trapper
-async def on_guild_channel_create(channel):
-    pass
-
-@function_trapper
-async def on_guild_channel_delete(channel):
-    pass
-
-@function_trapper
-async def on_guild_channel_update(before, after):
-    pass
-
-@function_trapper
-async def on_guild_emojis_update(guild, before, after):
-    pass
-
-@function_trapper
-async def on_guild_integrations_update(guild):
-    pass
-
-@function_trapper
-async def on_guild_role_create(role):
-    pass
-
-@function_trapper
-async def on_guild_role_delete(role):
-    pass
-
-@function_trapper
-async def on_guild_role_update(before, after):
-    pass
-
-@function_trapper
-async def on_user_update(before, after):
-    pass
-
-@client.event
-@function_trapper
-async def on_connect():
-    pass
-
-@function_trapper
-async def on_disconnect():
-    pass
-
-@function_trapper
-async def on_resumed():
-    pass
-
-@function_trapper
-async def on_error(event, *args, **kwargs):
-    pass
-
-@function_trapper
-async def on_raw_message_delete(payload):
-    pass
-
-@function_trapper
-async def on_reaction_add(reaction, user):
-    pass
-
-@function_trapper
-async def on_reaction_remove(reaction, user):
-    pass
-
-@function_trapper
-async def on_reaction_clear(message, reactions):
-    pass
-
-@function_trapper
-async def on_reaction_clear_emoji(message, emoji):
-    pass
-
-@function_trapper
-async def on_invite_create(invite):
-    pass
-
-@function_trapper
-async def on_invite_delete(invite):
-    pass
-
-@function_trapper
-async def on_raw_reaction_add(payload):
-    pass
-
-@function_trapper
-async def on_raw_reaction_remove(payload):
-    pass
-
-@function_trapper
-async def on_raw_message_delete(payload):
-    pass
-
-@function_trapper
-async def on_raw_message_edit(payload):
-    pass
-
-@function_trapper
-async def on_raw_member_update(payload):
-    pass
-
-@function_trapper
-async def on_raw_user_update(payload):
-    pass
-"""
-
+###
