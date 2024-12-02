@@ -68,15 +68,15 @@
 #                       no free credits, pay upfront
 # added perplexity.ai   No free credits, pay upfront, search oriented, not
 #                       good for conversational, but searching is outstanding.
-# added openrouter.ai   Several free models, has just about every major
-#                       provider, even some of the more difficult ones
-#                       to build for. Paid models will have a premium
-#                       for the normalization service. No direct model
-#                       support like you would get directly from model
-#                       vender (OpenAI, Anthropic, so on). Uses all
-#                       OpenAI code. Token counting is a nighmare but
-#                       the basic len/4 works reasonly well. toktoken()
-#                       does NOT work.
+
+# added openrouter.ai   Several free models limited to 200 requests per day,
+#                       has just about every major provider, even some of the
+#                       more difficult ones to build for. Paid models will have
+#                       a premium for the normalization service. No direct model
+#                       support like you would get directly from model vender
+#                       (OpenAI, Anthropic, so on). Uses all OpenAI code. Token
+#                       counting is a nighmare but the basic len/4 works
+#                       reasonly well. toktoken() does NOT work.
 
 # --> Not in a specific order, add support for the following engines (Maybe):
 
@@ -114,7 +114,12 @@
 #   Anti-raid - completed
 #   Find a way to identify personal information: email, phone numbers, SSN, EIN,
 #       Credit Card numbers - completed
-#       Refine with an AI classifier - in progress
+#       Refine with an AI classifier - completed
+
+# Build a classifier(s) to handle the following: (Mark with reactions)
+#   "TOXICITY", "SEVERE_TOXICITY", "IDENTITY_ATTACK", "INSULT", "PROFANITY",
+#   "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
+#   "INFLAMMATORY", "OBSCENE",
 
 #   Anti nuke
 #   Ticket management
@@ -168,7 +173,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1105"
+Version="0.0.0.0.1110"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1547,7 +1552,8 @@ def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
             timeout=timeout
         )
     clientAI.close()
-    response=completion.choices[0].message.content.strip()
+    if response!=None:
+        response=completion.choices[0].message.content.strip()
     RawLog(f"OpenRouter/{model}: {str(completion)}")
     return response
 
