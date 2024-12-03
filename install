@@ -10,7 +10,6 @@ BaseDir="/home/Companion"
 cd /home/GitHub/Companion
 
 mkdir -p $BaseDir > /dev/null 2>&1
-mkdir -p $BaseDir/Logs > /dev/null 2>&1
 git pull https://github.com/rapmd73/Companion
 cp -r * /home/Companion > /dev/null 2>&1
 
