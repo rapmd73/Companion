@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Companion
+# Companion AI chatbot/moderation
 # 2024 Copyright © Robert APM Darin
 # All rights reserved unconditionally.
 
@@ -146,8 +146,8 @@ import traceback
 from collections import deque
 import datetime
 import time
-import json
 import random
+import json
 import string
 import concurrent.futures
 import threading
@@ -173,7 +173,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1110"
+Version="0.0.0.0.1120"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -674,6 +674,96 @@ def GetWordList(text):
     words=text.lower().split()
     return [word for word in words if word.strip()]
 
+###
+### Direct Companion functions
+###
+
+# The `ReadTokens` function ensures the bot has the necessary credentials
+# to operate by locating and reading a specific file that stores API
+# tokens. It carefully checks if the file exists, verifies its format, and
+# ensures essential keys like the Discord token are present. If anything is
+# missing or incorrect, the function logs the issue and stops the program
+# to prevent errors during operation. By validating this information
+# upfront, it ensures the bot can run securely and without interruptions.
+
+@function_trapper({})
+def ReadTokens(gid=None):
+    tokens={}
+    if gid==None:
+        tfile=RunningName+'.tokens'
+    else:
+        tfile=f"{ConfigStorage}/{gid}/{gid}.tokens"
+    if os.path.exists(tfile):
+        try:
+            tokens=json.loads(jsonFilter(ReadFile(tfile)))
+        except Exception as err:
+            ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
+            sys.exit(1)
+    else:
+        ErrorLog(f"Missing token file: {tfile}")
+        sys.exit(1)
+
+    if gid==None and 'Discord' not in tokens:
+        ErrorLog("The MUST be a Discord API reference in the tokens file")
+        sys.exit(1)
+
+    return tokens
+
+# Raw dump. For diagnostics purposes to see the actual return response from the AI model.
+
+def RawLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            mkdir(LoggingStorage)
+            fn=f'{LoggingStorage}/RAWDUMP.log'
+            fh=open(fn,'w')
+            fh.write(text)
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
+
+# Logging
+
+def WriteLog(gid,uid,channel,text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
+
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+            s=f'{time} {uid} {channel} {txt}\n'
+
+            dn=f'{LoggingStorage}/{gid}'
+            mkdir(dn)
+            fn=f'{dn}/{channel}.log'
+            AppendFile(fn,s)
+        except Exception as err:
+            print(f'LOG Broke: {err}')
+            pass
+        LoggingLock.release()
+
+# Log errors
+
+def ErrorLog(text):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            txt=text.replace('\n','\\n').replace('\r','\\r')
+
+            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+            s=f'{time} {txt}\n'
+
+            mkdir(LoggingStorage)
+            fn=LoggingStorage+'/Errors.log'
+            AppendFile(fn,s)
+
+            # print to console
+            print(txt)
+        except:
+            pass
+        LoggingLock.release()
+
 # This function, `AIClassifier`, serves as a versatile interface to
 # interact with different AI models from multiple providers. It accepts a
 # `gid` (guild ID), a `classifier` configuration (which includes the AI
@@ -855,96 +945,6 @@ async def DetectPII(gid,bot,text):
 
     # If no PII pattern was found
     return None
-
-###
-### Direct Companion functions
-###
-
-# The `ReadTokens` function ensures the bot has the necessary credentials
-# to operate by locating and reading a specific file that stores API
-# tokens. It carefully checks if the file exists, verifies its format, and
-# ensures essential keys like the Discord token are present. If anything is
-# missing or incorrect, the function logs the issue and stops the program
-# to prevent errors during operation. By validating this information
-# upfront, it ensures the bot can run securely and without interruptions.
-
-@function_trapper({})
-def ReadTokens(gid=None):
-    tokens={}
-    if gid==None:
-        tfile=RunningName+'.tokens'
-    else:
-        tfile=f"{ConfigStorage}/{gid}/{gid}.tokens"
-    if os.path.exists(tfile):
-        try:
-            tokens=json.loads(jsonFilter(ReadFile(tfile)))
-        except Exception as err:
-            ErrorLog("Error token file is not in JSON format. Please see README.md for new layout")
-            sys.exit(1)
-    else:
-        ErrorLog(f"Missing token file: {tfile}")
-        sys.exit(1)
-
-    if gid==None and 'Discord' not in tokens:
-        ErrorLog("The MUST be a Discord API reference in the tokens file")
-        sys.exit(1)
-
-    return tokens
-
-# Raw dump. For diagnostics purposes to see the actual return response from the AI model.
-
-def RawLog(text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            mkdir(LoggingStorage)
-            fn=f'{LoggingStorage}/RAWDUMP.log'
-            fh=open(fn,'w')
-            fh.write(text)
-            fh.close()
-        except:
-            pass
-        LoggingLock.release()
-
-# Logging
-
-def WriteLog(gid,uid,channel,text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            txt=text.replace('\n','\\n').replace('\r','\\r')
-
-            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
-
-            s=f'{time} {uid} {channel} {txt}\n'
-
-            dn=f'{LoggingStorage}/{gid}'
-            mkdir(dn)
-            fn=f'{dn}/{channel}.log'
-            AppendFile(fn,s)
-        except Exception as err:
-            print(f'LOG Broke: {err}')
-            pass
-        LoggingLock.release()
-
-# Log errors
-
-def ErrorLog(text):
-    if LoggingLock.acquire(timeout=LoggingTimeout):
-        try:
-            txt=text.replace('\n','\\n').replace('\r','\\r')
-
-            time=(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
-
-            s=f'{time} {txt}\n'
-
-            mkdir(LoggingStorage)
-            fn=LoggingStorage+'/Errors.log'
-            AppendFile(fn,s)
-
-            # print to console
-            print(txt)
-        except:
-            pass
-        LoggingLock.release()
 
 # The `MaintainTokenLimit` function is responsible for ensuring that the
 # messages sent to the AI do not exceed a specific limit on the number of
@@ -1552,7 +1552,7 @@ def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
             timeout=timeout
         )
     clientAI.close()
-    if response!=None:
+    if completion!=None:
         response=completion.choices[0].message.content.strip()
     RawLog(f"OpenRouter/{model}: {str(completion)}")
     return response
@@ -2809,6 +2809,10 @@ async def on_message_edit(before, after):
             return
 
     if leftFound and rightFound:
+        ageMatch=await AIClassifier(after.guild.id,bot['AgeLEETClassifier'],after.content)
+        if ageMatch.lower()=='no':
+            return
+
         await ModeratorNotify(bot,after.guild,f"LEET words/Malicious edit possibility: {after.author.name}/{after.author.id} in {after.channel.name} matching {leftWord}/{rightWord}")
         # This seems to be a better way to ruin the attacker's plan
         embed=discord.Embed(
