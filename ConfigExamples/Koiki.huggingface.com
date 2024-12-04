@@ -1,0 +1,10 @@
+{ 
+    "Avatar":"http://ImageServer.com/Koiki.png",
+    "Engine":"HuggingFace",
+    "Model":"NousResearch/Hermes-3-Llama-3.1-8B",
+    "Encoding":"HuggingFace",
+    "MaxTokens":"14000",
+    "FreqPenality":0.67,
+    "Temperature":0.31,
+    "MaxMemory":50 
+}
