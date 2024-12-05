@@ -115,6 +115,7 @@
 #   Find a way to identify personal information: email, phone numbers, SSN, EIN,
 #       Credit Card numbers - completed
 #       Refine with an AI classifier - completed
+#   URL check (abuseIPDB) verifications. - completed
 
 # Build a classifier(s) to handle the following: (Mark with reactions)
 #   "TOXICITY", "SEVERE_TOXICITY", "IDENTITY_ATTACK", "INSULT", "PROFANITY",
@@ -124,7 +125,6 @@
 #   Anti nuke
 #   Ticket management
 #   Anti nudity verification for images.
-#   URL check (abuseIPDB) verifications.
 
 # Disable 3rd party logging.
 import warnings
@@ -152,7 +152,9 @@ import string
 import concurrent.futures
 import threading
 import urllib.request
+from urllib.parse import urlparse
 import requests
+import socket
 import re
 import asyncio
 import discord
@@ -173,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1130"
+Version="0.0.0.0.1135"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -194,6 +196,7 @@ AnagramWordList=f'{CompanionBase}/AnagramSolver.txt'
 # exists, it is read and message that have links listed are removed.
 # Requires the persona text file as well for responses.
 
+CompanionWhitelist=f'{CompanionBase}/Companion.whitelist'
 CompanionScamURLS=f'{CompanionBase}/Companion.scam-urls'
 CompanionAutoFilter=f'{CompanionBase}/Companion.autofilter'
 
@@ -415,6 +418,84 @@ def PickRandomResponse(fname):
     return selected_response
 
 ###
+### Functions for AbuseIPDB
+###
+
+# This set of functions works together to identify potentially harmful or
+# suspicious links in messages. It checks if a link is on a safe list or a
+# known scam list. If the link isn’t on either list, it looks up its background
+# using a service called AbuseIPDB, which evaluates whether the link’s
+# associated IP address has been reported for malicious activity. If the link
+# is flagged as dangerous, it’s marked as unsafe. This helps ensure that
+# harmful links can be quickly identified and dealt with.
+
+@function_trapper
+def ExtractURLs(text):
+    url_pattern=re.compile(r"https?://[^\s]+")
+    return url_pattern.findall(text)
+
+@function_trapper
+def Domain2IP(domain):
+    try:
+        ip_address=socket.gethostbyname(domain)
+        return ip_address
+    except Exception as err:
+        pass
+    return None
+
+@function_trapper
+def ExtractDomains(url):
+    parsed_url=urlparse(url)
+    return parsed_url.netloc
+
+@function_trapper
+def CheckAbuseIPDB(domain,token):
+    ipa=Domain2IP(domain)
+    if ipa==None:
+        return None,0
+    url=f"https://api.abuseipdb.com/api/v2/check"
+    params={"ipAddress": ipa}
+    headers={"Key": token, "Accept": "application/json"}
+
+    try:
+        response=requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data=response.json()
+        if data.get("data", {}).get("abuseConfidenceScore", 0)>0:
+            return True, data["data"]["abuseConfidenceScore"]
+        else:
+            return False, 0
+    except requests.exceptions.RequestException as e:
+        print(f"Error checking AbuseIPDB: {e}")
+        return None, 0
+
+@function_trapper
+def CheckMessageURLs(gid,text):
+    # Check whitelist
+    whiteurls=ReadFile2List(CompanionWhitelist)
+    # Not in whitelist
+    scamurls=ReadFile2List(CompanionScamURLS)
+
+    # Extract URLs from the message
+    Tokens=ReadTokens(gid)
+
+    urls=ExtractURLs(text)
+
+    if urls:
+        for url in urls:
+            domain=ExtractDomains(url)
+
+            if domain in whiteurls:
+                return False
+            elif domain in scamurls:
+                return True
+            elif 'AbuseIPDB' in Tokens:
+                is_abusive, score=CheckAbuseIPDB(domain,Tokens['AbuseIPDB'])
+                if is_abusive:
+                    return True
+    return False
+
+###
 ### Emotional Score functions
 ###
 
@@ -432,25 +513,25 @@ def PickRandomResponse(fname):
 def CalculateMinorScale(MajorScale):
     # Ensure the MajorScale is within the allowed range
     MajorScale=int(MajorScale)
-    if MajorScale > 10:
-        MajorScale = 10
-    elif MajorScale < -10:
-        MajorScale = -10
+    if MajorScale>10:
+        MajorScale=10
+    elif MajorScale<-10:
+        MajorScale=-10
 
     # Determine the range of the MinorScale based on the MajorScale
-    if MajorScale == 0:
-        MinorMax = 0.1
-        MinorMin = -0.11
-    elif MajorScale > 0:
-        MinorMax = 0.1 - 0.01 * MajorScale
-        MinorMin = -0.1
-    else:  # MajorScale < 0
-        MinorMax = 0.1
-        MinorMin = -0.1 + 0.01 * abs(MajorScale)
+    if MajorScale==0:
+        MinorMax=0.1
+        MinorMin=-0.11
+    elif MajorScale>0:
+        MinorMax=0.1 - 0.01 * MajorScale
+        MinorMin=-0.1
+    else:  # MajorScale<0
+        MinorMax=0.1
+        MinorMin=-0.1 + 0.01 * abs(MajorScale)
 
     # Format MinorMax and MinorMin to one decimal place
-    MinorMax = float(f"{MinorMax:.2f}")
-    MinorMin = float(f"{MinorMin:.2f}")
+    MinorMax=float(f"{MinorMax:.2f}")
+    MinorMin=float(f"{MinorMin:.2f}")
     return MinorMax, MinorMin
 
 # The `CalculateEmotionalScore` function evaluates and updates the
@@ -890,7 +971,7 @@ async def DetectPII(gid,bot,text):
                 phone_number=match.group()
 
                 # Skip numbers that are too short to be valid phone numbers
-                if len(phone_number) > 4:
+                if len(phone_number)>4:
                     return (phone_number, country)
             await asyncio.sleep(0)
 
@@ -919,7 +1000,7 @@ async def DetectPII(gid,bot,text):
             # Double every second digit from the right
             if idx % 2==1:
                 num *= 2
-                if num > 9:  # If doubling results in two digits, sum them
+                if num>9:  # If doubling results in two digits, sum them
                     num -= 9
             checksum += num
         return checksum % 10==0
@@ -1032,9 +1113,9 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
     old_tokens=current_tokens
 
     # While tokens exceed the limit, remove elements
-    while current_tokens > max_tokens:
+    while current_tokens>max_tokens:
         for i in range(len(messages) - 1):
-            if i < len(messages) - 1:
+            if i<len(messages) - 1:
                 if messages[i]['role'].lower()=="user" and messages[i+1]['role'].lower()=="assistant":
                     # Remove the pair (two items)
                     messages.pop(i)
@@ -1867,7 +1948,7 @@ def yttags2text(url):
 
         response=request.execute()
 
-        if "items" in response and len(response["items"]) > 0:
+        if "items" in response and len(response["items"])>0:
             video_snippet=response["items"][0]["snippet"]
             if "tags" in video_snippet:
                 tags=video_snippet["tags"]
@@ -2511,7 +2592,11 @@ async def AutomatedSecurityAudit():
 @function_trapper
 async def MemoryMaintenance():
     # Get server CFg files
-    cfg_files=[os.path.join(ConfigStorage, file) for file in os.listdir(ConfigStorage) if file.endswith('.cfg')]
+    cfg_files=[]
+    for dirpath, _, filenames in os.walk(ConfigStorage):
+        for file in filenames:
+            if file.endswith('.cfg'):
+                cfg_files.append(os.path.join(dirpath, file))
 
     # Read server CFG file and get MaxMemory
     for cfg in cfg_files:
@@ -2520,6 +2605,9 @@ async def MemoryMaintenance():
             await asyncio.sleep(0)
         except Exception as err:
             ErrorLog(f"{cfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
+            continue
+
+        if 'MaxMemory' not in Config:
             continue
 
         # Get how long to keep old memory files in seconds
@@ -2532,7 +2620,7 @@ async def MemoryMaintenance():
         mfiles=[]
         for dirpath, _, filenames in os.walk(dn):
             for file in filenames:
-                if file.endswith('.memory'):
+                if file.endswith('.memory') or file.endswith('.escore'):
                     mfiles.append(os.path.join(dirpath, file))
 
         # Now check the memory files for age. If the file is OLDER then
@@ -2540,8 +2628,11 @@ async def MemoryMaintenance():
 
         ct=time.time()
         for mf in mfiles:
+            factor=1
             lmt=os.path.getmtime(mf)
-            if ct-lmt>MaxMemory:
+            if mf.endswith('.escore'):
+                factor=5
+            if ct-lmt>(MaxMemory*factor):
                 os.remove(mf)
             await asyncio.sleep(0)
 
@@ -2906,8 +2997,8 @@ async def on_member_update(before, after):
         if bot==None:
             return
 
-        added_roles = [role for role in after.roles if role not in before.roles]
-        removed_roles = [role for role in before.roles if role not in after.roles]
+        added_roles=[role for role in after.roles if role not in before.roles]
+        removed_roles=[role for role in before.roles if role not in after.roles]
 
         if added_roles:
             for role in added_roles:
@@ -2918,7 +3009,7 @@ async def on_member_update(before, after):
                 await ModeratorNotify(bot,after.guild,f"{after.name} lost the role: {role.name}")
 
         # Print all roles that the user has after the update
-        role_names = ', '.join([role.name for role in after.roles])
+        role_names=', '.join([role.name for role in after.roles])
         await ModeratorNotify(bot,after.guild,f"{after.name} now has the following roles: {role_names}")
 
 # The `on_member_join` event is triggered whenever a new member joins a
@@ -3070,7 +3161,7 @@ async def on_typing(channel, user, when):
 
     current_time=time.time()
     last_change=LastSlowmodeChange.get(key, 0)
-    if current_time - last_change < SlowwModeCooldown:
+    if current_time - last_change<SlowwModeCooldown:
         return  # Skip the adjustment process if still in cooldown
 
     # Calculate expected users
@@ -3093,11 +3184,11 @@ async def on_typing(channel, user, when):
         expected_users=1
 
     # Determine slow mode duration
-    if typing_count > 2 * expected_users:  # Over threshold
+    if typing_count>2 * expected_users:  # Over threshold
         bot=GetCompanionPersona(server.id,None,Welcome=True)
-        await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users > {expected_users} users")
+        await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users>{expected_users} users")
         slow_mode_duration=SlowModeMultiplier * typing_count*10*joins
-    elif typing_count > expected_users:
+    elif typing_count>expected_users:
         slow_mode_duration=SlowModeMultiplier * typing_count*joins
     else:
         slow_mode_duration=0
@@ -3244,19 +3335,12 @@ async def on_message(message):
         # This is really the only absolute exception to BOT responsing...
         # Check for scam links and delete them.
 
-        # BUILD FALSE POSITIVES LIST, so far I haven't ran into any
-
         if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
-            scamurls=ReadFile2List(CompanionScamURLS)
-            for url in scamurls:
-                if url in message.content:
-                    print(f"ScamURL: {url} {message.author.mention}")
-                    author=str(message.author.mention)
-                    # If its a bot, it doesn't deserve a response
-                    if not message.author.bot:
-                        await send_response(bot,message,PickRandomResponse(bot['ScamURLS']),delete=57)
-                    await message.delete()
-                    return
+            if CheckMessageURLs(message.guild.id,message.content):
+                if not message.author.bot:
+                    await send_response(bot,message,PickRandomResponse(bot['ScamURLS']),delete=57)
+                await message.delete()
+                return
 
         if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
             autofilter=ReadFile2List(CompanionAutoFilter)
@@ -3490,6 +3574,7 @@ async def on_ready():
             GuildQueueLock.release()
 
         # Make sure the neccessary directories exist
+        mkdir(f'{ConfigStorage}/{guild.id}')
         mkdir(f'{MemoryStorage}/{guild.id}')
         mkdir(f'{LoggingStorage}/{guild.id}')
 
