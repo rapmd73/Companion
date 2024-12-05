@@ -173,7 +173,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1120"
+Version="0.0.0.0.1130"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -790,30 +790,56 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
     msg.append({ "role":"user", "content":input })
 
     Tokens=ReadTokens(gid)
-    mt=int(classifier.get('MaxTokens',2048))
-    provider=classifier['Engine'].lower()
-    model=classifier['Model']
     tout=classifier.get('Timeout',60)
 
-    if provider=='openai':
-       response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
-    elif provider=='openrouter':
-       response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
-    elif provider=='anthropic':
-       response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
-    elif provider=='togetherai':
-        response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
-    elif provider=='cohere':
-        response=GetCohere(Tokens['Cohere'],msg,model,0,0,tout)
-    elif provider=='ollama':
-       response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mt)
-    elif provider=='perplexity':
-      response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
-    elif provider=='huggingface':
-      response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
-    else:
-        ErrorLog(f"Invalid classifier engine: {provider}")
-        return FailResp
+    # Split multiple entries
+
+    el=list(classifier['Engine'].split(','))       # Engine list
+    ec=len(el)                              # Engine list length
+    tl=list(classifier['MaxTokens'].split(','))    # Max Tokens list
+    mt=len(tl)                              # Max Tokens list length
+    ml=list(classifier['Model'].split(','))        # Model list
+    mc=len(ml)                              # Model list length
+
+    # The number of models MUST equal the number of engines. 1 model per engine
+
+    if ec!=mc!=mt:
+        ErrorLog(f"Broke AIClassifier ((models/Encoding)!=engines!=MaxTokens): {sys.exc_info()[-1].tb_lineno}/{err}")
+        return None
+
+    # Run through the engins/models until we have a response.
+
+    response=None
+    ecounter=0
+    while response==None and ecounter<ec:
+        provider=el[ecounter].lower()
+        model=ml[ecounter]
+        mts=int(tl[ecounter])
+
+        if provider=='openai':
+           response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
+        elif provider=='openrouter':
+           response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
+        elif provider=='anthropic':
+           response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
+        elif provider=='togetherai':
+            response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
+        elif provider=='cohere':
+            response=GetCohere(Tokens['Cohere'],msg,model,0,0,tout)
+        elif provider=='ollama':
+           response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mts)
+        elif provider=='perplexity':
+          response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
+        elif provider=='huggingface':
+          response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
+        else:
+            ErrorLog(f"Invalid classifier engine: {provider}")
+            return FailResp
+        if response==None:
+            ecounter+=1
+        else:
+            break
+
     if response==None:
         return FailResp
     return response
@@ -1553,7 +1579,12 @@ def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
         )
     clientAI.close()
     if completion!=None:
-        response=completion.choices[0].message.content.strip()
+        # Should really handle errors better (for logging), but end result
+        # won't change.
+        try:
+            response=completion.choices[0].message.content.strip()
+        except Exception as err:
+            response=None
     RawLog(f"OpenRouter/{model}: {str(completion)}")
     return response
 
@@ -2705,32 +2736,32 @@ async def on_member_unban(guild, member):
     if bot is not None:
         await ModeratorNotify(bot, guild, txt)
 
-#The `on_message_edit` event handles edited messages in Discord, checking
-#for potential moderation issues such as leetspeak attempts, vulgarity, and
-#malicious edits aimed at extracting personal information like age. Upon
-#detecting an edit, it first verifies that the content has indeed changed
-#before proceeding. It then checks if the message is in a thread and
-#adjusts accordingly. If the message involves a bot persona, it logs the
-#changes and proceeds with moderation. The function scans the edited
-#message for specific "leet" words that might indicate an attempt to bypass
-#filters or ask for personal details like age. Additionally, it checks for
-#vulgar language, comparing the message content with a predictive model. If
-#vulgarity is found and the bot is set to block it, the message is deleted,
-#and the user is notified. If leetspeak is detected, the bot notifies
-#moderators with details of the edit, and an embedded message is created
-#for transparency. One of the more insidious attacks the bot counters
-#involves an attacker initially asking an innocent question, like "how many
-#sides to an octagon?" The victim may respond "8," and then the attacker
-#edits the message to read, "How old are you?" or "What is your age?" The
-#attacker takes a screenshot of the edited message, which could be used to
-#falsely accuse the victim of violating Discord's age restrictions, risking
-#a permanent ban. This malicious tactic exploits the fact that Discord's
-#age policy is strictly enforced. A major vulnerability in this system
-#exists when a message is posted before the bot is loaded and then edited
-#afterward; the bot will not receive the edit notification, creating a
-#loophole that only Discord can fix. To combat this, the bot aims to delete
-#the original message, preventing such malicious actions. If the message
-#passes all checks, no action is taken.
+# The `on_message_edit` event handles edited messages in Discord, checking
+# for potential moderation issues such as leetspeak attempts, vulgarity, and
+# malicious edits aimed at extracting personal information like age. Upon
+# detecting an edit, it first verifies that the content has indeed changed
+# before proceeding. It then checks if the message is in a thread and
+# adjusts accordingly. If the message involves a bot persona, it logs the
+# changes and proceeds with moderation. The function scans the edited
+# message for specific "leet" words that might indicate an attempt to bypass
+# filters or ask for personal details like age. Additionally, it checks for
+# vulgar language, comparing the message content with a predictive model. If
+# vulgarity is found and the bot is set to block it, the message is deleted,
+# and the user is notified. If leetspeak is detected, the bot notifies
+# moderators with details of the edit, and an embedded message is created
+# for transparency. One of the more insidious attacks the bot counters
+# involves an attacker initially asking an innocent question, like "how many
+# sides to an octagon?" The victim may respond "8," and then the attacker
+# edits the message to read, "How old are you?" or "What is your age?" The
+# attacker takes a screenshot of the edited message, which could be used to
+# falsely accuse the victim of violating Discord's age restrictions, risking
+# a permanent ban. This malicious tactic exploits the fact that Discord's
+# age policy is strictly enforced. A major vulnerability in this system
+# exists when a message is posted before the bot is loaded and then edited
+# afterward; the bot will not receive the edit notification, creating a
+# loophole that only Discord can fix. To combat this, the bot aims to delete
+# the original message, preventing such malicious actions. If the message
+# passes all checks, no action is taken.
 
 @client.event
 @function_trapper
