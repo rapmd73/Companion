@@ -856,7 +856,7 @@ def ErrorLog(text):
 # "inappropriate content for this server" (badcontent) message.
 
 @function_trapper
-async def CheckCIMS(gid,classifier,message):
+async def CheckCIMS(gid,bot,message,nsfw=False):
     cimsCategories={
         "TOXICITY": "\u2623",
         "SEVERE_TOXICITY": "\U0001F525",
@@ -872,14 +872,29 @@ async def CheckCIMS(gid,classifier,message):
         "BIGOTRY": "\U0001F6AB",
         "BULLYING": "\U0001F6D1" }
 
+    classifier=bot['CIMSClassifier']
     AImatch=await AIClassifier(gid,classifier,message.content)
     AImatch=AImatch.upper()
 
+    if AImatch!="NONE":
+        await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} flagged for {AImatch.lower()} in {message.channel.name}")
+
     # Iterate through the toxic categories
+    # if category is in the classifier, delete the message
     for category, emoji in cimsCategories.items():
         if category in AImatch:
             try:
-                await message.add_reaction(emoji)
+                if category in classifier:
+                    await ModeratorNotify(bot,message.guild,f"Deleted message from {message.author.name}/{message.author.id} for {category.lower()} in {message.channel.name}")
+                    if not message.author.bot:
+                        await send_response(bot,message,PickRandomResponse(bot['CIMS']),delete=57)
+                    await message.delete()
+
+                    # Once we hit a delete wall, the message is done and
+                    # gone.
+                    return AImatch
+                else:
+                    await message.add_reaction(emoji)
             except Exception as err:
                 ErrorLog(f"CIMS Failed to add reaction: {err}")
             # Each reaction is unique; move to the next word after reacting
@@ -899,9 +914,15 @@ async def CheckCIMS(gid,classifier,message):
 # The response from the AI is returned, completing the function's task.
 
 @function_trapper('No')
-async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None):
+async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsfw=False):
+    # NSFW channel can have different classifier that may be less aggressive
+    clinstr=classifier['Instructions']
+    if nsfw:
+        if os.path.exists(clinstr+'.nsfw'):
+            clinstr+='.nsfw'
+
     msg=[]
-    instr=ReadFile(classifier['Instructions']).replace('\n',' ').strip()
+    instr=ReadFile(clinstr).replace('\n',' ').strip()
     if lval:
         instr=instr.replace('{lval}',f'{lval}')
     if rval:
@@ -1308,6 +1329,7 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     bot['AutoFilter']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.autofilter"
     bot['AgeExploit']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.ageexploit"
     bot['PII']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.pii"
+    bot['CIMS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cims"
     bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
     bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
     bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
@@ -3361,58 +3383,61 @@ async def on_message(message):
         if message.webhook_id and message.author.name==bot['BotName']:
             return
 
-        # MUST BE FIRST!
-        # Imposter among us no more!
+        # Moderation section
+        if bot['AutoModeration'].lower()!='no':
+            # MUST BE FIRST!
+            # Imposter among us no more!
 
-        if await ImposterAmoungUs(message.guild,message.author):
-            await message.delete()
-            return
-
-        # Check for input that is a number only
-        if bot['AutoModeration'].lower()!='no' and os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
-            await ModeratorNotify(bot,message.guild,f"AgeExploit detected: {message.author.name}/{message.author.id} in {message.channel.name}")
-            author=str(message.author.mention)
-            # If its a bot, it doesn't deserve a response
-            if not message.author.bot:
-                await send_response(bot,message,PickRandomResponse(bot['AgeExploit']),delete=300)
-            await message.delete()
-            return
-
-        # Check if message has any PII
-        if await IsPIIDetected(bot,message):
-            return
-
-        # This is really the only absolute exception to BOT responsing...
-        # Check for scam links and delete them.
-
-        if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
-            if CheckMessageURLs(message.guild.id,message.content):
-                if not message.author.bot:
-                    await send_response(bot,message,PickRandomResponse(bot['ScamURLS']),delete=57)
+            if await ImposterAmoungUs(message.guild,message.author):
                 await message.delete()
                 return
 
-        if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
-            autofilter=ReadFile2List(CompanionAutoFilter)
-            for text in autofilter:
-                if text in message.content:
-                    author=str(message.author.mention)
-                    # If its a bot, it doesn't deserve a response
+            # Check for input that is a number only
+            if os.path.exists(bot['AgeExploit'])==True and NumberOnly(message.content):
+                await ModeratorNotify(bot,message.guild,f"AgeExploit detected: {message.author.name}/{message.author.id} in {message.channel.name}")
+                author=str(message.author.mention)
+                # If its a bot, it doesn't deserve a response
+                if not message.author.bot:
+                    await send_response(bot,message,PickRandomResponse(bot['AgeExploit']),delete=300)
+                await message.delete()
+                return
+
+            # Check if message has any PII
+            if await IsPIIDetected(bot,message):
+                return
+
+            # This is really the only absolute exception to BOT responsing...
+            # Check for scam links and delete them.
+
+            if os.path.exists(CompanionScamURLS)==True and os.path.exists(bot['ScamURLS'])==True and '://' in message.content:
+                if CheckMessageURLs(message.guild.id,message.content):
                     if not message.author.bot:
-                        await send_response(bot,message,PickRandomResponse(bot['AutoFilter']),delete=57)
+                        await send_response(bot,message,PickRandomResponse(bot['ScamURLS']),delete=57)
                     await message.delete()
+                    return
+
+            if os.path.exists(CompanionAutoFilter)==True and os.path.exists(bot['AutoFilter'])==True:
+                autofilter=ReadFile2List(CompanionAutoFilter)
+                for text in autofilter:
+                    if text in message.content:
+                        author=str(message.author.mention)
+                        # If its a bot, it doesn't deserve a response
+                        if not message.author.bot:
+                            await send_response(bot,message,PickRandomResponse(bot['AutoFilter']),delete=57)
+                        await message.delete()
+                        return
+
+            # Run CIMS
+            if os.path.exists(bot['CIMS'])==True and 'CIMSClassifier' in bot:
+                AImatch=await CheckCIMS(message.guild.id,bot,message,nsfw=nsfw)
+                if AImatch.lower()!='none':
                     return
 
         # Don't respond to other bots.
         if message.author.bot and bot['AllowBot'].lower()!='yes':
             return
 
-        # Run CIMS
-        if 'CIMSClassifier' in bot:
-            match=await CheckCIMS(message.guild.id,bot['CIMSClassifier'],message)
-            if match!='NONE':
-                await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} flagged for {match.lower()} in {message.channel.name}")
-
+        # User commands section
         # Allow the user to erase their own stored conversation
 
         if str(message.content).strip().startswith('%Forget'):
