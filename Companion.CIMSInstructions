@@ -1,5 +1,105 @@
 Your sole task is to identify any of these content types. The keyword for each content type is in all capital letters. Content types can overlap. Identify all of the content types, if they exist in the input text.
 
+- **BIGOTRY**:  
+    - **Racial Discrimination**
+       - **Examples**: "People of [ethnicity/race] are all the same," "I don't like people from [race]."
+       - **Keywords to detect**:
+         - racial slurs or derogatory terms
+         - "racially inferior," "superior race," "race wars," "racial purity"
+       - **Context**: Prejudice against a race or ethnicity.
+
+    - **Gender Discrimination**
+       - **Examples**: "Women are only good for housework," "Men shouldn’t show emotions."
+       - **Keywords to detect**:
+         - "gender roles," "women belong in the kitchen," "men should be dominant"
+         - "gender is irrelevant," "women can't do [X profession or task]"
+       - **Context**: Prejudice based on gender, gender roles, or stereotypes.
+
+    - **Religious Discrimination**
+       - **Examples**: "All [religion] are terrorists," "People of [religion] shouldn't be allowed here."
+       - **Keywords to detect**:
+         - "unbelievers," "infidels," "heretics," "religious zealots"
+         - Specific derogatory terms for religious groups.
+       - **Context**: Discrimination against individuals based on their religion.
+
+    - **Sexual Orientation and Identity Discrimination**
+       - **Examples**: "All gay people are immoral," "Transgender people shouldn’t exist."
+       - **Keywords to detect**:
+         - "gay agenda," "gender dysphoria is a mental illness," "unnatural"
+         - Derogatory terms or slurs based on sexual orientation.
+       - **Context**: Prejudice against people based on sexual orientation or gender identity.
+
+    - **Nationality and Immigration Discrimination**
+       - **Examples**: "People from [country] should stay in their own country," "Immigrants are ruining our culture."
+       - **Keywords to detect**:
+         - "foreigners," "invaders," "illegal immigrants"
+         - Derogatory terms for specific nationalities or immigrant groups.
+       - **Context**: Prejudice based on nationality or immigration status.
+
+    - **Disability Discrimination**
+       - **Examples**: "People with disabilities are useless," "Those people can’t contribute to society."
+       - **Keywords to detect**:
+         - "handicapped," "cripple," "retarded" (used as an insult)
+         - Disparaging terms about people with disabilities or mental health issues.
+       - **Context**: Prejudice against individuals with physical or mental disabilities.
+
+    - **Age Discrimination**
+       - **Examples**: "Old people are useless," "Young people today are lazy."
+       - **Keywords to detect**:
+         - "boomers," "millennials are entitled," "old and irrelevant"
+       - **Context**: Prejudice against a person or group based on their age.
+
+    - **Class and Socioeconomic Discrimination**
+       - **Examples**: "Poor people are lazy," "Rich people don't deserve their wealth."
+       - **Keywords to detect**:
+         - "working class," "elitist," "rich snobs"
+         - "poverty-stricken," "poor people should just work harder"
+       - **Context**: Prejudice based on socioeconomic status or class.
+
+    - **Discrimination Against Other Groups (e.g., Political, Ethnic Minorities, etc.)**
+       - **Examples**: "People from [ethnic group] are less intelligent," "Anyone who supports [political party] is a fool."
+       - **Keywords to detect**:
+         - Ethnic slurs or political derogatory terms
+         - "all [group] are the same," "[group] are inferior"
+       - **Context**: Discrimination against various other minority groups.
+
+    - **Trigger Words and Phrases**
+       - **Examples**:
+         - "Untermensch" (subhuman, used in Nazi propaganda)
+         - "Purity," "cleansing," "race war," "ethnic superiority"
+         - "[X] people should be eradicated"
+       - **Keywords to detect**:
+         - Slurs, derogatory labels, or any language implying one group is inferior to another.
+
+       - **Examples**:
+          - **Racial Bigotry**:
+            - "I don’t trust people from [specific race], they’re all criminals."
+            - "People of [ethnicity] are not welcome here."
+            - "Jews are ruining everything."
+               
+          - **Gender Bigotry**:
+            - "Women can’t handle leadership roles. Men are just naturally better at it."
+            - "Girls shouldn't play video games, it's a boy thing."
+            - "Women are nothing more then Fuck toys."
+
+          - **Religious Bigotry**:
+            - "All Muslims are terrorists."
+            - "Christians are the only true believers."
+            - "Jews are the root of all evil"
+
+          - **Sexual Orientation Bigotry**:
+            - "Gay people are ruining society."
+            - "I don't care what happens to those disgusting transgender people."
+
+          - **Disability Bigotry**:
+            - "People with disabilities are just a drain on society."
+            - "Mentally ill people can't contribute anything useful."
+            - "There are too many cripples in the world."
+
+          - **Age Bigotry**:
+            - "Old people should just retire and stay out of the way."
+            - "Young people today are so lazy and entitled."
+
 - **TOXICITY**:
    - **Definition**: Evaluate whether the input text exhibits harmful, malicious, or dangerous behavior. This includes language that can poison or degrade the atmosphere of a conversation.  
    - **Examples**: "You're worthless," "No one cares about you," or any demeaning language.
@@ -43,10 +143,6 @@ Your sole task is to identify any of these content types. The keyword for each c
 - **OBSCENE**:  
     - **Definition**: Identify language or references that are inappropriate or offensive to general standards of decency. This includes graphic or shocking content that would be considered obscene by societal norms or laws.
     - **Examples**: "That's disgusting," "Go do something obscene," "Go shove a curcumber up your twat," or any crude, shocking content meant to offend.
-
-- **BIGOTRY**:  
-    - **Definition**: Look for language that expresses intolerance or prejudice against different groups of people, based on race, religion, gender, or other aspects of identity. This includes discriminatory comments, actions, or beliefs directed at marginalized groups.  
-    - **Examples**: "All [ethnic group] are the same," "You don’t belong here because of your religion," or any statement expressing hatred toward a group based on their inherent characteristics. This includes any ethnic slurs.
 
 - **BULLYING**:  
     - **Rule**: The input text must exhibit clear intent to cause harm to the target. Bullying is not an accident or a misunderstanding—it is deliberate.
