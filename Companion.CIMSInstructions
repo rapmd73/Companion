@@ -1,0 +1,100 @@
+Your sole task is to identify any of these content types. The keyword for each content type is in all capital letters. Content types can overlap. Identify all of the content types, if they exist in the input text.
+
+- **TOXICITY**:
+   - **Definition**: Evaluate whether the input text exhibits harmful, malicious, or dangerous behavior. This includes language that can poison or degrade the atmosphere of a conversation.  
+   - **Examples**: "You're worthless," "No one cares about you," or any demeaning language.
+
+- **SEVERE_TOXICITY**:  
+   - **Definition**: Identify text that goes beyond general toxicity into extreme harmful behavior. This includes the promotion of hate, extreme negativity, or language intended to severely damage someone's emotional or psychological state.  
+   - **Examples**: "You should just die," "No one will ever love you," or any text promoting severe harm.
+
+- **IDENTITY_ATTACK**:  
+   - **Definition**: Look for attacks against a person’s identity, including racial, gender, or personal characteristics. This includes anything that targets or criticizes someone's core sense of self.  
+   - **Examples**: "You're just a stupid woman," "People like you don’t belong here."
+
+- **INSULT**:  
+   - **Definition**: Identify words or phrases meant to offend or belittle someone. This includes derogatory or mocking language intended to hurt or demean.  
+   - **Examples**: "You're an idiot," "You’re so useless," or any insult meant to degrade someone's intelligence, appearance, or character.
+
+- **PROFANITY**:  
+   - **Definition**: Look for the use of vulgar or inappropriate language. This includes swear words or offensive expressions.  
+   - **Examples**: "Fuck you," "Bitch," or any other curse words.
+
+- **THREAT**:  
+   - **Definition**: Identify language that implies harm or violence toward others. This includes any form of verbal threat or suggestion of violence.  
+   - **Examples**: "I’ll beat you up," "You’re going to regret this," or any text that directly threatens physical or emotional harm.
+
+- **SEXUALLY_EXPLICIT**:  
+   - **Definition**: Look for text that contains explicit sexual language or references. This includes language that is overtly sexual or suggestive.  
+   - **Examples**: "I want to sleep with you," "That outfit looks so hot," or any crude or graphic sexual content.
+
+- **FLIRTATION**:  
+   - **Definition**: Identify text that conveys playful or suggestive interactions with romantic or sexual overtones. This includes indirect, playful, or suggestive language that might imply interest or attraction.  
+   - **Examples**: "Are you trying to make me blush?" "You look cute today," or "I’d love to take you out sometime."
+
+- **PERSONAL_ATTACK**:  
+   - **Definition**: Identify attacks aimed directly at a person’s character or actions, specifically targeting an individual. This includes any language meant to damage someone personally, often involving insults or accusations.  
+   - **Examples**: "You’re a liar," "Everyone hates you," or any direct attack meant to undermine someone's reputation.
+
+- **INFLAMMATORY**:  
+    - **Definition**: Look for text that is likely to provoke strong, heated reactions or escalate tensions. This includes language that is designed to cause division or provoke intense emotional responses.  
+    - **Examples**: "Everyone here is stupid," "People like you are the problem," or any statement intended to stir conflict.
+
+- **OBSCENE**:  
+    - **Definition**: Identify language or references that are inappropriate or offensive to general standards of decency. This includes graphic or shocking content that would be considered obscene by societal norms or laws.
+    - **Examples**: "That's disgusting," "Go do something obscene," "Go shove a curcumber up your twat," or any crude, shocking content meant to offend.
+
+- **BIGOTRY**:  
+    - **Definition**: Look for language that expresses intolerance or prejudice against different groups of people, based on race, religion, gender, or other aspects of identity. This includes discriminatory comments, actions, or beliefs directed at marginalized groups.  
+    - **Examples**: "All [ethnic group] are the same," "You don’t belong here because of your religion," or any statement expressing hatred toward a group based on their inherent characteristics. This includes any ethnic slurs.
+
+- **BULLYING**:  
+    - **Rule**: The input text must exhibit clear intent to cause harm to the target. Bullying is not an accident or a misunderstanding—it is deliberate.
+       - **Detection**: Look for language that suggests malice, hostility, or an intention to damage the target's reputation, self-esteem, or well-being.
+       - **Example**: "I’ll make sure you regret this" or "I’ll ruin your life."
+
+    - **Rule**: Bullying typically involves repeated or sustained attacks aimed at the same person over time.
+       - **Detection**: Check for phrases or patterns that indicate this behavior is not a one-time occurrence, but something that’s happening over a period of time.
+       - **Example**: "You’re always messing up," "You always get it wrong," or "No one will ever like you."
+
+    - **Rule**: The focus of the language must be on demeaning or degrading the target as an individual, often involving insults, name-calling, or questioning their value.
+       - **Detection**: Look for content that targets personal aspects of someone, including their appearance, personality, abilities, or beliefs.
+       - **Example**: "You’re so stupid," "You’re useless," or "No one cares about you."
+
+    - **Rule**: Bullying often involves isolating someone socially, whether in a group or a larger community.
+       - **Detection**: Identify phrases that attempt to remove or ostracize someone from a group or social activity, denying them inclusion.
+       - **Example**: "You’re not invited, stay out of this," "No one wants you here," or "Don’t even bother trying to join us."
+
+    - **Rule**: Bullying can involve spreading false or hurtful information about someone to damage their reputation or relationships.
+       - **Detection**: Look for language that involves gossip, rumors, or falsehoods aimed at tarnishing someone’s image.
+       - **Example**: "I heard they’re a loser," "Everyone’s talking about how pathetic you are," or "Did you hear what they did? What a joke."
+
+    - **Rule**: Bullying frequently involves verbal aggression that is meant to belittle, intimidate, or control the victim.
+       - **Detection**: Look for harsh, demeaning, or emotionally damaging language that could impact the target’s self-worth or emotional state.
+       - **Example**: "You’re worthless," "You’ll never amount to anything," or "Why even try? You’ll fail."
+
+    - **Rule**: Bullying includes direct or implied threats of violence, whether physical or emotional.
+       - **Detection**: Identify language that includes threats to harm someone or to make their life more difficult in any way, physically or emotionally.
+       - **Example**: "You’ll regret this," "If you don’t do what I say, I’ll make your life miserable," or "I’ll make sure you never get ahead."
+
+    - **Rule**: Bullying often seeks to destroy the target’s confidence and self-esteem, casting doubt on their abilities or self-worth.
+       - **Detection**: Look for language that aims to make the target feel inferior, worthless, or incapable.
+       - **Example**: "You’ll never succeed," "You’re too stupid to understand," or "No one will ever love you."
+
+    - **Rule**: Bullying can occur when the bully seeks to embarrass or humiliate the target in front of others.
+       - **Detection**: Detect content where the target is made to look foolish or is purposely put in a humiliating situation in public or in front of others.
+       - **Example**: "Let’s see how they mess up in front of everyone," "Everyone will laugh when they see you do this," or "Look at them, trying to act like they’re something."
+
+    - **Rule**: Bullying in online spaces, including social media, chats, and digital messages, is a form of bullying that can be as damaging as physical bullying.
+       - **Detection**: Identify harmful online language that targets a person through platforms such as social media, private messages, or comments. Look for content meant to embarrass, threaten, or isolate someone.
+       - **Example**: "No one cares about you, just leave the group," "Everyone’s talking about you online, they think you’re a joke," or "Here’s a picture of them, let’s all make fun of it."
+
+    - **Rule**: Bullying often involves manipulating or controlling the target, making them feel powerless or dependent on the bully.
+       - **Detection**: Look for language that pressures or controls the target, coercing them into doing something they don’t want to or making them feel trapped.
+       - **Example**: "If you don’t do this, I’ll ruin everything for you," "You’ll never get anywhere without my help," or "If you tell anyone, I’ll make sure you regret it."
+
+    - **Rule**: Bullying can also involve deliberately provoking someone to anger or to react in a way that can cause them further harm.
+       - **Detection**: Identify language that seeks to provoke, annoy, or bait the victim into reacting in a negative way.
+       - **Example**: "Go ahead, try to fight me. I’ll crush you," "You’ll never stand up for yourself, will you?" or "I can make you so angry, it’s easy."
+
+If any of the content matches the description of each keyword, return that keyword. return multiple keywords separeted by a comma. You may return multiple keywords, if the input text matches more than one category. If no category is matched, return NONE. Only return the keywords (comma separated) with no additional commentary.

@@ -117,10 +117,11 @@
 #       Refine with an AI classifier - completed
 #   URL check (abuseIPDB) verifications. - completed
 
-# Build a classifier(s) to handle the following: (Mark with reactions)
+# Content Identification/Moderatation System (CIMS)
+# Build a classifier to handle the following: (Mark with reactions)
 #   "TOXICITY", "SEVERE_TOXICITY", "IDENTITY_ATTACK", "INSULT", "PROFANITY",
 #   "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
-#   "INFLAMMATORY", "OBSCENE",
+#   "INFLAMMATORY", "OBSCENE", "BULLYING"
 
 #   Anti nuke
 #   Ticket management
@@ -169,13 +170,12 @@ import cohere
 from huggingface_hub import InferenceClient
 import anthropic
 import youtube_transcript_api
-import imagehash
 from transformers import AutoTokenizer
 from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1135"
+Version="0.0.0.0.1140"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -844,6 +844,38 @@ def ErrorLog(text):
         except:
             pass
         LoggingLock.release()
+
+# Check CIMS
+
+@function_trapper
+async def CheckCIMS(gid,classifier,message):
+    cimsCategories={
+        "TOXICITY": "\u2623",
+        "SEVERE_TOXICITY": "\U0001F525",
+        "IDENTITY_ATTACK": "\U0001F534",
+        "INSULT": "\U0001F92C",
+        "PROFANITY": "\U0001F4A2",
+        "THREAT": "\u26A0",
+        "SEXUALLY_EXPLICIT": "\U0001F51E",
+        "FLIRTATION": "\U0001F48B",
+        "PERSONAL_ATTACK": "\U0001F44A",
+        "INFLAMMATORY": "\u26A1",
+        "OBSCENE": "\U0001F621",
+        "BIGOTRY": "\U0001F6AB",
+        "BULLYING": "\U0001F6D1"
+    }
+
+    AImatch=await AIClassifier(gid,classifier,message.content)
+
+    # Iterate through the toxic categories
+    for category, emoji in cimsCategories.items():
+        if category in AImatch.upper():
+            try:
+                await message.add_reaction(emoji)
+            except Exception as err:
+                ErrorLog(f"CIMS Failed to add reaction: {err}")
+            # Each reaction is unique; move to the next word after reacting
+            break
 
 # This function, `AIClassifier`, serves as a versatile interface to
 # interact with different AI models from multiple providers. It accepts a
@@ -2615,6 +2647,10 @@ async def MemoryMaintenance():
         sid=cfg.split('/')[5].split('.')[0]
         dn=f"{MemoryStorage}/{sid}"
 
+        # Ignore cfg files that aren't guild ids
+        if not os.path.exists(dn):
+            continue
+
         # Get list of .memory files for this server
 
         mfiles=[]
@@ -3051,7 +3087,10 @@ async def on_member_join(member):
         return
 
     # If there is a moderator area, send a message to it.
-    await ModeratorNotify(bot,member.guild,f"{member}/{member.id} joined.")
+    name=member.name
+    if member.nick:
+        name=member.nick
+    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id} joined.")
 
     if os.path.exists(bot['Welcome']):
         # Figure out which persona is calling the shots.
@@ -3080,7 +3119,10 @@ async def on_member_remove(member):
         ErrorLog(f"OMR: {member}")
 
     # If there is a moderator area, send a message to it.
-    await ModeratorNotify(bot,member.guild,f"{member}/{member.id} left.")
+    name=member.name
+    if member.nick:
+        name=member.nick
+    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id} left.")
 
 # The `on_typing` event is triggered when a user begins typing in a text
 # channel. This method is used to manage user activity by adjusting slow
@@ -3356,6 +3398,10 @@ async def on_message(message):
         # Don't respond to other bots.
         if message.author.bot and bot['AllowBot'].lower()!='yes':
             return
+
+        # Run CIMS
+        if 'CIMSClassifier' in bot:
+            await CheckCIMS(message.guild.id,bot['CIMSClassifier'],message)
 
         # Allow the user to erase their own stored conversation
 
