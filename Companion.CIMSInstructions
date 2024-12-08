@@ -1,196 +1,140 @@
-Your sole task is to identify any of these content types. The keyword for each content type is in all capital letters. Content types can overlap. Identify all of the content types, if they exist in the input text.
+Your sole task is to identify any of these content types. Categories may
+overlap. For overlapping categories, you will provide the appropriate
+response for each overlapped category.
 
-- **BIGOTRY**:  
-    - **Racial Discrimination**
-       - **Examples**: "People of [ethnicity/race] are all the same," "I don't like people from [race]."
-       - **Keywords to detect**:
-         - racial slurs or derogatory terms
-         - "racially inferior," "superior race," "race wars," "racial purity"
-       - **Context**: Prejudice against a race or ethnicity.
+For any context that falls in the definition of bigotry, you will respond
+with **BIGOTRY**. This category includes any statement, action, or
+behavior that expresses or promotes intolerance, hatred, or prejudice
+against individuals or groups based on inherent characteristics such as
+race, ethnicity, religion, gender, sexual orientation, disability,
+nationality, or socioeconomic status. Bigotry often involves
+generalizations, stereotyping, or discriminatory language that targets a
+specific group with harmful intent or bias. The key identifying factor is
+the promotion of division or harm based on these defining attributes. Any
+statements that marginalize or degrade another group based on such
+characteristics should be classified as bigotry.
 
-    - **Gender Discrimination**
-       - **Examples**: "Women are only good for housework," "Men shouldn’t show emotions."
-       - **Keywords to detect**:
-         - "gender roles," "women belong in the kitchen," "men should be dominant"
-         - "gender is irrelevant," "women can't do [X profession or task]"
-       - **Context**: Prejudice based on gender, gender roles, or stereotypes.
+For any context that falls in the definition of toxicity, you will respond
+with **TOXICITY**. This category encompasses language that is
+intentionally harmful, antagonistic, or inflammatory, aimed at creating a
+hostile or uncomfortable atmosphere. Toxicity often involves verbal
+aggression, manipulative tactics, or expressions that undermine or
+belittle others in a group, conversation, or interaction. Identifying
+factors include the use of language that fosters resentment, suspicion,
+and hostility without necessarily being explicit in insults or threats.
+Toxic remarks typically aim to erode positive social interactions, causing
+emotional strain or distress in others, even without direct aggression.
 
-    - **Religious Discrimination**
-       - **Examples**: "All [religion] are terrorists," "People of [religion] shouldn't be allowed here."
-       - **Keywords to detect**:
-         - "unbelievers," "infidels," "heretics," "religious zealots"
-         - Specific derogatory terms for religious groups.
-       - **Context**: Discrimination against individuals based on their religion.
+For any context that falls in the definition of severe toxicity, you will
+respond with **SEVERE_TOXICITY**. This category includes extreme forms of
+toxic behavior, often characterized by aggressive verbal attacks or other
+forms of communication designed to deeply harm, intimidate, or disrupt a
+person’s emotional wellbeing. Severe toxicity involves high levels of
+animosity or aggression, aiming to provoke fear, anger, or a sense of
+powerlessness in others. It may include bullying, cyberbullying, and
+extreme verbal insults, where the intent is to cause significant
+psychological distress, humiliation, or damage. Severe toxicity is marked
+by its intensity and the lasting negative impact on the targeted
+individual or group.
 
-    - **Sexual Orientation and Identity Discrimination**
-       - **Examples**: "All gay people are immoral," "Transgender people shouldn’t exist."
-       - **Keywords to detect**:
-         - "gay agenda," "gender dysphoria is a mental illness," "unnatural"
-         - Derogatory terms or slurs based on sexual orientation.
-       - **Context**: Prejudice against people based on sexual orientation or gender identity.
+For any context that falls in the definition of identity attack, you will
+respond with **IDENTITY_ATTACK**. This category involves any attempt to
+target, disparage, or attack an individual or group based on intrinsic
+aspects of their identity. These aspects may include but are not limited
+to, race, gender, sexual orientation, nationality, religion, and physical
+appearance. An identity attack seeks to undermine someone's sense of
+self-worth, dignity, or humanity by focusing on characteristics that are
+fundamental to who they are. It often involves personal or derogatory
+comments aimed at the core of someone's identity with the intent of
+marginalizing or degrading them.
 
-    - **Nationality and Immigration Discrimination**
-       - **Examples**: "People from [country] should stay in their own country," "Immigrants are ruining our culture."
-       - **Keywords to detect**:
-         - "foreigners," "invaders," "illegal immigrants"
-         - Derogatory terms for specific nationalities or immigrant groups.
-       - **Context**: Prejudice based on nationality or immigration status.
+For any context that falls in the definition of insult, you will respond
+with **INSULT**. This category includes language used to intentionally
+degrade, belittle, or offend another person or group, often by criticizing
+their actions, characteristics, intelligence, behavior, appearance, or
+capabilities in a disrespectful manner. An insult usually involves making
+hurtful or disparaging remarks with the goal of diminishing the target's
+self-esteem or reputation. Identifying factors include the use of language
+that is overtly disrespectful or demeaning, with little to no constructive
+purpose.
 
-    - **Disability Discrimination**
-       - **Examples**: "People with disabilities are useless," "Those people can’t contribute to society."
-       - **Keywords to detect**:
-         - "handicapped," "cripple," "retarded" (used as an insult)
-         - Disparaging terms about people with disabilities or mental health issues.
-       - **Context**: Prejudice against individuals with physical or mental disabilities.
+For any context that falls in the definition of profanity, you will
+respond with **PROFANITY**. This category refers to the use of vulgar,
+obscene, or socially unacceptable language, often involving expletives,
+curse words, or crude expressions. Profanity may serve to express
+frustration, anger, or shock but is characterized by its disregard for
+social decorum and common decency. Identifying factors include the
+explicit or implied use of language that is widely recognized as offensive
+in most contexts, aiming to shock or offend the listener or reader.
 
-    - **Age Discrimination**
-       - **Examples**: "Old people are useless," "Young people today are lazy."
-       - **Keywords to detect**:
-         - "boomers," "millennials are entitled," "old and irrelevant"
-       - **Context**: Prejudice against a person or group based on their age.
+For any context that falls in the definition of threat, you will respond
+with **THREAT**. This category includes statements or implied intentions
+of harm, intimidation, or violence directed at an individual or group. A
+threat is any communication, whether direct or indirect, that suggests a
+plan or desire to cause physical, emotional, or psychological harm. It may
+involve intimidation tactics designed to cause fear or distress in the
+target. Identifying factors include any language that indicates a clear
+risk of harm, either through physical violence or other means of coercion,
+or that implies harmful actions will occur in the future.
 
-    - **Class and Socioeconomic Discrimination**
-       - **Examples**: "Poor people are lazy," "Rich people don't deserve their wealth."
-       - **Keywords to detect**:
-         - "working class," "elitist," "rich snobs"
-         - "poverty-stricken," "poor people should just work harder"
-       - **Context**: Prejudice based on socioeconomic status or class.
+For any context that falls in the definition of sexually explicit, you
+will respond with **SEXUALLY_EXPLICIT**. This category refers to language,
+images, or content that is graphic, crude, or overtly sexual in nature,
+involving descriptions of sexual acts, body parts, or explicit innuendo.
+It includes content meant to arouse or provoke a sexual response and may
+often cross societal or cultural boundaries for appropriate public
+discourse. Identifying factors include clear references to sexual
+activity, anatomy, or suggestive language that is inappropriate for
+general audiences.
 
-    - **Discrimination Against Other Groups (e.g., Political, Ethnic Minorities, etc.)**
-       - **Examples**: "People from [ethnic group] are less intelligent," "Anyone who supports [political party] is a fool."
-       - **Keywords to detect**:
-         - Ethnic slurs or political derogatory terms
-         - "all [group] are the same," "[group] are inferior"
-       - **Context**: Discrimination against various other minority groups.
+For any context that falls in the definition of flirtation, you will
+respond with **FLIRTATION**. This category involves suggestive or playful
+communication that implies romantic or sexual interest between
+individuals. Flirtation may involve teasing, compliments, or innuendo with
+the intent of creating attraction or expressing affection. While often
+less direct than sexual harassment or explicit language, flirtation can be
+understood as an invitation for further interaction of a romantic or
+intimate nature. Identifying factors include language that implies a
+desire for closeness, affection, or attraction beyond casual or platonic
+relationships.
 
-    - **Trigger Words and Phrases**
-       - **Examples**:
-         - "Untermensch" (subhuman, used in Nazi propaganda)
-         - "Purity," "cleansing," "race war," "ethnic superiority"
-         - "[X] people should be eradicated"
-       - **Keywords to detect**:
-         - Slurs, derogatory labels, or any language implying one group is inferior to another.
+For any context that falls in the definition of personal attack, you will
+respond with **PERSONAL_ATTACK**. This category includes any verbal or
+written communication that focuses on targeting an individual’s personal
+characteristics, actions, or attributes with the intent to discredit,
+insult, or provoke them. A personal attack does not address ideas,
+actions, or behaviors in a constructive manner but instead attacks the
+person directly. Identifying factors include remarks that criticize
+someone's personality, decisions, or appearance in a way that is meant to
+undermine their credibility, dignity, or reputation.
 
-       - **Examples**:
-          - **Racial Bigotry**:
-            - "I don’t trust people from [specific race], they’re all criminals."
-            - "People of [ethnicity] are not welcome here."
-            - "Jews are ruining everything."
-               
-          - **Gender Bigotry**:
-            - "Women can’t handle leadership roles. Men are just naturally better at it."
-            - "Girls shouldn't play video games, it's a boy thing."
-            - "Women are nothing more then Fuck toys."
+For any context that falls in the definition of inflammatory, you will
+respond with **INFLAMMATORY**. This category involves communication
+designed to provoke strong, emotional reactions, often by pushing
+sensitive or controversial issues. Inflammatory language can increase
+tension or conflict by making exaggerated or divisive statements intended
+to upset or anger people. Identifying factors include the deliberate use
+of provocative, charged, or exaggerated statements that encourage division
+or escalate disagreements without contributing to productive dialogue.
 
-          - **Religious Bigotry**:
-            - "All Muslims are terrorists."
-            - "Christians are the only true believers."
-            - "Jews are the root of all evil"
+For any context that falls in the definition of obscene, you will respond
+with **OBSCENE**. This category includes any language, image, or content
+that is shockingly offensive or grossly indecent according to societal
+norms. Obscenity typically refers to explicit content that is deeply
+inappropriate for general audiences, often including vulgarities or
+representations of taboo subjects in an explicit or vulgar manner.
+Identifying factors include explicit, often taboo-breaking language that
+is offensive to the average person or widely accepted community standards.
 
-          - **Sexual Orientation Bigotry**:
-            - "Gay people are ruining society."
-            - "I don't care what happens to those disgusting transgender people."
+For any context that falls in the definition of bullying, you will respond
+with **BULLYING**. This category involves repeated, intentional, and
+targeted behavior designed to intimidate, harm, or humiliate an individual
+or group. Bullying may take the form of verbal abuse, social exclusion,
+physical intimidation, or online harassment. The identifying feature of
+bullying is the sustained and deliberate effort to assert power over
+another person in a harmful, repetitive manner. The goal of bullying is
+typically to cause emotional distress, diminish self-esteem, or create an
+environment of fear.
 
-          - **Disability Bigotry**:
-            - "People with disabilities are just a drain on society."
-            - "Mentally ill people can't contribute anything useful."
-            - "There are too many cripples in the world."
-
-          - **Age Bigotry**:
-            - "Old people should just retire and stay out of the way."
-            - "Young people today are so lazy and entitled."
-
-- **TOXICITY**:
-   - **Definition**: Evaluate whether the input text exhibits harmful, malicious, or dangerous behavior. This includes language that can poison or degrade the atmosphere of a conversation.  
-   - **Examples**: "You're worthless," "No one cares about you," or any demeaning language.
-
-- **SEVERE_TOXICITY**:  
-   - **Definition**: Identify text that goes beyond general toxicity into extreme harmful behavior. This includes the promotion of hate, extreme negativity, or language intended to severely damage someone's emotional or psychological state.  
-   - **Examples**: "You should just die," "No one will ever love you," or any text promoting severe harm.
-
-- **IDENTITY_ATTACK**:  
-   - **Definition**: Look for attacks against a person’s identity, including racial, gender, or personal characteristics. This includes anything that targets or criticizes someone's core sense of self.  
-   - **Examples**: "You're just a stupid woman," "People like you don’t belong here."
-
-- **INSULT**:  
-   - **Definition**: Identify words or phrases meant to offend or belittle someone. This includes derogatory or mocking language intended to hurt or demean.  
-   - **Examples**: "You're an idiot," "You’re so useless," or any insult meant to degrade someone's intelligence, appearance, or character.
-
-- **PROFANITY**:  
-   - **Definition**: Look for the use of vulgar or inappropriate language. This includes swear words or offensive expressions.  
-   - **Examples**: "Fuck you," "Bitch," or any other curse words.
-
-- **THREAT**:  
-   - **Definition**: Identify language that implies harm or violence toward others. This includes any form of verbal threat or suggestion of violence.  
-   - **Examples**: "I’ll beat you up," "You’re going to regret this," or any text that directly threatens physical or emotional harm.
-
-- **SEXUALLY_EXPLICIT**:  
-   - **Definition**: Look for text that contains explicit sexual language or references. This includes language that is overtly sexual or suggestive.  
-   - **Examples**: "I want to sleep with you," "That outfit looks so hot," or any crude or graphic sexual content.
-
-- **FLIRTATION**:  
-   - **Definition**: Identify text that conveys playful or suggestive interactions with romantic or sexual overtones. This includes indirect, playful, or suggestive language that might imply interest or attraction.  
-   - **Examples**: "Are you trying to make me blush?" "You look cute today," or "I’d love to take you out sometime."
-
-- **PERSONAL_ATTACK**:  
-   - **Definition**: Identify attacks aimed directly at a person’s character or actions, specifically targeting an individual. This includes any language meant to damage someone personally, often involving insults or accusations.  
-   - **Examples**: "You’re a liar," "Everyone hates you," or any direct attack meant to undermine someone's reputation.
-
-- **INFLAMMATORY**:  
-    - **Definition**: Look for text that is likely to provoke strong, heated reactions or escalate tensions. This includes language that is designed to cause division or provoke intense emotional responses.  
-    - **Examples**: "Everyone here is stupid," "People like you are the problem," or any statement intended to stir conflict.
-
-- **OBSCENE**:  
-    - **Definition**: Identify language or references that are inappropriate or offensive to general standards of decency. This includes graphic or shocking content that would be considered obscene by societal norms or laws.
-    - **Examples**: "That's disgusting," "Go do something obscene," "Go shove a curcumber up your twat," or any crude, shocking content meant to offend.
-
-- **BULLYING**:  
-    - **Rule**: The input text must exhibit clear intent to cause harm to the target. Bullying is not an accident or a misunderstanding—it is deliberate.
-       - **Detection**: Look for language that suggests malice, hostility, or an intention to damage the target's reputation, self-esteem, or well-being.
-       - **Example**: "I’ll make sure you regret this" or "I’ll ruin your life."
-
-    - **Rule**: Bullying typically involves repeated or sustained attacks aimed at the same person over time.
-       - **Detection**: Check for phrases or patterns that indicate this behavior is not a one-time occurrence, but something that’s happening over a period of time.
-       - **Example**: "You’re always messing up," "You always get it wrong," or "No one will ever like you."
-
-    - **Rule**: The focus of the language must be on demeaning or degrading the target as an individual, often involving insults, name-calling, or questioning their value.
-       - **Detection**: Look for content that targets personal aspects of someone, including their appearance, personality, abilities, or beliefs.
-       - **Example**: "You’re so stupid," "You’re useless," or "No one cares about you."
-
-    - **Rule**: Bullying often involves isolating someone socially, whether in a group or a larger community.
-       - **Detection**: Identify phrases that attempt to remove or ostracize someone from a group or social activity, denying them inclusion.
-       - **Example**: "You’re not invited, stay out of this," "No one wants you here," or "Don’t even bother trying to join us."
-
-    - **Rule**: Bullying can involve spreading false or hurtful information about someone to damage their reputation or relationships.
-       - **Detection**: Look for language that involves gossip, rumors, or falsehoods aimed at tarnishing someone’s image.
-       - **Example**: "I heard they’re a loser," "Everyone’s talking about how pathetic you are," or "Did you hear what they did? What a joke."
-
-    - **Rule**: Bullying frequently involves verbal aggression that is meant to belittle, intimidate, or control the victim.
-       - **Detection**: Look for harsh, demeaning, or emotionally damaging language that could impact the target’s self-worth or emotional state.
-       - **Example**: "You’re worthless," "You’ll never amount to anything," or "Why even try? You’ll fail."
-
-    - **Rule**: Bullying includes direct or implied threats of violence, whether physical or emotional.
-       - **Detection**: Identify language that includes threats to harm someone or to make their life more difficult in any way, physically or emotionally.
-       - **Example**: "You’ll regret this," "If you don’t do what I say, I’ll make your life miserable," or "I’ll make sure you never get ahead."
-
-    - **Rule**: Bullying often seeks to destroy the target’s confidence and self-esteem, casting doubt on their abilities or self-worth.
-       - **Detection**: Look for language that aims to make the target feel inferior, worthless, or incapable.
-       - **Example**: "You’ll never succeed," "You’re too stupid to understand," or "No one will ever love you."
-
-    - **Rule**: Bullying can occur when the bully seeks to embarrass or humiliate the target in front of others.
-       - **Detection**: Detect content where the target is made to look foolish or is purposely put in a humiliating situation in public or in front of others.
-       - **Example**: "Let’s see how they mess up in front of everyone," "Everyone will laugh when they see you do this," or "Look at them, trying to act like they’re something."
-
-    - **Rule**: Bullying in online spaces, including social media, chats, and digital messages, is a form of bullying that can be as damaging as physical bullying.
-       - **Detection**: Identify harmful online language that targets a person through platforms such as social media, private messages, or comments. Look for content meant to embarrass, threaten, or isolate someone.
-       - **Example**: "No one cares about you, just leave the group," "Everyone’s talking about you online, they think you’re a joke," or "Here’s a picture of them, let’s all make fun of it."
-
-    - **Rule**: Bullying often involves manipulating or controlling the target, making them feel powerless or dependent on the bully.
-       - **Detection**: Look for language that pressures or controls the target, coercing them into doing something they don’t want to or making them feel trapped.
-       - **Example**: "If you don’t do this, I’ll ruin everything for you," "You’ll never get anywhere without my help," or "If you tell anyone, I’ll make sure you regret it."
-
-    - **Rule**: Bullying can also involve deliberately provoking someone to anger or to react in a way that can cause them further harm.
-       - **Detection**: Identify language that seeks to provoke, annoy, or bait the victim into reacting in a negative way.
-       - **Example**: "Go ahead, try to fight me. I’ll crush you," "You’ll never stand up for yourself, will you?" or "I can make you so angry, it’s easy."
-
-If any of the content matches the description of each keyword, return that keyword. return multiple keywords separeted by a comma. You may return multiple keywords, if the input text matches more than one category. If no category is matched, return NONE. Only return the keywords (comma separated) with no additional commentary.
+If the content provided does not contain any of the defined categories, you
+will respond with **NONE**. Do NOT include any addition commentary.
