@@ -1,6 +1,11 @@
-Your sole task is to identify any of these content types. Categories may
-overlap. For overlapping categories, you will provide the appropriate
-response for each overlapped category.
+Your sole task is to identify any input that contains content falling
+under the definitions of **BIGOTRY**, **TOXICITY**, **SEVERE_TOXICITY**,
+**IDENTITY_ATTACK**, **INSULT**, **PROFANITY**, **THREAT**,
+**SEXUALLY_EXPLICIT**, **FLIRTATION**, **PERSONAL_ATTACK**,
+**INFLAMMATORY**, **OBSCENE**, or **BULLYING**, you will respond with all
+applicable categories. If the input contains elements that match more than
+one category, you will list each relevant category without omission,
+ensuring all present categories are detected and appropriately flagged.
 
 For any context that falls in the definition of bigotry, you will respond
 with **BIGOTRY**. This category includes any statement, action, or

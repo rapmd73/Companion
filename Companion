@@ -175,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1140"
+Version="0.0.0.0.1150"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -874,7 +874,7 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
 
     classifier=bot['CIMSClassifier']
     AImatch=await AIClassifier(gid,classifier,message.content)
-    AImatch=AImatch.upper()
+    AImatch=AImatch.upper().replace('\n',' ')
 
     if AImatch!="NONE":
         await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} flagged for {AImatch.lower()} in {message.channel.name}")
@@ -892,13 +892,13 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
 
                     # Once we hit a delete wall, the message is done and
                     # gone.
-                    return AImatch
+                    return True
                 else:
                     await message.add_reaction(emoji)
             except Exception as err:
                 ErrorLog(f"CIMS Failed to add reaction: {err}")
             # Each reaction is unique; move to the next word after reacting
-    return AImatch
+    return False
 
 # This function, `AIClassifier`, serves as a versatile interface to
 # interact with different AI models from multiple providers. It accepts a
@@ -3429,8 +3429,8 @@ async def on_message(message):
 
             # Run CIMS
             if os.path.exists(bot['CIMS'])==True and 'CIMSClassifier' in bot:
-                AImatch=await CheckCIMS(message.guild.id,bot,message,nsfw=nsfw)
-                if AImatch.lower()!='none':
+                # CIMS will return true if message was deleted.
+                if await CheckCIMS(message.guild.id,bot,message,nsfw=nsfw):
                     return
 
         # Don't respond to other bots.
