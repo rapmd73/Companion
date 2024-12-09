@@ -116,12 +116,11 @@
 #       Credit Card numbers - completed
 #       Refine with an AI classifier - completed
 #   URL check (abuseIPDB) verifications. - completed
-
-# Content Identification/Moderatation System (CIMS)
-# Build a classifier to handle the following: (Mark with reactions)
-#   "TOXICITY", "SEVERE_TOXICITY", "IDENTITY_ATTACK", "INSULT", "PROFANITY",
-#   "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
-#   "INFLAMMATORY", "OBSCENE", "BULLYING"
+#   Content Identification/Moderatation System (CIMS) - completed
+#       Build a classifier to handle the following: (Mark with reactions):
+#       "TOXICITY", "SEVERE_TOXICITY", "IDENTITY_ATTACK", "INSULT", "PROFANITY",
+#       "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
+#       "INFLAMMATORY", "OBSCENE", "BULLYING"
 
 #   Anti nuke
 #   Ticket management
@@ -175,7 +174,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1150"
+Version="0.0.0.0.1155"
 
 # The running name of the program. Must be global and NEVER changing.
 
