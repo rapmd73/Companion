@@ -855,7 +855,7 @@ def ErrorLog(text):
 # Add ability to check each setting for deletion and respond with
 # "inappropriate content for this server" (badcontent) message.
 
-@function_trapper
+@function_trapper("NONE")
 async def CheckCIMS(gid,bot,message,nsfw=False):
     cimsCategories={
         "TOXICITY": "\u2623",
@@ -874,9 +874,9 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
 
     classifier=bot['CIMSClassifier']
     AImatch=await AIClassifier(gid,classifier,message.content)
-    AImatch=AImatch.upper().replace('\n',' ').replace('*','').strip()
+    AImatch=AImatch.upper().replace('\n',' ').replace('.','').replace('*','').strip()
 
-    if "NONE" not in AImatch:
+    if AImatch!="NONE" and AImatch!='NO':
         await ModeratorNotify(bot,message.guild,f"{message.author.name}/{message.author.id} flagged for {AImatch.lower()} in {message.channel.name}")
 
     # Iterate through the toxic categories
