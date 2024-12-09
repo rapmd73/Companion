@@ -174,7 +174,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1155"
+Version="0.0.0.0.1160"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -872,7 +872,8 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
         "BULLYING": "\U0001F6D1" }
 
     classifier=bot['CIMSClassifier']
-    AImatch=await AIClassifier(gid,classifier,message.content)
+    text=f"Classify this: '{message.content}'"
+    AImatch=await AIClassifier(gid,classifier,text)
     AImatch=AImatch.upper().replace('\n',' ').replace('.','').replace('*','').strip()
 
     if AImatch!="NONE" and AImatch!='NO':
@@ -926,7 +927,7 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
         instr=instr.replace('{lval}',f'{lval}')
     if rval:
         instr=instr.replace('{rval}',f'{rval}')
-    input=text.replace('\n',' ').strip()
+    input=text.replace('\n',' ').replace("'","\'").replace('"',"'").strip()
     msg.append({ "role":"system", "content":instr })
     msg.append({ "role":"user", "content":input })
 
@@ -958,11 +959,11 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
         mts=int(tl[ecounter])
 
         if provider=='openai':
-           response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
+            response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
         elif provider=='openrouter':
-           response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
+            response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
         elif provider=='anthropic':
-           response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
+            response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
         elif provider=='togetherai':
             response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
         elif provider=='cohere':
@@ -970,9 +971,9 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
         elif provider=='ollama':
            response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mts)
         elif provider=='perplexity':
-          response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
+            response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
         elif provider=='huggingface':
-          response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
+            response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
         else:
             ErrorLog(f"Invalid classifier engine: {provider}")
             return FailResp
