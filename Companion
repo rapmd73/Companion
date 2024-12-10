@@ -174,7 +174,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1160"
+Version="0.0.0.0.1200"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -465,7 +465,7 @@ def CheckAbuseIPDB(domain,token):
         else:
             return False, 0
     except requests.exceptions.RequestException as e:
-        print(f"Error checking AbuseIPDB: {e}")
+        ErrorLog(f"Error checking AbuseIPDB: {e}")
         return None, 0
 
 @function_trapper
@@ -953,37 +953,44 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
 
     response=None
     ecounter=0
+    model=None
     while response==None and ecounter<ec:
         provider=el[ecounter].lower()
         model=ml[ecounter]
         mts=int(tl[ecounter])
 
-        if provider=='openai':
-            response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
-        elif provider=='openrouter':
-            response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
-        elif provider=='anthropic':
-            response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
-        elif provider=='togetherai':
-            response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
-        elif provider=='cohere':
-            response=GetCohere(Tokens['Cohere'],msg,model,0,0,tout)
-        elif provider=='ollama':
-           response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mts)
-        elif provider=='perplexity':
-            response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
-        elif provider=='huggingface':
-            response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
-        else:
-            ErrorLog(f"Invalid classifier engine: {provider}")
-            return FailResp
-        if response==None:
-            ecounter+=1
-        else:
-            break
+        try:
+            if provider=='openai':
+                response=GetOpenAI(Tokens['OpenAI'],msg,model,0,0,tout)
+            elif provider=='openrouter':
+                response=GetOpenRouter(Tokens['OpenRouter'],msg,model,0,0,tout)
+            elif provider=='anthropic':
+                response=GetAnthropic(Tokens['Anthropic'],msg,model,0,0,tout)
+            elif provider=='togetherai':
+                response=GetTogetherAI(Tokens['TogetherAI'],msg,model,0,0,tout)
+            elif provider=='cohere':
+                response=GetCohere(Tokens['Cohere'],msg,model,0,0,tout)
+            elif provider=='ollama':
+               response=GetOllama(None,msg,model,0,0,tout,seed=0,mt=mts)
+            elif provider=='perplexity':
+                response=GetPerplexity(Tokens['Perplexity'],msg,model,0,0,tout)
+            elif provider=='huggingface':
+                response,stop=GetHuggingFace(Tokens['HuggingFace'],msg,model,0,0,tout)
+            else:
+                ErrorLog(f"Invalid classifier engine: {provider}")
+                return FailResp
+            if response==None:
+                ecounter+=1
+            else:
+                break
+        except Exception as err:
+            response=None
+
+    print(provider,model,response)
 
     if response==None:
         return FailResp
+
     return response
 
 # This function scans a piece of text to identify sensitive personal information, such
@@ -1228,6 +1235,47 @@ def GetSteering(bot,input_text):
     # No txt file found. No prompts available
     return None
 
+# Figure out basefile with channel and NFW settings.
+# possibilities are that a persona can be:
+#   1. global (SFW)
+#   2. global, NSFW
+#   3. channel, (SFW)
+#   4. channel, NSFW
+
+@function_trapper(None)
+def GetCompanionControlFile(basename,channel,nsfw):
+    # .cfg may or may not exist. Perserve if it does.
+    iscfg=basename.endswith(".cfg")
+    new_basename=basename[:-4] if iscfg else basename
+    cfg=".cfg" if iscfg else ""
+
+    # NSFW channel version
+    refname=f"{new_basename}.{channel}.nsfw"+cfg
+    if nsfw and os.path.exists(refname):
+        return refname
+
+    # SFW channel version
+    refname=f"{new_basename}.{channel}"+cfg
+    if os.path.exists(refname):
+        return refname
+
+    # NSFW global version
+    refname=f"{new_basename}.nsfw"+cfg
+    if nsfw and os.path.exists(refname):
+        return refname
+
+    # SFW global version
+    refname=f"{new_basename}"+cfg
+    if nsfw and os.path.exists(refname):
+        return refname
+
+    # This is a real PITA to debug. Returning basename is just a nice way of letting
+    # os.path.exists() deal with a missing file without having to test for None
+    # everywhere. Returning None here will unleash chaos and be a nightmare to find
+    # out this THIS one line can cause such nighmares.
+
+    return basename
+
 # The `GetCompanionPersona` function is responsible for determining and retrieving the
 # specific personality or character traits that the bot will use when interacting with
 # users in a particular Discord server.  When users send messages, it's important for
@@ -1244,7 +1292,7 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
     cfg=f"{ConfigStorage}/{gid}/{gid}.cfg"
     if not os.path.exists(cfg):
         mkdir(f"{ConfigStorage}/{gid}")
-        print(f'NO configuration: {cfg}')
+        ErrorLog(f'NO configuration: {cfg}')
         return None
 
     try:
@@ -1277,75 +1325,35 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
             bot['BotName']=Config['Default']
             bot['ResponseAllowed']='No'
 
-    # Sort out loading a persona by channel and NSFW possibilities.
-
-    # possibilities are that a persona can be:
-    #   1. global (SFW)
-    #   2. global, NSFW
-    #   3. channel, (SFW)
-    #   4. channel, NSFW
+    # Base bot structure
+    CompanionBotName=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}"
 
     # System Role
-    # Test channel NSFW
-    BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.system.nsfw"
-    if nsfw and os.path.exists(BotSystem):
-        bot['System']=BotSystem
-    else:
-        # Test channel SFW
-        BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.system"
-        if os.path.exists(BotSystem):
-            bot['System']=BotSystem
-        else:
-            # Test global NSFW
-            BotSystem=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.system.nsfw"
-            if nsfw and os.path.exists(BotSystem):
-                bot['System']=BotSystem
-            else:
-                # global SFW
-                bot['System']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.system"
+    bot['System']=GetCompanionControlFile(f"{CompanionBotName}.system",channel,nsfw)
 
     # Persona file
-    # Test channel NSFW
-    BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona.nsfw"
-    if nsfw and os.path.exists(BotPersona):
-        bot['Persona']=BotPersona
-    else:
-        # Test channel SFW
-        BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.{channel}.persona"
-        if os.path.exists(BotPersona):
-            bot['Persona']=BotPersona
-        else:
-            # Test global NSFW
-            BotPersona=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona.nsfw"
-            if nsfw and os.path.exists(BotPersona):
-                bot['Persona']=BotPersona
-            else:
-                # global SFW
-                bot['Persona']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.persona"
+    bot['Persona']=GetCompanionControlFile(f"{CompanionBotName}.persona",channel,nsfw)
 
-    bot['Welcome']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.welcome"
-    bot['Vulgarity']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.vulgarity"
-    bot['ScamURLS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.scamurls"
-    bot['AutoFilter']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.autofilter"
-    bot['AgeExploit']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.ageexploit"
-    bot['PII']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.pii"
-    bot['CIMS']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.cims"
-    bot['TooMuchInformation']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.tmi"
-    bot['Broken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.broke"
-    bot['URLBroken']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.urlbroke"
-    bot['YTtags']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.yttags"
-    bot['noYTtags']=f"{CompanionStorage}/{bot['BotName']}/{bot['BotName']}.noyttags"
+    # EVERY channel can be dressed up.
+    bot['Welcome']=GetCompanionControlFile(f"{CompanionBotName}.welcome",channel,nsfw)
+    bot['Vulgarity']=GetCompanionControlFile(f"{CompanionBotName}.vulgarity",channel,nsfw)
+    bot['ScamURLS']=GetCompanionControlFile(f"{CompanionBotName}.scamurls",channel,nsfw)
+    bot['AutoFilter']=GetCompanionControlFile(f"{CompanionBotName}.autofilter",channel,nsfw)
+    bot['AgeExploit']=GetCompanionControlFile(f"{CompanionBotName}.ageexploit",channel,nsfw)
+    bot['PII']=GetCompanionControlFile(f"{CompanionBotName}.pii",channel,nsfw)
+    bot['CIMS']=GetCompanionControlFile(f"{CompanionBotName}.cims",channel,nsfw)
+    bot['TooMuchInformation']=GetCompanionControlFile(f"{CompanionBotName}.tmi",channel,nsfw)
+    bot['Broken']=GetCompanionControlFile(f"{CompanionBotName}.broke",channel,nsfw)
+    bot['URLBroken']=GetCompanionControlFile(f"{CompanionBotName}.urlbroke",channel,nsfw)
+    bot['YTtags']=GetCompanionControlFile(f"{CompanionBotName}.yttags",channel,nsfw)
+    bot['noYTtags']=GetCompanionControlFile(f"{CompanionBotName}.noyttags",channel,nsfw)
 
     # Load bot config file. Channel CFg always has priority.
     settings={}
     try:
-        bcfg=f"{ConfigStorage}/{gid}/{bot['BotName']}.{channel}.cfg"
-        if os.path.exists(bcfg):
+        bcfg=GetCompanionControlFile(f"{ConfigStorage}/{gid}/{bot['BotName']}.cfg",channel,nsfw)
+        if bcfg!=None:
             settings=json.loads(jsonFilter(ReadFile(bcfg)))
-        else:
-            bcfg=f"{ConfigStorage}/{gid}/{bot['BotName']}.cfg"
-            if os.path.exists(bcfg):
-                settings=json.loads(jsonFilter(ReadFile(bcfg)))
     except Exception as err:
         ErrorLog(f"{bcfg} damaged: {sys.exc_info()[-1].tb_lineno}/{err}")
 
@@ -1414,7 +1422,7 @@ def GetBabble(message,text):
     ForgetThisMessage=False
     if text.strip().startswith('%#>'):
         ForgetThisMessage=True
-        input_text=input_text[3:]
+        input_text=input_text[3:].strip()
 
     # Load the persona and memory files
     # NSFW not allowed in threads directly, so find parent channel
@@ -1514,6 +1522,7 @@ def GetBabble(message,text):
         response=GetAIResponse(gid,persona,cbot)
         endTime=time.time()
         AppendFile(f'{LoggingStorage}/{gid}.timing',f"{datetime.datetime.fromtimestamp(startTime).strftime('%Y-%m-%d %H:%M:%S')} {cbot['Engine']} {cbot['Model']} {endTime-startTime:.6f}\n")
+
         if response==None:
             ecounter+=1
         else:
@@ -1721,13 +1730,7 @@ def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
             timeout=timeout
         )
     clientAI.close()
-    if completion!=None:
-        # Should really handle errors better (for logging), but end result
-        # won't change.
-        try:
-            response=completion.choices[0].message.content.strip()
-        except Exception as err:
-            response=None
+    response=completion.choices[0].message.content.strip()
     RawLog(f"OpenRouter/{model}: {str(completion)}")
     return response
 
@@ -3580,7 +3583,7 @@ async def on_message(message):
     except discord.HTTPException as err:
         if err.code==429:  # Rate limit error
             retry_after=int(err.response.headers.get('X-RateLimit-Reset', 1))*2
-            print(f"Rate limit hit. Retrying after {retry_after} seconds.")
+            ErrorLog(f"Rate limit hit. Retrying after {retry_after} seconds.")
             await asyncio.sleep(retry_after)
             await on_message(message)  # Retry the request
 
