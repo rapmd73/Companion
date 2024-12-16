@@ -169,12 +169,13 @@ import cohere
 from huggingface_hub import InferenceClient
 import anthropic
 import youtube_transcript_api
+import scrapingant_client as Ant
 from transformers import AutoTokenizer
 from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1200"
+Version="0.0.0.0.1215"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -454,10 +455,11 @@ def CheckAbuseIPDB(domain,token):
         return None,0
     url=f"https://api.abuseipdb.com/api/v2/check"
     params={"ipAddress": ipa}
-    headers={"Key": token, "Accept": "application/json"}
+    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+             "Key": token, "Accept": "application/json"}
 
     try:
-        response=requests.get(url, headers=headers, params=params)
+        response=requests.get(url, headers=headers, params=params,timeout=60)
         response.raise_for_status()
         data=response.json()
         if data.get("data", {}).get("abuseConfidenceScore", 0)>0:
@@ -520,7 +522,7 @@ def CalculateMinorScale(MajorScale):
     # Determine the range of the MinorScale based on the MajorScale
     if MajorScale==0:
         MinorMax=0.1
-        MinorMin=-0.11
+        MinorMin=-0.1
     elif MajorScale>0:
         MinorMax=0.1 - 0.01 * MajorScale
         MinorMin=-0.1
@@ -986,8 +988,6 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
         except Exception as err:
             response=None
 
-    print(provider,model,response)
-
     if response==None:
         return FailResp
 
@@ -1235,12 +1235,14 @@ def GetSteering(bot,input_text):
     # No txt file found. No prompts available
     return None
 
-# Figure out basefile with channel and NFW settings.
-# possibilities are that a persona can be:
-#   1. global (SFW)
-#   2. global, NSFW
-#   3. channel, (SFW)
-#   4. channel, NSFW
+# This function determines the appropriate configuration file for a companion bot
+# based on whether the settings are for a specific channel or global and whether they
+# are SFW (safe for work) or NSFW (not safe for work). It prioritizes NSFW
+# channel-specific files, then SFW channel-specific files, followed by NSFW global
+# files, and finally SFW global files. If none of these files exist, it falls back to
+# the provided base filename to avoid potential errors in case the file is missing.
+# This ensures the system can gracefully handle configuration scenarios without
+# crashing.
 
 @function_trapper(None)
 def GetCompanionControlFile(basename,channel,nsfw):
@@ -1407,8 +1409,6 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 def GetBabble(message,text):
     # The "uid" and "channel" are used to load the persona and store the memory to
     # disk. At this point, we don't have any global variables.
-
-    # EXTEND to: GuildID/ChannelID:NSFW/MessageID/UID/input
 
     dataline=text.split('/')
     gid=message.guild.id
@@ -1981,6 +1981,24 @@ def AnagramSolver(fromletters):
         wstr+=' '.join(valid_words_by_length[length])+'\n\n'
     return wstr
 
+# Decode has symbols
+
+@function_trapper(None)
+def DecodeHashCodes(input_string):
+    def replace_entity(match):
+        # Extract the numeric value from the match
+        entity_code = match.group(1)
+        try:
+            # Convert the numeric value to a character
+            return chr(int(entity_code))
+        except ValueError:
+            # Return the original match if conversion fails
+            return match.group(0)
+
+    # Regular expression to match numeric character references (e.g., &#65;)
+    entity_pattern = r'&#(\d+);'
+    return re.sub(entity_pattern, replace_entity, input_string)
+
 # The `yttags2text` function extracts tags from a YouTube video by
 # analyzing its URL to find the video ID. It then uses YouTube's API to
 # fetch details about the video, including its tags. If tags are available,
@@ -2065,6 +2083,20 @@ def PDF2Text(pdf_buffer):
             text+=page.extract_text()
         return 'PDF Content: '+text
 
+# Call ScrapingAnt service to fetch web page
+
+@function_trapper(None)
+def ScrapingAnt(gid,url):
+    Tokens=ReadTokens(gid)
+    if 'ScrapingAnt' not in Tokens:
+        return None
+
+    print("Ant:",url)
+
+    client = Ant.ScrapingAntClient(token=Tokens['ScrapingAnt'])
+    result = client.general_request(url)
+    return result.content
+
 # The `html2text` function is used to fetch and convert the content of a
 # web page into plain text. First, it sets a user agent to mimic a browser
 # request to the given URL. If the URL points to a YouTube video, it
@@ -2079,7 +2111,7 @@ def PDF2Text(pdf_buffer):
 # length of the content fetched and returns it as a readable string.
 
 @function_trapper(None)
-def html2text(url):
+def html2text(gid,url):
     # Set the user agent
     headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
     request=urllib.request.Request(url, headers=headers)
@@ -2093,16 +2125,19 @@ def html2text(url):
 
     # Not a YouTube transcript, Fetch the HTML content from the URL
 
+    html=None
     try:
         with urllib.request.urlopen(request,timeout=60) as response:
             html=response.read()
     except Exception as err:
-        print("URL Error:",url,str(err))
-        return None
+        html=None
 
-    if response.code>=400:
-        print("URL Code:",response.code,url)
-        return None
+    if not html:
+        html=ScrapingAnt(gid,url)
+        # Convert to bytes
+        html=html.encode('utf-8',errors='ignore')
+        if not html:
+            return None
 
     # Check for PDF signature
     if html[:5]=='%PDF-':
@@ -2111,7 +2146,7 @@ def html2text(url):
         return text
 
     # Decoding MUST be done AFTER pdf test
-    html=html.decode('utf-8',errors='ignore')
+    html=DecodeHashCodes(html.decode('utf-8',errors='ignore'))
 
     # Remove the entire head section
     html=re.sub(r'<head.*?>.*?</head>', '', html, flags=re.DOTALL)
@@ -2717,19 +2752,19 @@ async def autodelete_messages():
     global DeleteList
 
     if DeleteLock.acquire(timeout=DeleteTimeout):
-        try:
-            now=time.time()
-            if DeleteList:
-                for msg in list(DeleteList):
-                    if now>msg['Expires']:
-                        guild=client.get_guild(msg['gid'])              # Guild
-                        channel=guild.get_channel(msg['cid'])           # Channel
-                        message=await channel.fetch_message(msg['mid']) # Message
-
-                        DeleteList.remove(msg)
+        now=time.time()
+        if DeleteList:
+            for msg in list(DeleteList):
+                if now>msg['Expires']:
+                    guild=client.get_guild(msg['gid'])              # Guild
+                    channel=guild.get_channel(msg['cid'])           # Channel
+                    message=await channel.fetch_message(msg['mid']) # Message
+                    DeleteList.remove(msg)
+                    try:
                         await message.delete()
-        except Exception as err:
-            ErrorLog(f'Broke ADM: {sys.exc_info()[-1].tb_lineno}/{err}')
+                    except Exception as err:
+                        # Something broke, most likely message already deleted.
+                        pass
         DeleteLock.release()
     else:
         ErrorLog("Lock failed ADM")
@@ -3564,7 +3599,7 @@ async def on_message(message):
             if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
                 # Web/URL reference
                 url=input_text.replace(' ','')[1:]
-                input_text=html2text(url)
+                input_text=html2text(message.guild.id,url)
                 if input_text==None:
                     await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
                     return

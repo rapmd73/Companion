@@ -12,6 +12,7 @@ ai21
 transformers
 youtube-transcript-api
 pdfplumber
+scrapingant-client
 google-api-python-client
 google-auth
 google-auth-oauthlib
