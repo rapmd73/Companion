@@ -2656,7 +2656,7 @@ def CheckWhitelist(bot,whitelist,message):
 @function_trapper(False)
 async def IsPIIDetected(bot,message):
     if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
-        if CheckWhitelist(bot,'PIIModeration',message):
+        if CheckWhitelist(bot,'PIIWhitelist',message):
             return False
 
         HasPII=await DetectPII(message.guild.id,bot,message.content)
