@@ -553,9 +553,6 @@ def CalculateEmotionalScore(fn,gid,bot,buff,text):
     if 'EmotionClassifier' not in bot:
         return buff
 
-    if CheckWhitelist(bot,'EmotionWhitelist',message):
-        return False
-
     # Figure out Emotional Score
     escore=0
     if os.path.exists(fn):
