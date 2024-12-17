@@ -175,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1215"
+Version="0.0.0.0.1220"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -553,6 +553,9 @@ def CalculateEmotionalScore(fn,gid,bot,buff,text):
     if 'EmotionClassifier' not in bot:
         return buff
 
+    if CheckWhitelist(bot,'EmotionWhitelist',message):
+        return False
+
     # Figure out Emotional Score
     escore=0
     if os.path.exists(fn):
@@ -872,6 +875,9 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
         "OBSCENE": "\U0001F621",
         "BIGOTRY": "\U0001F6AB",
         "BULLYING": "\U0001F6D1" }
+
+    if CheckWhitelist(bot,'CIMSWhitelist',message):
+        return False
 
     classifier=bot['CIMSClassifier']
     text=f"Classify this: '{message.content}'"
@@ -2611,6 +2617,23 @@ async def ImposterAmoungUs(guild, member):
             return True
     return False
 
+# Check wwhitelist
+
+def CheckWhitelist(bot,whitelist,message):
+    # Check whitelist
+    if whitelist in bot:
+        piiList=bot[whitelist].split(',')
+        for uc in piiList:
+            # Is this a whitelisted user
+            if uc[0]=='@':
+                if uc[1:].lower()==message.author.name.lower():
+                    return True
+            # Is this a white listed channel
+            if uc[0]=='#':
+                if uc[1:].lower()==message.channel.name.lower():
+                    return True
+    return False
+
 # The `IsPIIDetected` function is an asynchronous handler that checks for
 # personally identifiable information (PII) in a message sent in a Discord
 # server. It first verifies if PII moderation is enabled by checking a bot
@@ -2631,18 +2654,8 @@ async def ImposterAmoungUs(guild, member):
 @function_trapper(False)
 async def IsPIIDetected(bot,message):
     if bot['PIIModeration'].lower()!='no' and os.path.exists(bot['PII'])==True:
-        # Check whitelist
-        if 'PIIWhitelist' in bot:
-            piiList=bot['PIIWhitelist'].split(',')
-            for uc in piiList:
-                # Is this a whitelisted user
-                if uc[0]=='@':
-                    if uc[1:].lower()==message.author.name.lower():
-                        return False
-                # Is this a white listed channel
-                if uc[0]=='#':
-                    if uc[1:].lower()==message.channel.name.lower():
-                        return False
+        if CheckWhitelist(bot,'PIIModeration',message):
+            return False
 
         HasPII=await DetectPII(message.guild.id,bot,message.content)
         if HasPII:
@@ -3003,6 +3016,9 @@ async def on_message_edit(before, after):
 
     # Manage automated moderation
     if bot['AutoModeration'].lower()=='no':
+        return
+
+    if CheckWhitelist(bot,'AgeLEETWhitelist',message):
         return
 
     # Build leet lists
