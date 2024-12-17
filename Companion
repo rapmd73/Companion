@@ -175,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1220"
+Version="0.0.0.0.1225"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2619,15 +2619,20 @@ async def ImposterAmoungUs(guild, member):
 def CheckWhitelist(bot,whitelist,message):
     # Check whitelist
     if whitelist in bot:
-        piiList=bot[whitelist].split(',')
-        for uc in piiList:
+        wList=bot[whitelist].split(',')
+        for uc in wList:
+            uc=uc.lower().strip()
+            # Is this a whitelisted user ID
+            if uc[0]=='!':
+                if uc[1:]==str(message.author.id):
+                    return True
             # Is this a whitelisted user
             if uc[0]=='@':
-                if uc[1:].lower()==message.author.name.lower():
+                if uc[1:]==message.author.name.lower():
                     return True
             # Is this a white listed channel
             if uc[0]=='#':
-                if uc[1:].lower()==message.channel.name.lower():
+                if uc[1:]==message.channel.name.lower():
                     return True
     return False
 
@@ -3015,7 +3020,7 @@ async def on_message_edit(before, after):
     if bot['AutoModeration'].lower()=='no':
         return
 
-    if CheckWhitelist(bot,'AgeLEETWhitelist',message):
+    if CheckWhitelist(bot,'AgeLEETWhitelist',after):
         return
 
     # Build leet lists
