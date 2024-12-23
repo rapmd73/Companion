@@ -175,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1225"
+Version="0.0.0.0.1235"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -1201,6 +1201,7 @@ def MaintainTokenLimit(Tokens,orgmessages,max_tokens=128000,engine='openai',mode
         current_tokens=count_tokens()
         # Check for the situation that we can't reduce the number of tokens.
         if old_tokens==current_tokens and current_tokens>max_tokens:
+            print(f"{engine}/{model}: Token reductiion error. {current_tokens}>{max_tokens}")
             return None
         old_tokens=current_tokens
 
@@ -2628,11 +2629,11 @@ def CheckWhitelist(bot,whitelist,message):
                     return True
             # Is this a whitelisted user
             if uc[0]=='@':
-                if uc[1:]==message.author.name.lower():
+                if uc[1:]==message.author.name.lower().strip():
                     return True
             # Is this a white listed channel
             if uc[0]=='#':
-                if uc[1:]==message.channel.name.lower():
+                if uc[1:]==message.channel.name.lower().strip():
                     return True
     return False
 
