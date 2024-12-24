@@ -3639,7 +3639,7 @@ async def on_message(message):
 
             # if the input text starts with "%http", replace it with the actual URL text
             if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
-                if CheckWhitelist(bot,'AllowYTTags',message):
+                if CheckWhitelist(bot,'AllowHTTP',message):
                     # Web/URL reference
                     url=input_text.replace(' ','')[1:]
                     input_text=html2text(message.guild.id,url)
