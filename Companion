@@ -175,7 +175,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1235"
+Version="0.0.0.0.1250"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -2617,24 +2617,37 @@ async def ImposterAmoungUs(guild, member):
 
 # Check wwhitelist
 
-def CheckWhitelist(bot,whitelist,message):
+def CheckWhitelist(bot,whitelist,message=None,user=None):
+    if message==None and author==None:
+        return False
+
+    if user==None:
+        author=message.author
+    else:
+        author=user
+
     # Check whitelist
-    if whitelist in bot:
-        wList=bot[whitelist].split(',')
-        for uc in wList:
-            uc=uc.lower().strip()
-            # Is this a whitelisted user ID
-            if uc[0]=='!':
-                if uc[1:]==str(message.author.id):
+    if whitelist not in bot:
+        return False
+
+    wList=bot[whitelist].split(',')
+    for uc in wList:
+        uc=uc.lower().strip()
+        # Is this a whitelisted user ID
+        if uc[0]=='!':
+            if uc[1:]==str(author.id):
+                return True
+        # Is this a whitelisted user role.
+        if uc[0]=='@':
+            for role in author.roles:
+                if role.name==uc[1:]:
                     return True
-            # Is this a whitelisted user
-            if uc[0]=='@':
-                if uc[1:]==message.author.name.lower().strip():
-                    return True
-            # Is this a white listed channel
-            if uc[0]=='#':
-                if uc[1:]==message.channel.name.lower().strip():
-                    return True
+            return False
+        # Is this a white listed channel
+        if uc[0]=='#' and message!=None:
+            if uc[1:]==message.channel.name.lower().strip():
+                return True
+
     return False
 
 # The `IsPIIDetected` function is an asynchronous handler that checks for
@@ -3595,32 +3608,47 @@ async def on_message(message):
             # Anagram solver... how the hell did I end up don the rabbit hole? Really?
 
             if os.path.exists(AnagramWordList) and input_text.lower().strip().startswith('%anagramsolver'):
-                letters=input_text[14:].strip().lower()
-                input_text=AnagramSolver(letters)
-                await send_response(bot,message,input_text)
-                return
+                if CheckWhitelist(bot,'AllowAnagramSolver',message):
+                    letters=input_text[14:].strip().lower()
+                    input_text=AnagramSolver(letters)
+                    await send_response(bot,message,input_text)
+                    return
+                else:
+# Write response for "That action is not allowed here... Self deleting
+                    await message.delete()
+                    return
 
             # Read tags from YouTune video
             if os.path.exists(bot['YTtags']) and os.path.exists(bot['noYTtags']) \
             and input_text.lower().strip().startswith('%yttags'):
-                # Web/URL reference
-                url=input_text[7:].strip()
-                input_text=yttags2text(url)
-                if input_text==None:
-                    await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
-                elif input_text=='{[(*VNF*)]}':
-                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                if CheckWhitelist(bot,'AllowYTTags',message):
+                    # Web/URL reference
+                    url=input_text[7:].strip()
+                    input_text=yttags2text(url)
+                    if input_text==None:
+                        await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
+                    elif input_text=='{[(*VNF*)]}':
+                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                    else:
+                        await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
+                    return
                 else:
-                    await send_response(bot,message,f"{PickRandomResponse(bot['YTtags'])}\n\n{input_text}")
-                return
+# Write response for "That action is not allowed here... Self deleting
+                    await message.delete()
+                    return
 
             # if the input text starts with "%http", replace it with the actual URL text
             if os.path.exists(bot['TooMuchInformation']) and input_text.lower().strip().startswith('%http'):
-                # Web/URL reference
-                url=input_text.replace(' ','')[1:]
-                input_text=html2text(message.guild.id,url)
-                if input_text==None:
-                    await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                if CheckWhitelist(bot,'AllowYTTags',message):
+                    # Web/URL reference
+                    url=input_text.replace(' ','')[1:]
+                    input_text=html2text(message.guild.id,url)
+                    if input_text==None:
+                        await send_response(bot,message,PickRandomResponse(bot['URLBroken']))
+                        return
+                else:
+# Write response for "That action is not allowed here... Self deleting
+                    await message.delete()
                     return
 
             # Give the AI the message
