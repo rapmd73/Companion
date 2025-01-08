@@ -3,6 +3,10 @@
 # Crontab entry ( without hash mark #
 # @reboot ( /home/Companion/LauncherCompanion & ) > /dev/null 2>&1
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+
+#source /home/RAPMD/bin/activate
+
 export OLLAMA_HOST=http://127.0.0.1:11434
 
 BaseDir="/home/Companion"

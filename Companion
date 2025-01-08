@@ -18,24 +18,38 @@
 # for now, it works well and is quite fast.
 
 # ***** IMPORTANT:
-#   This program uses ADMINISTRATOR priviledges.
+#   This program MAY still require ADMINISTRATOR priviledges. Work is being done to
+#   curb that.
+#
+# The following permissions are NOW required:
+#    create_instant_invite, kick_members, ban_members,
+#    manage_channels, manage_guild, add_reactions, view_audit_log,
+#    view_channel, manage_roles, manage_permissions, manage_webhooks,
+#    manage_emojis_and_stickers, send_messages, send_tts_messages,
+#    manage_messages, embed_links, attach_files, read_message_history,
+#    mention_everyone, manage_threads, use_embedded_activities,
+#    send_messages_in_threads, use_application_commands, manage_events
+
+# According to Discord documentation,
+#   https://discord.com/community/permissions-on-discord-discord
+#
+# Without the Administrator permission:
+#
+#   The role cannot bypass channel-specific permissions unless explicitly granted
+#   in each channel.
+#
+#   Cannot access permissions higher than its own role in the hierarchy. (This
+#   appears to no longer work).
 
 # Forum and thread support is a strange approach. Threads are treated like
 # channels, with a few extra bits. Webhooks, slowdown mode, edits, even the way
-# message are sent into the thread is effected. Activitieshave to be tested and
+# message are sent into the thread is effected. Activities have to be tested and
 # is it is a thread, most of the time, you have to pull the parent channel.
 # Webhooks and slowdown mode, in particular, do NOT have separate
 # functionalities of a channel, even though discord treats them like a channel.
 
 ### *** At some point, I'm going to really have to rewrite this. The forum/thread
 ###     detection code is a stinking hot mess and scattered everywhere.
-
-# Areas where a classifier can improve functionality (at a higher cost):
-#   Phone number detection would have a significantly lower lecel of false
-#   positives.
-#
-#   Technical messages versus non-technical for varying the temperature of
-#   the conversation.
 
 # Emotion scoring (classifier)
 #
@@ -122,6 +136,7 @@
 #       "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
 #       "INFLAMMATORY", "OBSCENE", "BULLYING"
 
+# In consideration/progres
 #   Anti nuke
 #   Ticket management
 #   Anti nudity verification for images.
@@ -175,7 +190,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1250"
+Version="0.0.0.0.1265"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -350,6 +365,7 @@ def function_trapper(failed_result=None):
 
 # Cheap mkdir
 
+@function_trapper(None)
 def mkdir(fn):
     if not os.path.exists(fn):
         os.makedirs(fn,exist_ok=True)
@@ -373,6 +389,7 @@ def ReadFile(fn,binary=False):
 
 # Append a single line to an existing file
 
+@function_trapper(None)
 def AppendFile(fname,text):
     fh=open(fname,'a+')
     fh.write(text)
@@ -380,6 +397,7 @@ def AppendFile(fname,text):
 
 # Write file to disk
 
+@function_trapper(None)
 def WriteFile(fn,data):
     cf=open(fn,'w')
     cf.write(data)
@@ -822,7 +840,6 @@ def WriteLog(gid,uid,channel,text):
             AppendFile(fn,s)
         except Exception as err:
             print(f'LOG Broke: {err}')
-            pass
         LoggingLock.release()
 
 # Log errors
@@ -1734,7 +1751,10 @@ def GetOpenRouter(apikey,messages,model,freqpenalty,temperature,timeout):
             timeout=timeout
         )
     clientAI.close()
-    response=completion.choices[0].message.content.strip()
+    try:
+        response=completion.choices[0].message.content.strip()
+    except Exception as err:
+        return None
     RawLog(f"OpenRouter/{model}: {str(completion)}")
     return response
 
@@ -2440,6 +2460,13 @@ async def VerifyCompanionAdministration(guild):
         if orole not in guild.owner.roles:
             await guild.owner.add_roles(orole)
 
+        # Push it to the highest position
+        # await guild.edit_role_positions(positions={orole: len(guild.roles)-1})
+    # else:
+        # Push it to the highest position
+        # if orole!=guild.roles[-1]:
+        #     await guild.edit_role_positions(positions={orole: len(guild.roles)-1})
+
     # Check for the 'companion-administration' channel
     channel=discord.utils.get(guild.text_channels, name='companion-administration')
 
@@ -2466,6 +2493,36 @@ async def VerifyCompanionAdministration(guild):
         channel.edit(overwrites=overwrites)
     return channel
 
+# Verify all required permissions
+
+@function_trapper
+def VerifyGuildPermissions(guild):
+    # List of non-voice-related permissions
+    non_voice_permissions = [
+        "create_instant_invite", "kick_members", "ban_members", "administrator",
+        "manage_channels", "manage_guild", "add_reactions", "view_audit_log",
+        "view_channel", "manage_roles", "manage_permissions", "manage_webhooks",
+        "manage_emojis_and_stickers", "send_messages", "send_tts_messages",
+        "manage_messages", "embed_links", "attach_files", "read_message_history",
+        "mention_everyone", "manage_threads", "use_embedded_activities",
+        "send_messages_in_threads", "use_application_commands", "manage_events"
+    ]
+
+    # Get the bot's current guild permissions
+    bot_permissions = guild.me.guild_permissions
+
+    # Find missing permissions
+    missing_permissions = [perm for perm in non_voice_permissions if not getattr(bot_permissions, perm)]
+
+    # Print missing permissions if any
+    if missing_permissions:
+        print(f"{guild.id} Missing permissions:")
+        for perm in missing_permissions:
+            print(f"- {perm}")
+        return False  # Not all permissions are enabled
+
+    return True  # All permissions are enabled
+
 # This function checks the security setup of a Discord server to ensure
 # it’s well-protected and highlights any weak points. It verifies if an
 # "owner" role exists, has the highest permissions, and is assigned to the
@@ -2489,6 +2546,8 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
 
     # Create the CompanionAdministration area (if not exist) and get the channel
     admin=await VerifyCompanionAdministration(guild)
+
+    PermChk=VerifyGuildPermissions(guild)
 
     # Start with the automatic setting. Results will be forced if audit fails
     FailedAudit=False
@@ -2549,6 +2608,8 @@ async def SecurityAudit(guild=None,message=None,ShowResults=False,auto=False):
     if ShowResults or FailedAudit:
         await admin.send(f"Guild: {guild.name} ({guild.id})")
         await admin.send(f"Owner: {guild.owner} ({guild.owner.id})")
+        if not PermChk:
+            await admin.send(f"This guild does NOT have the proper permissions set to function.")
         if not AuditOwnerRole:
             await admin.send(f"The `owner` role does not exist. A dedicated guild owner role is vital for securing control, ensuring only trusted hands hold top permissions. This role acts as the ultimate safeguard against unauthorized changes, breaches, and ensures accountability in managing server integrity.")
         if not IsHighestPos:
@@ -2615,7 +2676,12 @@ async def ImposterAmoungUs(guild, member):
             return True
     return False
 
-# Check wwhitelist
+# This function acts as a bypass for regular system measures, granting special
+# permissions to **trusted** users, roles, or channels listed in a whitelist. It
+# checks if a user’s ID, their role name, or the channel name matches an entry in
+# the bot’s predefined whitelist. If a match is found, it allows the action without
+# enforcing standard restrictions. This ensures trusted individuals or channels can
+# operate freely, even when other controls are in place.
 
 def CheckWhitelist(bot,whitelist,message=None,user=None):
     if message==None and author==None:
@@ -3328,7 +3394,7 @@ async def on_typing(channel, user, when):
     # Determine slow mode duration
     if typing_count>2 * expected_users:  # Over threshold
         bot=GetCompanionPersona(server.id,None,Welcome=True)
-        await ModeratorNotify(bot,server.id,f"Under potential raid attack, {joins} joins, {typing_count} users>{expected_users} users")
+        await ModeratorNotify(bot,server,f"Under potential raid attack, {joins} joins, {typing_count} users>{expected_users} users")
         slow_mode_duration=SlowModeMultiplier * typing_count*10*joins
     elif typing_count>expected_users:
         slow_mode_duration=SlowModeMultiplier * typing_count*joins
@@ -3734,6 +3800,9 @@ async def on_ready():
 
     # Print some fluff
     for guild in client.guilds:
+        if not VerifyGuildPermissions(guild):
+            print(f"{guild.id} does NOT have the proper permissions to function.")
+
         # Add the guild to the circular guild queue, if not already in it.
         if guild.id not in GuildQueue and GuildQueueLock.acquire(timeout=GuildQueueTimeout):
             GuildQueue.append(guild)
