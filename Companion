@@ -137,9 +137,10 @@
 #       "INFLAMMATORY", "OBSCENE", "BULLYING"
 
 # In consideration/progres
+#   Anti nudity/gore/violence verification for images.
+#   NO link edit
 #   Anti nuke
 #   Ticket management
-#   Anti nudity verification for images.
 
 # Disable 3rd party logging.
 import warnings
@@ -190,7 +191,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1265"
+Version="0.0.0.0.1275"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -337,8 +338,8 @@ def function_trapper(failed_result=None):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as err:
-                    tb=traceback.extract_tb(sys.exc_info()[-1])
-                    errline=tb[-1].lineno
+                    tb=traceback.extract_tb(err.__traceback__)
+                    errline=tb[-1].lineno if tb else 'Unknown'
                     ErrorLog(f"{func.__name__}/{errline}: {err}")
                     return failed_result
             return async_wrapper
@@ -348,8 +349,8 @@ def function_trapper(failed_result=None):
                 try:
                     return func(*args, **kwargs)
                 except Exception as err:
-                    tb=traceback.extract_tb(sys.exc_info()[-1])
-                    errline=tb[-1].lineno
+                    tb=traceback.extract_tb(err.__traceback__)
+                    errline=tb[-1].lineno if tb else 'Unknown'
                     ErrorLog(f"{func.__name__}/{errline}: {err}")
                     return failed_result
             return sync_wrapper
@@ -507,10 +508,12 @@ def CheckMessageURLs(gid,text):
             if domain in whiteurls:
                 return False
             elif domain in scamurls:
+                print(f"Scam URL: {domain}")
                 return True
             elif 'AbuseIPDB' in Tokens:
                 is_abusive, score=CheckAbuseIPDB(domain,Tokens['AbuseIPDB'])
                 if is_abusive:
+                    print(f"AbuseIPDB: {domain}")
                     return True
     return False
 
@@ -823,6 +826,20 @@ def RawLog(text):
             pass
         LoggingLock.release()
 
+# Bot record diagnostics
+
+def BotLog(bot):
+    if LoggingLock.acquire(timeout=LoggingTimeout):
+        try:
+            mkdir(LoggingStorage)
+            fn=f'{LoggingStorage}/Bot.log'
+            fh=open(fn,'w')
+            fh.write(json.dumps(bot,indent=2))
+            fh.close()
+        except:
+            pass
+        LoggingLock.release()
+
 # Logging
 
 def WriteLog(gid,uid,channel,text):
@@ -937,6 +954,7 @@ async def CheckCIMS(gid,bot,message,nsfw=False):
 
 @function_trapper('No')
 async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsfw=False):
+    startTime=time.time()
     # NSFW channel can have different classifier that may be less aggressive
     clinstr=classifier['Instructions']
     if nsfw:
@@ -978,6 +996,7 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
     model=None
     while response==None and ecounter<ec:
         provider=el[ecounter].lower()
+        pvn=el[ecounter]
         model=ml[ecounter]
         mts=int(tl[ecounter])
 
@@ -1010,6 +1029,9 @@ async def AIClassifier(gid,classifier,text,FailResp="No",lval=None,rval=None,nsf
 
     if response==None:
         return FailResp
+
+    endTime=time.time()
+    AppendFile(f'{LoggingStorage}/{gid}.timing',f"{datetime.datetime.fromtimestamp(startTime).strftime('%Y-%m-%d %H:%M:%S')} {pvn} {model} {endTime-startTime:.6f}\n")
 
     return response
 
@@ -1292,21 +1314,22 @@ def GetCompanionControlFile(basename,channel,nsfw):
     if nsfw and os.path.exists(refname):
         return refname
 
-    # This is a real PITA to debug. Returning basename is just a nice way of letting
-    # os.path.exists() deal with a missing file without having to test for None
-    # everywhere. Returning None here will unleash chaos and be a nightmare to find
-    # out this THIS one line can cause such nighmares.
+    # This is a real PITA to debug. Returning basename is just a nice way of
+    # letting os.path.exists() deal with a missing file without having to test
+    # for None everywhere. Returning None here will unleash chaos and be a
+    # nightmare to find out this THIS one line can cause such nighmares.
 
     return basename
 
-# The `GetCompanionPersona` function is responsible for determining and retrieving the
-# specific personality or character traits that the bot will use when interacting with
-# users in a particular Discord server.  When users send messages, it's important for
-# the bot to respond in a way that fits its designated role or persona. This function
-# checks the server's configuration settings to find out which persona should be used
-# based on factors like the channel type and whether it’s a safe-for-work (SFW) or
-# not-safe-for-work (NSFW) environment. It gathers all relevant information about how
-# the bot should behave, including its name, response style, and any special rules it
+# The `GetCompanionPersona` function is responsible for determining and
+# retrieving the specific personality or character traits that the bot will use
+# when interacting with users in a particular Discord server.  When users send
+# messages, it's important for the bot to respond in a way that fits its
+# designated role or persona. This function checks the server's configuration
+# settings to find out which persona should be used based on factors like the
+# channel type and whether it’s a safe-for-work (SFW) or not-safe-for-work
+# (NSFW) environment. It gathers all relevant information about how the bot
+# should behave, including its name, response style, and any special rules it
 # needs to follow.
 
 @function_trapper(None)
@@ -1329,8 +1352,8 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
 
     bot=Config.copy()
 
-    # Welcome should really be Default. If more then one bot it listed, comma separated,
-    # one one random, and vwerify that it has a welcome file.
+    # Welcome should really be Default. If more then one bot it listed, comma
+    # separated, one one random, and vwerify that it has a welcome file.
 
     if Welcome==True:
         if 'Welcome' in Config:
@@ -1415,16 +1438,19 @@ def GetCompanionPersona(gid,channel,nsfw=False,Welcome=False):
         if type(bot['MaxMemory'])!=int:
             bot['MaxMemory']=int(bot['MaxMemory'])
 
+    BotLog(bot)
+
     # return the current bot
     return bot
 
-# The `GetBabble` function is designed to manage the interaction between users and the
-# AI within a Discord server. When a user sends a message to the bot, this function
-# takes that message and prepares it for processing by the AI.  Here's how it works:
-# when a message is received, `GetBabble` gathers all relevant information, including
-# who sent the message and which channel it was sent in. It then compiles this
-# information along with any previous context or conversation history. This complete
-# package is then sent to the AI for generating an appropriate response.
+# The `GetBabble` function is designed to manage the interaction between users
+# and the AI within a Discord server. When a user sends a message to the bot,
+# this function takes that message and prepares it for processing by the AI.
+# Here's how it works: when a message is received, `GetBabble` gathers all
+# relevant information, including who sent the message and which channel it was
+# sent in. It then compiles this information along with any previous context or
+# conversation history. This complete package is then sent to the AI for
+# generating an appropriate response.
 
 @function_trapper(None)
 def GetBabble(message,text):
@@ -1578,14 +1604,15 @@ def GetBabble(message,text):
     # Return the AI response
     return response
 
-# The `HandleOneMessage` function is designed to take care of individual messages sent
-# to the bot in a Discord server. When a user sends a message, this function steps in to
-# manage the entire process of understanding and responding to that message.  Here's how
-# it works: when a message is received, the function first gathers all necessary
-# details, such as who sent the message and which channel it was sent in. It then checks
-# if there are any specific rules or settings that need to be applied based on the
-# context (like whether it's a safe-for-work environment). After that, it prepares
-# everything needed for the AI to generate an appropriate response.
+# The `HandleOneMessage` function is designed to take care of individual
+# messages sent to the bot in a Discord server. When a user sends a message,
+# this function steps in to manage the entire process of understanding and
+# responding to that message.  Here's how it works: when a message is received,
+# the function first gathers all necessary details, such as who sent the
+# message and which channel it was sent in. It then checks if there are any
+# specific rules or settings that need to be applied based on the context (like
+# whether it's a safe-for-work environment). After that, it prepares everything
+# needed for the AI to generate an appropriate response.
 
 @function_timer
 @function_trapper(None)

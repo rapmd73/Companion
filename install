@@ -1,4 +1,8 @@
 #!/bin/bash
+if [ -d "/home/RAPMD" ] ; then
+    source /home/RAPMD/bin/activate
+fi
+
 pip3=`which pip3`
 if [ "x$pip3" == "x" ] ; then
     echo PIP3 not installed. Please install it first, then re-run this script.
@@ -13,8 +17,8 @@ mkdir -p $BaseDir > /dev/null 2>&1
 git pull https://github.com/rapmd73/Companion
 cp -r * /home/Companion > /dev/null 2>&1
 
-python3 -m pip install --upgrade pip --break-system-packages
+python3 -m pip install --upgrade pip
 
 for i in `cat requirements.txt` ; do
-    $pip3 install -U $i --break-system-packages
+    $pip3 install -U $i
 done
