@@ -17,9 +17,18 @@
 # functions. The program just grew and grew. At some point, I'll rewrite this... but
 # for now, it works well and is quite fast.
 
+# In progres: locking and lock management is a nightmare. Work is being done for a
+# distrivuted locking manager that will provide muck better control over system
+# resources and rate limits.
+
+# Language transltions with AI is absolutely strange. Japanese seems to be an
+# oddity compared to other asian languages. Will need a person of Jpanese to figure
+# this one out.. So far OpenAI seems to be the only service that accurately
+# translates Japanese to English consistently and reliably.
+
 # ***** IMPORTANT:
-#   This program MAY still require ADMINISTRATOR priviledges. Work is being done to
-#   curb that.
+#   This program MAY still require ADMINISTRATOR priviledges. Work is
+#   being done to curb that.
 #
 # The following permissions are NOW required:
 #    create_instant_invite, kick_members, ban_members,
@@ -136,7 +145,10 @@
 #       "THREAT", "SEXUALLY_EXPLICIT", "FLIRTATION", "PERSONAL ATTACK",
 #       "INFLAMMATORY", "OBSCENE", "BULLYING"
 
-# In consideration/progres
+# In consideration/progress
+#   Need to somehow figure out suicide and self harm for CIMS....
+#   Delete messages from other bots
+#   Only allow X messages, auto delete any above X count
 #   Anti nudity/gore/violence verification for images.
 #   NO link edit
 #   Anti nuke
@@ -191,7 +203,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1275"
+Version="0.0.0.0.1290"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -306,7 +318,7 @@ def function_timer(func):
         result=func(*args, **kwargs)
         end_time=time.perf_counter()
         elapsed_time=end_time - start_time
-        print(f"{func.__name__}: {elapsed_time:.6f} seconds")
+        ErrorLog(f"{func.__name__}: {elapsed_time:.6f} seconds")
         return result
 
     @functools.wraps(func)
@@ -315,7 +327,7 @@ def function_timer(func):
         result=await func(*args, **kwargs)
         end_time=time.perf_counter()
         elapsed_time=end_time - start_time
-        print(f"{func.__name__}: {elapsed_time:.6f} seconds")
+        ErrorLog(f"{func.__name__}: {elapsed_time:.6f} seconds")
         return result
 
     if inspect.iscoroutinefunction(func):
@@ -487,7 +499,7 @@ def CheckAbuseIPDB(domain,token):
             return False, 0
     except requests.exceptions.RequestException as e:
         ErrorLog(f"Error checking AbuseIPDB: {e}")
-        return None, 0
+        return False, 0
 
 @function_trapper
 def CheckMessageURLs(gid,text):
@@ -513,7 +525,7 @@ def CheckMessageURLs(gid,text):
             elif 'AbuseIPDB' in Tokens:
                 is_abusive, score=CheckAbuseIPDB(domain,Tokens['AbuseIPDB'])
                 if is_abusive:
-                    print(f"AbuseIPDB: {domain}")
+                    print(f"AbuseIPDB: {score}/{domain}")
                     return True
     return False
 
@@ -877,7 +889,9 @@ def ErrorLog(text):
             # print to console
             print(txt)
         except:
-            pass
+            # print to console
+            print(txt)
+
         LoggingLock.release()
 
 # This function is designed to detect harmful or inappropriate content in a
@@ -2058,7 +2072,7 @@ def DecodeHashCodes(input_string):
 # easily accessible from any valid YouTube link.
 
 @function_trapper('{[(*VNF*)]}')
-def yttags2text(url):
+def yttags2text(gid,url):
     def extract_video_id(url):
         # Match either a youtu.be or youtube.com URL to extract the video ID
         youtube_regex=r"(?:youtu\.be\/|youtube\.com\/(?:.*v=|.*\/|.*v\/|.*embed\/|.*shorts\/))([a-zA-Z0-9_-]{11})"
@@ -2093,6 +2107,7 @@ def yttags2text(url):
             return '{[(*VNF*)]}'
 
     # Create YouTube Object
+    Tokens=ReadTokens(gid)
     youtube=build('youtube', 'v3', developerKey=Tokens['YouTube'])
 
     # Retrieve and display tags
@@ -2144,8 +2159,12 @@ def ScrapingAnt(gid,url):
 
     print("Ant:",url)
 
-    client = Ant.ScrapingAntClient(token=Tokens['ScrapingAnt'])
-    result = client.general_request(url)
+    try:
+        client = Ant.ScrapingAntClient(token=Tokens['ScrapingAnt'])
+        result = client.general_request(url)
+    except Exception as err:
+        print(f"Ant: {err}")
+        return None
     return result.content
 
 # The `html2text` function is used to fetch and convert the content of a
@@ -2185,10 +2204,10 @@ def html2text(gid,url):
 
     if not html:
         html=ScrapingAnt(gid,url)
-        # Convert to bytes
-        html=html.encode('utf-8',errors='ignore')
         if not html:
             return None
+        # Convert to bytes
+        html=html.encode('utf-8',errors='ignore')
 
     # Check for PDF signature
     if html[:5]=='%PDF-':
@@ -2386,6 +2405,7 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
         else:
             wm=await webhook.send(content=x1,embed=embed,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
         whmsg.append(wm)
+        await asyncio.sleep(1.1)
     elif len(response)<=1900:
         if author!=None:
             x1=f"{author} {response}"
@@ -2397,6 +2417,7 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
         else:
             wm=await webhook.send(content=x1,username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
         whmsg.append(wm)
+        await asyncio.sleep(1.1)
     else:
 
         # Break this up into multiple messages. Discord does NOT allow
@@ -2424,6 +2445,7 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
                 else:
                     wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
                 whmsg.append(wm)
+                await asyncio.sleep(1.1)
             if x1[p]=='.' or x1[p]==' ':
                 p+=1
             x1=x1[p:].strip()
@@ -2433,6 +2455,7 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
                 wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
             else:
                 wm=await webhook.send(content=x1.strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
+                await asyncio.sleep(1.1)
             whmsg.append(wm)
 
     # Queue autodelete messages. Responses can be multiple messages.
@@ -3273,7 +3296,7 @@ async def on_member_join(member):
         return
 
     if bot['AutoLogging'].lower()!='no':
-        ErrorLog(f"OMJ: {member}")
+        ErrorLog(f"OMJ: {member}/{member.id}/{member.display_name}")
 
     # Impersonation detection
     if await ImposterAmoungUs(member.guild,member):
@@ -3283,7 +3306,7 @@ async def on_member_join(member):
     name=member.name
     if member.nick:
         name=member.nick
-    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id} joined.")
+    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id}/{member.display_name} joined.")
 
     if os.path.exists(bot['Welcome']):
         # Figure out which persona is calling the shots.
@@ -3315,7 +3338,7 @@ async def on_member_remove(member):
     name=member.name
     if member.nick:
         name=member.nick
-    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id} left.")
+    await ModeratorNotify(bot,member.guild,f"{name}/{member}/{member.id}/{member.display_name} left.")
 
 # The `on_typing` event is triggered when a user begins typing in a text
 # channel. This method is used to manage user activity by adjusting slow
@@ -3421,7 +3444,7 @@ async def on_typing(channel, user, when):
     # Determine slow mode duration
     if typing_count>2 * expected_users:  # Over threshold
         bot=GetCompanionPersona(server.id,None,Welcome=True)
-        await ModeratorNotify(bot,server,f"Under potential raid attack, {joins} joins, {typing_count} users>{expected_users} users")
+        await ModeratorNotify(bot,server,f"Under potential raid attack, {joins} joins, {typing_count} active users>{expected_users} expected users")
         slow_mode_duration=SlowModeMultiplier * typing_count*10*joins
     elif typing_count>expected_users:
         slow_mode_duration=SlowModeMultiplier * typing_count*joins
@@ -3717,7 +3740,7 @@ async def on_message(message):
                 if CheckWhitelist(bot,'AllowYTTags',message):
                     # Web/URL reference
                     url=input_text[7:].strip()
-                    input_text=yttags2text(url)
+                    input_text=yttags2text(guild.id,url)
                     if input_text==None:
                         await send_response(bot,message,PickRandomResponse(bot['noYTtags']))
                     elif input_text=='{[(*VNF*)]}':
