@@ -211,7 +211,7 @@ RunningName=sys.argv[0]
 
 # Persona base folder. This is where all personas are stored.
 
-CompanionBase='/home/Companion'
+CompanionBase=os.getenv('COMPANION_BASE', '/home/Companion')
 CompanionStorage=f'{CompanionBase}/Personas'
 MemoryStorage=f'{CompanionBase}/Servers/Memory'
 LoggingStorage=f'{CompanionBase}/Servers/Logs'
