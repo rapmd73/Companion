@@ -203,7 +203,7 @@ from googleapiclient.discovery import build
 
 # Active version
 
-Version="0.0.0.0.1290"
+Version="0.0.0.0.1295"
 
 # The running name of the program. Must be global and NEVER changing.
 
@@ -211,6 +211,7 @@ RunningName=sys.argv[0]
 
 # Persona base folder. This is where all personas are stored.
 
+# From SamAcctX
 CompanionBase=os.getenv('COMPANION_BASE', '/home/Companion')
 CompanionStorage=f'{CompanionBase}/Personas'
 MemoryStorage=f'{CompanionBase}/Servers/Memory'
@@ -821,6 +822,15 @@ def ReadTokens(gid=None):
     if gid==None and 'Discord' not in tokens:
         ErrorLog("The MUST be a Discord API reference in the tokens file")
         sys.exit(1)
+
+    # Inspired by SamAcctX
+    for key in tokens:
+        if tokens[key].lower().startswith('!environment:'):
+            vn=tokens[key].split(':',1)[1].strip() # Environment variable name
+            ev=os.getenv(vn) # Environment variable contents, if any
+            # Make sre we have an environment variable
+            if ev:
+                tokens[key]=ev
 
     return tokens
 
