@@ -517,9 +517,9 @@ def CheckMessageURLs(gid,text):
     if urls:
         for url in urls:
             domain=ExtractDomains(url)
-
             if domain in whiteurls:
                 return False
+
             elif domain in scamurls:
                 print(f"Scam URL: {domain}")
                 return True
@@ -2441,14 +2441,11 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
             # Look for new line first
             p=x1.rfind('\n',0,pmax)
             if p==-1:
-                # Look for a period  Separate at a sentence
-                p=x1.rfind('.',0,pmax)
+                # Look for a space  Separate at a word
+                p=x1.rfind(' ',0,pmax)
                 if p==-1:
-                    # Look for a space  Separate at a word
-                    p=x1.rfind(' ',0,pmax)
-                    if p==-1:
-                        # Brute split
-                        pmax=1900
+                    # Brute split
+                    pmax=1900
             if len(x1[:p])>0:
                 if threadID:
                     wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],thread=threadID,wait=True)
@@ -2456,8 +2453,6 @@ async def send_response(bot,message,response,embed=None,delete=None,member=None)
                     wm=await webhook.send(content=x1[:p].strip(),username=bot['BotName'],avatar_url=bot['Avatar'],wait=True)
                 whmsg.append(wm)
                 await asyncio.sleep(1.1)
-            if x1[p]=='.' or x1[p]==' ':
-                p+=1
             x1=x1[p:].strip()
             l=len(x1)
         if l>0:
@@ -2907,19 +2902,22 @@ async def autodelete_messages():
     global DeleteList
 
     if DeleteLock.acquire(timeout=DeleteTimeout):
-        now=time.time()
-        if DeleteList:
-            for msg in list(DeleteList):
-                if now>msg['Expires']:
-                    guild=client.get_guild(msg['gid'])              # Guild
-                    channel=guild.get_channel(msg['cid'])           # Channel
-                    message=await channel.fetch_message(msg['mid']) # Message
-                    DeleteList.remove(msg)
-                    try:
-                        await message.delete()
-                    except Exception as err:
-                        # Something broke, most likely message already deleted.
-                        pass
+        try:
+            now=time.time()
+            if DeleteList:
+                for msg in list(DeleteList):
+                    if now>msg['Expires']:
+                        guild=client.get_guild(msg['gid'])              # Guild
+                        channel=guild.get_channel(msg['cid'])           # Channel
+                        DeleteList.remove(msg)
+                        try:
+                            message=await channel.fetch_message(msg['mid']) # Message
+                            await message.delete()
+                        except Exception as err:
+                            # Something broke, most likely message already deleted.
+                            pass
+        except Exception as err:
+            ErrorLog(f"ADM Error/{sys.exc_info()[-1].tb_lineno}/{err}: {err}")
         DeleteLock.release()
     else:
         ErrorLog("Lock failed ADM")
