@@ -1902,7 +1902,8 @@ def GetPerplexity(apikey,messages,model,freqpenalty,temperature,timeout):
     # Set up headers including authorization
     headers={
             "Authorization": f"Bearer {apikey}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "X-Pplx-Integration": "companion"
         }
 
     # Make the POST request to the Perplexity API
